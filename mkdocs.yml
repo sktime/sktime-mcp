@@ -1,8 +1,9 @@
 site_name: sktime-mcp
 site_description: The Semantic Engine for Time-Series Forecasting with LLMs
 site_author: sktime-mcp contributors
+site_url: https://sktime.github.io/sktime-mcp/ 
 repo_name: sktime-mcp
-repo_url: https://github.com/shashankss1205/sktime-mcp
+repo_url: https://github.com/sktime/sktime-mcp
 
 theme:
   name: material
@@ -48,6 +49,7 @@ nav:
   - User Guide: user-guide.md
   - Usage Examples: usage-examples.md
   - Data Sources: data-sources.md
+  - Background Jobs: background-jobs.md
   - Architecture: architecture.md
   - Implementation: implementation.md
   - Developer Guide: dev-guide.md

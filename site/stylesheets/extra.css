@@ -37,7 +37,8 @@
     font-size: 2.5rem;
     font-weight: 800;
     margin-bottom: 1rem;
-    background: linear-gradient(to right, #4C3BCF, #FF0080);
+    /* background: linear-gradient(to right, #4C3BCF, #FF0080); */
+    background: white; /* Fallback for older browsers */
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
