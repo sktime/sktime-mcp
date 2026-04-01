@@ -1,9 +1,10 @@
 /* Custom CSS for sktime-mcp docs */
 
 :root {
-  --md-primary-fg-color: #4C3BCF; /* Deep Indigo */
-  --md-primary-fg-color--light: #6E5ED9;
-  --md-primary-fg-color--dark: #3729A0;
+    --md-primary-fg-color: #4C3BCF;
+    /* Deep Indigo */
+    --md-primary-fg-color--light: #6E5ED9;
+    --md-primary-fg-color--dark: #3729A0;
 }
 
 /* Make tables look a bit more modern and spaced out */
@@ -20,7 +21,7 @@
 }
 
 /* Admonition refinements */
-.md-typeset .admonition, 
+.md-typeset .admonition,
 .md-typeset details {
     border-radius: 8px;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
@@ -37,8 +38,8 @@
     font-size: 2.5rem;
     font-weight: 800;
     margin-bottom: 1rem;
-    /* background: linear-gradient(to right, #4C3BCF, #FF0080); */
-    background: white; /* Fallback for older browsers */
+    background: linear-gradient(to right, var(--md-primary-fg-color), #FF0080);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
 }

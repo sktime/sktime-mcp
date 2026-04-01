@@ -1,6 +1,8 @@
 
 # sktime-mcp
 
+**[Read the Official Documentation](http://sktime.github.io/sktime-mcp/)** | **[PyPI Package](https://pypi.org/project/sktime-mcp/0.1.0/)**
+
 <div class="hero-text">
   <h1>The Semantic Engine for Time-Series</h1>
   <p style="font-size: 1.2rem; margin-bottom: 2rem;">
@@ -31,8 +33,16 @@
 Get up and running in seconds. Use with **Claude Desktop**, **Cursor**, or any MCP-compatible client.
 
 ### 1. Install
+
 ```bash
-git clone https://github.com/Shashankss1205/sktime-mcp.git
+# Install directly from PyPI (https://pypi.org/project/sktime-mcp/0.1.0/)
+pip install sktime-mcp
+```
+
+Alternatively, when contributing, use GitHub to install from source:
+
+```bash
+git clone https://github.com/sktime/sktime-mcp.git
 cd sktime-mcp
 python3 -m venv .venv
 source .venv/bin/activate

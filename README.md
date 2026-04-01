@@ -1,5 +1,8 @@
 # sktime-mcp
 
+**[Read the Documentation](http://sktime.github.io/sktime-mcp/)** | **[PyPI Package](https://pypi.org/project/sktime-mcp/0.1.0/)**
+
+
 **MCP (Model Context Protocol) layer for sktime - Registry-Driven for LLMs**
 
 A semantic engine that exposes sktime's native registry and semantics to Large Language Models, enabling them to:
