@@ -7,7 +7,7 @@ name = "sktime-mcp"
 version = "0.1.0"
 description = "MCP (Model Context Protocol) layer for sktime - Registry-Driven for LLMs"
 readme = "README.md"
-license = { text = "BSD-3-Clause" }
+license = { file = "LICENSE" }
 requires-python = ">=3.9"
 authors = [
     { name = "sktime-mcp contributors" }
@@ -90,6 +90,7 @@ include = [
     "/src",
     "/tests",
     "/README.md",
+    "/LICENSE",
 ]
 
 [tool.black]
