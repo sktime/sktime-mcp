@@ -4,6 +4,7 @@ Base adapter for data sources.
 Defines the interface that all data source adapters must implement.
 """
 
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Tuple
 
@@ -40,6 +41,22 @@ class DataSourceAdapter(ABC):
             DataFrame with time index
         """
         pass
+
+    async def load_async(self, job_id: Optional[str] = None) -> pd.DataFrame:
+        """
+        Load data from the source asynchronously.
+
+        By default, runs the sync load() in a thread to be non-blocking.
+        Subclasses should override this for true async IO.
+
+        Args:
+            job_id: Optional ID of the background job for progress tracking
+
+        Returns:
+            DataFrame with time index
+        """
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.load)
 
     @abstractmethod
     def validate(self, data: pd.DataFrame) -> Tuple[bool, Dict[str, Any]]:

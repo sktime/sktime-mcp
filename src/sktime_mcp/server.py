@@ -17,9 +17,12 @@ from mcp.types import TextContent, Tool
 from sktime_mcp.composition.validator import get_composition_validator
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
+    auto_format_on_load_tool,
     fit_predict_with_data_tool,
+    format_time_series_tool,
     list_data_handles_tool,
     list_data_sources_tool,
+    load_data_source_async_tool,
     load_data_source_tool,
     release_data_handle_tool,
 )
@@ -31,10 +34,6 @@ from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
     fit_predict_tool,
     list_datasets_tool,
-)
-from sktime_mcp.tools.format_tools import (
-    auto_format_on_load_tool,
-    format_time_series_tool,
 )
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
@@ -269,19 +268,27 @@ async def list_tools() -> List[Tool]:
         ),
         Tool(
             name="load_data_source",
-            description=(
-                "Load data from various sources. GUIDELINES: "
-                "1. NEVER assume a column is a time index (like 'Month' or 'Date') unless the user explicitly tells you to use it as the index. "
-                "2. ALWAYS specify 'target_column' if the user mentions a specific variable to forecast (e.g., 'Use Sales as target'). "
-                "3. By default, sktime-mcp treats the first column as target; if the first column is 'Month', this is likely WRONG. "
-                "4. For non-standard date formats (e.g., '1-01'), omit 'time_column' to use an integer index unless you can handle the format."
-            ),
+            description="Load data from any source (pandas, SQL, file, etc.) synchronously",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "config": {
                         "type": "object",
-                        "description": "Data source configuration. Must include 'type' (pandas, sql, file, url).",
+                        "description": "Data source configuration",
+                    },
+                },
+                "required": ["config"],
+            },
+        ),
+        Tool(
+            name="load_data_source_async",
+            description="Load data from any source asynchronously in the background",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "config": {
+                        "type": "object",
+                        "description": "Data source configuration",
                     },
                 },
                 "required": ["config"],
@@ -514,6 +521,8 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             )
         elif name == "load_data_source":
             result = load_data_source_tool(arguments["config"])
+        elif name == "load_data_source_async":
+            result = await load_data_source_async_tool(arguments["config"])
         elif name == "list_data_sources":
             result = list_data_sources_tool()
         elif name == "fit_predict_with_data":

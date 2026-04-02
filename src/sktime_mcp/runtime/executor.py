@@ -459,6 +459,95 @@ class Executor:
         """List available demo datasets."""
         return list(DEMO_DATASETS.keys())
 
+    async def load_data_source_async(
+        self, config: Dict[str, Any], job_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Async version of load_data_source with job tracking.
+        """
+        try:
+            from sktime_mcp.data import DataSourceRegistry
+
+            # Create job if not provided
+            if job_id is None:
+                job_id = self._job_manager.create_job(
+                    job_type="load_data",
+                    estimator_handle="None",  # No estimator for data loading
+                    dataset_name=config.get("url") or config.get("path") or "custom",
+                    total_steps=1,
+                )
+
+            # Update status to RUNNING
+            self._job_manager.update_job(job_id, status=JobStatus.RUNNING)
+
+            # Create adapter
+            adapter = DataSourceRegistry.create_adapter(config)
+
+            # Step 1: Load data
+            self._job_manager.update_job(job_id, completed_steps=0, current_step="Loading data...")
+
+            # Load data async
+            data = await adapter.load_async(job_id=job_id)
+
+            # Validate
+            is_valid, validation_report = adapter.validate(data)
+            if not is_valid:
+                self._job_manager.update_job(
+                    job_id,
+                    status=JobStatus.FAILED,
+                    errors=[f"Data validation failed: {validation_report.get('errors')}"],
+                )
+                return {
+                    "success": False,
+                    "error": "Data validation failed",
+                    "validation": validation_report,
+                }
+
+            # Convert to sktime format
+            y, X = adapter.to_sktime_format(data)
+
+            # Update metadata
+            metadata = adapter.get_metadata().copy()
+            metadata["columns"] = [y.name if hasattr(y, "name") and y.name else "target"]
+            if X is not None:
+                metadata["exog_columns"] = list(X.columns)
+
+            # Generate handle
+            data_handle = f"data_{uuid.uuid4().hex[:8]}"
+
+            # Store
+            self._data_handles[data_handle] = {
+                "y": y,
+                "X": X,
+                "metadata": metadata,
+                "validation": validation_report,
+                "config": config,
+            }
+
+            result = {
+                "success": True,
+                "data_handle": data_handle,
+                "metadata": metadata,
+                "validation": validation_report,
+            }
+
+            # Finalize job
+            self._job_manager.update_job(
+                job_id,
+                status=JobStatus.COMPLETED,
+                completed_steps=1,
+                current_step="Completed",
+                result=result,
+            )
+
+            return result
+
+        except Exception as e:
+            logger.exception(f"Error in async load_data_source for job {job_id}")
+            if job_id:
+                self._job_manager.update_job(job_id, status=JobStatus.FAILED, errors=[str(e)])
+            return {"success": False, "error": str(e), "job_id": job_id}
+
     def load_data_source(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Load data from any source (pandas, SQL, file, etc.).

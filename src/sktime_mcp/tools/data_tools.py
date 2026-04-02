@@ -57,6 +57,20 @@ def load_data_source_tool(config: Dict[str, Any]) -> Dict[str, Any]:
     return executor.load_data_source(config)
 
 
+async def load_data_source_async_tool(config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Load data from any source asynchronously (background job).
+
+    Args:
+        config: Data source configuration
+
+    Returns:
+        Dictionary with job_id and initial status
+    """
+    executor = get_executor()
+    return await executor.load_data_source_async(config)
+
+
 def list_data_sources_tool() -> Dict[str, Any]:
     """
     List all available data source types.
