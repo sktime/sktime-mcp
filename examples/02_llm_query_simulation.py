@@ -22,7 +22,6 @@ from sktime_mcp.tools.list_estimators import list_estimators_tool
 from sktime_mcp.tools.describe_estimator import describe_estimator_tool, search_estimators_tool
 from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 from sktime_mcp.tools.fit_predict import fit_predict_tool
-from sktime_mcp.tools.data_tools import list_available_data_tool
 from sktime_mcp.composition.validator import get_composition_validator
 from sktime_mcp.registry.tag_resolver import get_tag_resolver
 
