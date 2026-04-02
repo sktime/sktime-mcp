@@ -4,7 +4,7 @@ Data loading tools for sktime MCP.
 Provides tools for loading data from various sources.
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from sktime_mcp.runtime.executor import get_executor
 
 
@@ -117,18 +117,34 @@ def fit_predict_with_data_tool(
     )
 
 
-def list_data_handles_tool() -> Dict[str, Any]:
+def list_available_data_tool(is_demo: Optional[bool] = None) -> Dict[str, Any]:
     """
-    List all loaded data handles.
-    
+    List all available data — demo datasets and loaded data handles.
+
+    Args:
+        is_demo: Optional filter.
+            True  → only system demo datasets
+            False → only active custom handles
+            None  → both (default)
+
     Returns:
         Dictionary with:
         - success: bool
-        - count: int (number of loaded data handles)
-        - handles: list of data handle information
+        - system_demos: list of demo dataset names (if is_demo != False)
+        - active_handles: list of loaded handle info (if is_demo != True)
     """
     executor = get_executor()
-    return executor.list_data_handles()
+    result: Dict[str, Any] = {"success": True}
+
+    if is_demo is None or is_demo is True:
+        demos = executor.list_datasets()
+        result["system_demos"] = [{"name": d, "type": "demo"} for d in demos]
+
+    if is_demo is None or is_demo is False:
+        handles = executor.list_data_handles()
+        result["active_handles"] = handles.get("handles", [])
+
+    return result
 
 
 def release_data_handle_tool(data_handle: str) -> Dict[str, Any]:

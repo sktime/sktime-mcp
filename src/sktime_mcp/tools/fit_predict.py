@@ -85,20 +85,6 @@ def predict_tool(
     return executor.predict(estimator_handle, fh=fh)
 
 
-def list_datasets_tool() -> Dict[str, Any]:
-    """
-    List available demo datasets.
-    
-    Returns:
-        Dictionary with list of dataset names
-    """
-    executor = get_executor()
-    return {
-        "success": True,
-        "datasets": executor.list_datasets(),
-    }
-
-
 def fit_predict_async_tool(
     estimator_handle: str,
     dataset: str,

@@ -19,7 +19,8 @@ sys.path.insert(0, "src")
 from sktime_mcp.tools.list_estimators import list_estimators_tool, get_available_tags
 from sktime_mcp.tools.describe_estimator import describe_estimator_tool
 from sktime_mcp.tools.instantiate import instantiate_estimator_tool, list_handles_tool
-from sktime_mcp.tools.fit_predict import fit_predict_tool, list_datasets_tool
+from sktime_mcp.tools.fit_predict import fit_predict_tool
+from sktime_mcp.tools.data_tools import list_available_data_tool
 from sktime_mcp.composition.validator import get_composition_validator
 
 
@@ -39,8 +40,8 @@ def main():
     # =========================================================================
     print_section("STEP 1: Discover Available Datasets")
     
-    datasets = list_datasets_tool()
-    print(f"Available datasets: {datasets['datasets']}")
+    datasets = list_available_data_tool(is_demo=True)
+    print(f"Available datasets: {[d['name'] for d in datasets['system_demos']]}")
     
     # =========================================================================
     # STEP 2: Discovery - Find Forecasting Estimators
