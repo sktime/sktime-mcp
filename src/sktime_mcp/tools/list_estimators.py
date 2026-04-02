@@ -4,7 +4,7 @@ list_estimators tool for sktime MCP.
 Discovers estimators by task type and capability tags.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from sktime_mcp.registry.interface import get_registry
 
@@ -16,20 +16,20 @@ def list_estimators_tool(
 ) -> Dict[str, Any]:
     """
     Discover sktime estimators by task type and capability tags.
-    
+
     Args:
         task: Filter by task type. Options: "forecasting", "classification",
               "regression", "transformation", "clustering"
         tags: Filter by capability tags. Example: {"capability:pred_int": True}
         limit: Maximum number of results to return (default: 50)
-    
+
     Returns:
         Dictionary with:
         - success: bool
         - estimators: List of estimator summaries
         - count: Number of results
         - total: Total matching (before limit)
-    
+
     Example:
         >>> list_estimators_tool(task="forecasting", tags={"capability:pred_int": True})
         {
@@ -40,17 +40,17 @@ def list_estimators_tool(
         }
     """
     registry = get_registry()
-    
+
     try:
         estimators = registry.get_all_estimators(task=task, tags=tags)
         total = len(estimators)
-        
+
         # Apply limit
         estimators = estimators[:limit]
-        
+
         # Convert to summaries
         results = [est.to_summary() for est in estimators]
-        
+
         return {
             "success": True,
             "estimators": results,

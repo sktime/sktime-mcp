@@ -8,9 +8,9 @@ Available adapters:
 - UrlAdapter: Datasets from Web URLs
 """
 
+from .file_adapter import FileAdapter
 from .pandas_adapter import PandasAdapter
 from .sql_adapter import SQLAdapter
-from .file_adapter import FileAdapter
 from .url_adapter import UrlAdapter
 
 __all__ = [

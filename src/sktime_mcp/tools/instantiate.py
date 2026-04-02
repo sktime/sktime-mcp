@@ -16,18 +16,18 @@ def instantiate_estimator_tool(
 ) -> Dict[str, Any]:
     """
     Create an estimator instance and return a handle.
-    
+
     Args:
         estimator: Name of the estimator class (e.g., "ARIMA")
         params: Optional hyperparameters for the estimator
-    
+
     Returns:
         Dictionary with:
         - success: bool
         - handle: Unique handle ID string
         - estimator: Name of the estimator
         - params: Parameters used
-    
+
     Example:
         >>> instantiate_estimator_tool("ARIMA", {"order": [1, 1, 1]})
         {
@@ -47,11 +47,11 @@ def instantiate_pipeline_tool(
 ) -> Dict[str, Any]:
     """
     Create a pipeline from a list of components and return a handle.
-    
+
     Args:
         components: List of estimator names in pipeline order
         params_list: Optional list of parameter dicts for each component
-    
+
     Returns:
         Dictionary with:
         - success: bool
@@ -59,7 +59,7 @@ def instantiate_pipeline_tool(
         - pipeline: Name of the pipeline
         - components: List of component names
         - params_list: Parameters used for each component
-    
+
     Example:
         >>> instantiate_pipeline_tool(
         ...     ["ConditionalDeseasonalizer", "Detrender", "ARIMA"],
@@ -80,10 +80,10 @@ def instantiate_pipeline_tool(
 def release_handle_tool(handle: str) -> Dict[str, Any]:
     """
     Release an estimator handle and free resources.
-    
+
     Args:
         handle: The handle ID to release
-    
+
     Returns:
         Dictionary with success status
     """
@@ -99,7 +99,7 @@ def release_handle_tool(handle: str) -> Dict[str, Any]:
 def list_handles_tool() -> Dict[str, Any]:
     """
     List all active estimator handles.
-    
+
     Returns:
         Dictionary with list of active handles and their info
     """

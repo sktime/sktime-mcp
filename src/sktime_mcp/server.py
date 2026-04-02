@@ -8,60 +8,55 @@ that exposes sktime's registry and execution capabilities to LLMs.
 import asyncio
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+from mcp.types import TextContent, Tool
 
-from sktime_mcp.tools.list_estimators import (
-    list_estimators_tool,
-    get_available_tasks,
-    get_available_tags,
+from sktime_mcp.composition.validator import get_composition_validator
+from sktime_mcp.tools.codegen import export_code_tool
+from sktime_mcp.tools.data_tools import (
+    fit_predict_with_data_tool,
+    list_data_handles_tool,
+    list_data_sources_tool,
+    load_data_source_tool,
+    release_data_handle_tool,
 )
 from sktime_mcp.tools.describe_estimator import (
     describe_estimator_tool,
     search_estimators_tool,
 )
+from sktime_mcp.tools.fit_predict import (
+    fit_predict_async_tool,
+    fit_predict_tool,
+    list_datasets_tool,
+)
+from sktime_mcp.tools.format_tools import (
+    auto_format_on_load_tool,
+    format_time_series_tool,
+)
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
     instantiate_pipeline_tool,
-    release_handle_tool,
-    list_handles_tool,
-)
-from sktime_mcp.tools.fit_predict import (
-    fit_predict_tool,
-    fit_predict_async_tool,
-    fit_tool,
-    predict_tool,
-    list_datasets_tool,
-)
-from sktime_mcp.tools.codegen import export_code_tool
-from sktime_mcp.tools.data_tools import (
-    load_data_source_tool,
-    list_data_sources_tool,
-    fit_predict_with_data_tool,
-    list_data_handles_tool,
-    release_data_handle_tool,
-)
-from sktime_mcp.tools.format_tools import (
-    format_time_series_tool,
-    auto_format_on_load_tool,
 )
 from sktime_mcp.tools.job_tools import (
-    check_job_status_tool,
-    list_jobs_tool,
     cancel_job_tool,
-    delete_job_tool,
+    check_job_status_tool,
     cleanup_old_jobs_tool,
+    delete_job_tool,
+    list_jobs_tool,
 )
-from sktime_mcp.composition.validator import get_composition_validator
+from sktime_mcp.tools.list_estimators import (
+    get_available_tags,
+    list_estimators_tool,
+)
 
 # Configure logging to stderr with detailed format
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
@@ -75,11 +70,10 @@ def sanitize_for_json(obj):
         return {str(k): sanitize_for_json(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return [sanitize_for_json(item) for item in obj]
-    elif hasattr(obj, '__dict__') and not isinstance(obj, (str, int, float, bool, type(None))):
+    elif hasattr(obj, "__dict__") and not isinstance(obj, (str, int, float, bool, type(None))):
         return str(obj)
     else:
         return obj
-
 
 
 @server.list_tools()
@@ -471,7 +465,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
     """Handle tool calls."""
     logger.info(f"=== Tool Call: {name} ===")
     logger.info(f"Arguments: {json.dumps(arguments, indent=2)}")
-    
+
     try:
         if name == "list_estimators":
             result = list_estimators_tool(
@@ -564,13 +558,13 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
         else:
             result = {"error": f"Unknown tool: {name}"}
-        
+
         logger.info(f"=== Result for {name} ===")
-        
+
         # Sanitize result for JSON serialization
         sanitized_result = sanitize_for_json(result)
         logger.info(f"{json.dumps(sanitized_result, indent=2, default=str)}")
-        
+
         return [TextContent(type="text", text=json.dumps(sanitized_result, indent=2, default=str))]
     except Exception as e:
         logger.exception(f"Error in tool {name}")

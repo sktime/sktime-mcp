@@ -8,12 +8,12 @@ enabling discovery, reasoning, composition, and execution of time series workflo
 __version__ = "0.1.0"
 __author__ = "sktime-mcp contributors"
 
+from sktime_mcp.composition.validator import CompositionValidator
 from sktime_mcp.registry.interface import (
     EstimatorNode,
     RegistryInterface,
 )
 from sktime_mcp.registry.tag_resolver import TagResolver
-from sktime_mcp.composition.validator import CompositionValidator
 from sktime_mcp.runtime.executor import Executor
 from sktime_mcp.runtime.handles import HandleManager
 
