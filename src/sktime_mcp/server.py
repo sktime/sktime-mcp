@@ -48,6 +48,7 @@ from sktime_mcp.tools.format_tools import (
     format_time_series_tool,
     auto_format_on_load_tool,
 )
+from sktime_mcp.tools.list_available_data import list_available_data_tool
 from sktime_mcp.tools.job_tools import (
     check_job_status_tool,
     list_jobs_tool,
@@ -223,8 +224,31 @@ async def list_tools() -> List[Tool]:
         ),
         Tool(
             name="list_datasets",
-            description="List available demo datasets",
+            description="[Deprecated] List available demo datasets. Use list_available_data instead.",
             inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="list_available_data",
+            description=(
+                "list all data available for use - system demo datasets and active "
+                "user-loaded data handles - in a single unified response. "
+                "replaces list_datasets and list_data_handles. "
+                "Use is_demo=true for demos only, is_demo=false for handles only, "
+                "or omit is_demo to get both."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "is_demo": {
+                        "type": "boolean",
+                        "description": (
+                            "optional filter: true returns only system demo datasets, "
+                            "false returns only active data handles, "
+                            "omit to return both."
+                        ),
+                    },
+                },
+            },
         ),
         Tool(
             name="get_available_tags",
@@ -328,7 +352,7 @@ async def list_tools() -> List[Tool]:
         ),
         Tool(
             name="list_data_handles",
-            description="List all loaded data handles and their metadata",
+            description="[Deprecated] List all loaded data handles and their metadata. Use list_available_data instead.",
             inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
@@ -505,6 +529,8 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             result = validation.to_dict()
         elif name == "list_datasets":
             result = list_datasets_tool()
+        elif name == "list_available_data":
+            result = list_available_data_tool(arguments.get("is_demo"))
         elif name == "get_available_tags":
             result = get_available_tags()
         elif name == "search_estimators":

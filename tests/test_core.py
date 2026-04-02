@@ -147,11 +147,49 @@ class TestTools:
     def test_describe_unknown_estimator(self):
         """Test describing an unknown estimator."""
         from sktime_mcp.tools.describe_estimator import describe_estimator_tool
-        
+
         result = describe_estimator_tool("NotARealEstimator12345")
-        
+
         assert not result["success"]
         assert "error" in result
+
+    def test_list_available_data_no_filter(self):
+        """list_available_data with no args returns both system_demos and active_handles."""
+        from sktime_mcp.tools.list_available_data import list_available_data_tool
+
+        result = list_available_data_tool()
+
+        assert result["success"]
+        assert "system_demos" in result
+        assert "active_handles" in result
+        assert "total" in result
+        assert isinstance(result["system_demos"], list)
+        assert isinstance(result["active_handles"], list)
+        assert result["total"] == len(result["system_demos"]) + len(result["active_handles"])
+        assert "airline" in result["system_demos"]
+
+    def test_list_available_data_demos_only(self):
+        """list_available_data with is_demo=True returns only system demo datasets."""
+        from sktime_mcp.tools.list_available_data import list_available_data_tool
+
+        result = list_available_data_tool(is_demo=True)
+
+        assert result["success"]
+        assert len(result["system_demos"]) > 0
+        assert result["active_handles"] == []
+        assert result["total"] == len(result["system_demos"])
+        assert "airline" in result["system_demos"]
+
+    def test_list_available_data_handles_only(self):
+        """list_available_data with is_demo=False returns only active data handles."""
+        from sktime_mcp.tools.list_available_data import list_available_data_tool
+
+        result = list_available_data_tool(is_demo=False)
+
+        assert result["success"]
+        assert result["system_demos"] == []
+        assert isinstance(result["active_handles"], list)
+        assert result["total"] == len(result["active_handles"])
 
 
 if __name__ == "__main__":

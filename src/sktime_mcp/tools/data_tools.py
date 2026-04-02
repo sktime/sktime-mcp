@@ -120,7 +120,11 @@ def fit_predict_with_data_tool(
 def list_data_handles_tool() -> Dict[str, Any]:
     """
     List all loaded data handles.
-    
+
+    .. deprecated::
+        Use ``list_available_data`` instead which returns both system demo datasets
+        and active data handles in a single unified response.
+
     Returns:
         Dictionary with:
         - success: bool
