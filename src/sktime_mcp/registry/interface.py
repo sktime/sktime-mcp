@@ -255,10 +255,47 @@ class RegistryInterface:
         """Get list of available task types."""
         return list(self.TASK_MAP.values())
     
-    def get_available_tags(self) -> List[str]:
-        """Get list of all available tags across all estimators."""
+    def get_available_tags(self) -> List[Dict[str, Any]]:
+        """Get rich metadata for all available tags using sktime's registry.
+
+        Returns a list of dicts, each containing:
+        - tag: the tag name (e.g., "scitype:y")
+        - description: human-readable explanation of what the tag means
+        - value_type: the expected value type (e.g., "bool", "str")
+        - applies_to: list of estimator types this tag applies to
+        """
         self._ensure_loaded()
-        return sorted(list(self._all_tags))
+
+        try:
+            from sktime.registry import all_tags
+            tags_df = all_tags(as_dataframe=True)
+        except ImportError:
+            # Fallback to old behaviour if all_tags is not available
+            return [{"tag": t} for t in sorted(self._all_tags)]
+
+        result = []
+        for _, row in tags_df.iterrows():
+            # Normalize scitype to a list for consistency
+            scitype = row.get("scitype", [])
+            if isinstance(scitype, str):
+                scitype = [scitype]
+            elif not isinstance(scitype, list):
+                scitype = list(scitype) if hasattr(scitype, '__iter__') else [str(scitype)]
+
+            # Convert value_type to a JSON-safe string representation
+            value_type = row.get("type", "")
+            if not isinstance(value_type, str):
+                value_type = str(value_type)
+
+            result.append({
+                "tag": row["name"],
+                "description": row.get("description", ""),
+                "value_type": value_type,
+                "applies_to": scitype,
+            })
+
+        result.sort(key=lambda x: x["tag"])
+        return result
     
     def search_estimators(self, query: str) -> List[EstimatorNode]:
         """

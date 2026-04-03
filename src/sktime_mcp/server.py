@@ -229,7 +229,12 @@ async def list_tools() -> List[Tool]:
         ),
         Tool(
             name="get_available_tags",
-            description="List all queryable capability tags",
+            description=(
+                "List all queryable capability tags with rich metadata. "
+                "Returns tag name, description, expected value type, and which "
+                "estimator types the tag applies to. ALWAYS call this before "
+                "using tags in list_estimators to ensure correct tag names and values."
+            ),
             inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
