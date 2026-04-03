@@ -8,6 +8,48 @@ from typing import Any, Dict, List, Optional
 
 from sktime_mcp.runtime.executor import get_executor
 from sktime_mcp.runtime.handles import get_handle_manager
+from sktime_mcp.registry.interface import get_registry
+
+
+def _is_safe_param_value(value: Any) -> bool:
+    """Return whether a parameter value is JSON-like and safe to pass through."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return True
+
+    if isinstance(value, (list, tuple)):
+        return all(_is_safe_param_value(v) for v in value)
+
+    if isinstance(value, dict):
+        return all(isinstance(k, str) and _is_safe_param_value(v) for k, v in value.items())
+
+    return False
+
+
+def _validate_instantiate_params(estimator: str, params: Optional[Dict[str, Any]]) -> None:
+    """Validate estimator params before instantiation."""
+    if params is None:
+        return
+
+    if not isinstance(params, dict):
+        raise TypeError("params must be a dict or None")
+
+    for key, value in params.items():
+        if not isinstance(key, str):
+            raise TypeError("all params keys must be strings")
+        if not _is_safe_param_value(value):
+            raise TypeError(f"unsupported parameter type for key '{key}'")
+
+    node = get_registry().get_estimator_by_name(estimator)
+    if node is None:
+        return
+
+    valid_keys = set(node.hyperparameters.keys())
+    if not valid_keys:
+        return
+
+    unknown = sorted(set(params.keys()) - valid_keys)
+    if unknown:
+        raise ValueError(f"Unknown parameter(s) for {estimator}: {unknown}")
 
 
 def instantiate_estimator_tool(
@@ -37,6 +79,8 @@ def instantiate_estimator_tool(
             "params": {"order": [1, 1, 1]}
         }
     """
+    _validate_instantiate_params(estimator, params)
+
     executor = get_executor()
     return executor.instantiate(estimator, params)
 
