@@ -69,7 +69,7 @@ Add to your Claude Desktop config (`~/.config/claude/claude_desktop_config.json`
 
 ### Discovery & Search
 
-#### 1. `list_estimators`
+#### 1. `list_estimators_tool`
 Discover estimators by task type and capability tags.
 
 **Arguments:**
@@ -92,7 +92,7 @@ Discover estimators by task type and capability tags.
 
 ---
 
-#### 2. `search_estimators`
+#### 2. `search_estimators_tool`
 Search estimators by name or description using text query.
 
 **Arguments:**
@@ -111,7 +111,7 @@ Search estimators by name or description using text query.
 
 ---
 
-#### 3. `describe_estimator`
+#### 3. `describe_estimator_tool`
 Get detailed information about a specific estimator's capabilities.
 
 **Arguments:**
@@ -139,7 +139,7 @@ List all queryable capability tags across all estimators.
 
 ### Instantiation
 
-#### 5. `instantiate_estimator`
+#### 5. `instantiate_estimator_tool`
 Create a single estimator instance and return a handle.
 
 **Arguments:**
@@ -161,7 +161,7 @@ Create a single estimator instance and return a handle.
 
 ---
 
-#### 6. `instantiate_pipeline` 
+#### 6. `instantiate_pipeline_tool` 
 Create a complete pipeline from a list of components (transformers → forecaster).
 
 **Arguments:**
@@ -214,7 +214,7 @@ Check if a proposed pipeline composition is valid before instantiation.
 
 ### Execution
 
-#### 8. `fit_predict`
+#### 8. `fit_predict_tool`
 Execute a complete workflow: load dataset, fit estimator, and generate predictions.
 
 **Arguments:**
@@ -237,7 +237,7 @@ Execute a complete workflow: load dataset, fit estimator, and generate predictio
 
 ### Datasets
 
-#### 9. `list_datasets`
+#### 9. `list_datasets_tool`
 List all available demo datasets for testing and experimentation.
 
 **Arguments:** None
@@ -282,23 +282,23 @@ Release an estimator handle and free memory.
 
 1. **Discover Models**
    ```
-   list_estimators(task="forecasting", tags={"capability:pred_int": true})
+   list_estimators_tool(task="forecasting", tags={"capability:pred_int": true})
    ```
 
 2. **Inspect Choice**
    ```
-   describe_estimator(estimator="ARIMA")
+   describe_estimator_tool(estimator="ARIMA")
    ```
 
 3. **Instantiate**
    ```
-   instantiate_estimator(estimator="ARIMA", params={"order": [1,1,1]})
+   instantiate_estimator_tool(estimator="ARIMA", params={"order": [1,1,1]})
    → Returns: {"handle": "est_abc123"}
    ```
 
 4. **Execute**
    ```
-   fit_predict(estimator_handle="est_abc123", dataset="airline", horizon=12)
+   fit_predict_tool(estimator_handle="est_abc123", dataset="airline", horizon=12)
    → Returns: {"predictions": {1: 450.2, 2: 455.1, ...}}
    ```
 
@@ -325,7 +325,7 @@ Release an estimator handle and free memory.
 
 3. **Execute**
    ```
-   fit_predict(estimator_handle="est_xyz789", dataset="airline", horizon=12)
+   fit_predict_tool(estimator_handle="est_xyz789", dataset="airline", horizon=12)
    → Returns: {"predictions": {...}}
    ```
 
