@@ -10,7 +10,7 @@ Welcome to the **sktime-mcp** User Guide. This comprehensive manual will help yo
 
 Before you begin, ensure you have:
 
-- **Python 3.9+** installed.
+- **Python 3.10+** installed.
 - **pip** package manager.
 - A compatible MCP Client (like **Claude Desktop**).
 
@@ -53,8 +53,8 @@ The `sktime-mcp` server exposes a suite of tools designed for Large Language Mod
 | **Discovery** | `list_estimators`, `search_estimators`, `describe_estimator` | Find the right model for your task (Forecasting, Classification, etc.). |
 | **Instantiation** | `instantiate_estimator`, `instantiate_pipeline` | Create model instances or complex pipelines. |
 | **Execution** | `fit_predict`, `fit`, `predict` | Train models and generate forecasts. |
-| **Data** | `load_data_source`, `list_datasets` | Load data from Pandas, CSV/Parquet, or SQL. |
-| **Export** | `export_code` | Generate Python code to reproduce your results. |
+| **Data** | `load_data_source`, `list_available_data` | Load data from Pandas, CSV/Parquet, or SQL, and inspect demo datasets plus active handles. |
+| **Export** | `export_code`, `save_model` | Generate Python code or persist fitted estimators to a local path. |
 
 ---
 
@@ -68,7 +68,7 @@ The `sktime-mcp` server exposes a suite of tools designed for Large Language Mod
 
 **Step 1: Discover Data**
 ```json
-{"tool": "list_datasets", "arguments": {}}
+{"tool": "list_available_data", "arguments": {"is_demo": true}}
 ```
 
 **Step 2: Find a Forecaster**
@@ -114,6 +114,46 @@ Check if components work together (e.g., Deseasonalizer -> Detrender -> ARIMA).
 }
 ```
 
+### 3. Save a Fitted Model
+
+Persist a trained estimator to a local filesystem path using sktime's MLflow integration.
+
+**Step 1: Fit the estimator**
+```json
+{
+  "tool": "fit_predict",
+  "arguments": {
+    "estimator_handle": "est_abc123",
+    "dataset": "airline",
+    "horizon": 12
+  }
+}
+```
+
+**Step 2: Save the fitted model**
+```json
+{
+  "tool": "save_model",
+  "arguments": {
+    "estimator_handle": "est_abc123",
+    "path": "/absolute/path/to/model_dir",
+    "mlflow_params": {
+      "serialization_format": "cloudpickle"
+    }
+  }
+}
+```
+
+**Typical response**
+```json
+{
+  "success": true,
+  "estimator_handle": "est_abc123",
+  "saved_path": "/absolute/path/to/model_dir",
+  "message": "Model saved successfully to '/absolute/path/to/model_dir'"
+}
+```
+
 ---
 
 ## 💾 Data Management
@@ -150,6 +190,7 @@ Bring your own data into the MCP server.
 
 - **Resource Management**: Explicitly release handles (`release_handle`, `release_data_handle`) when done to free up memory.
 - **Reproducibility**: Always use `export_code` after a successful experiment to save your work.
+- **Persistence**: Use `save_model` after fitting if you need the estimator to survive server restarts.
 - **Data Hygiene**: Use `auto_format_on_load` for messy real-world data to avoid frequent validation errors.
 
 ---
@@ -158,9 +199,9 @@ Bring your own data into the MCP server.
 
 While `sktime-mcp` is a powerful tool for prototyping, please be aware of the current architectural limitations.
 
-#### 1. In-Memory "Amnesia" (No Persistence)
-The server stores state in standard Python dictionaries.
-> **Impact**: If the server restarts or connection drops, all loaded data and trained models are lost. There is no disk-backed checkpointing.
+#### 1. In-Memory Handles (Explicit Persistence Required)
+The server stores active handles in standard Python dictionaries.
+> **Impact**: If the server restarts or connection drops, in-memory handles are lost. Use `save_model` to persist fitted estimators to a local filesystem path when needed.
 
 #### 2. Synchronous Execution (GIL Blocking)
 Heavy operations (like `AutoARIMA` fitting) run on the main thread.
@@ -196,6 +237,8 @@ Complex sktime types (Periods, Intervals) are converted to strings for LLM consu
 | Issue | Solution |
 |-------|----------|
 | **"Unknown estimator"** | Use `search_estimators` to find the exact case-sensitive name. |
-| **"Missing dependencies"** | Run `pip install -e ".[all]"` to ensure all extras are present. |
+| **`No module named 'sktime'` / `sktime must be installed`** | Activate your project virtual environment and reinstall: `pip install -e ".[dev]"` (or `pip install -e ".[all]"` if you need optional adapters). |
+| **"Missing dependencies"** | Run `pip install -e ".[all]"` to ensure optional extras are present. |
+| **`save_model` import/runtime errors** | Install MLflow in the environment used by the server. The tool relies on `sktime.utils.mlflow_sktime.save_model` and saves to a local filesystem path. |
 | **Validation Failures** | Enable `auto_format_on_load` or use `format_time_series` to clean your data. |
 | **Server Timeout** | Heavy models take time. Be patient or try a simpler model (e.g., `NaiveForecaster`) first. |

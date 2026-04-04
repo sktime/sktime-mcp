@@ -241,8 +241,8 @@ job_result = fit_predict_async(handle, "airline", horizon=24)
 job_id = job_result["job_id"]
 
 # 3. Server is responsive - you can do other things!
-# Check available datasets
-datasets = list_datasets()
+# Check available demo datasets
+datasets = list_available_data(is_demo=True)
 
 # Search for other estimators
 estimators = search_estimators("prophet")
