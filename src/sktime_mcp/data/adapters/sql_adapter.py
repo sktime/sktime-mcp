@@ -167,11 +167,16 @@ class SQLAdapter(DataSourceAdapter):
 
     def _sanitize_connection_string(self, conn_string: str) -> str:
         """Remove credentials from connection string for metadata."""
-        # Hide password in connection string
+        # Hide password in connection string but preserve the dialect/protocol
         if "@" in conn_string:
-            parts = conn_string.split("@")
-            if len(parts) == 2:
-                return f"***@{parts[1]}"
+            try:
+                protocol_auth, rest = conn_string.split("@", 1)
+                if "://" in protocol_auth:
+                    protocol, _ = protocol_auth.split("://", 1)
+                    return f"{protocol}://***@{rest}"
+                return f"***@{rest}"
+            except Exception:
+                return f"***@{conn_string.split('@')[-1]}"
         return conn_string
 
     def validate(self, data: pd.DataFrame) -> tuple[bool, dict[str, Any]]:
