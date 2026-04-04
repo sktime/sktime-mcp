@@ -249,3 +249,57 @@ def list_handles_tool() -> Dict[str, Any]:
         "handles": handles,
         "count": len(handles),
     }
+
+
+def load_model_tool(path: str) -> Dict[str, Any]:
+    """
+    Load a saved model from disk and register its handle.
+
+    Args:
+        path: Path to the saved model directory.
+
+    Returns:
+        Dictionary with success status and the new handle.
+    """
+    import os
+
+    if not os.path.exists(path):
+        return {
+            "success": False,
+            "error": f"Path does not exist: {path}",
+        }
+
+    try:
+        from sktime.utils.mlflow_sktime import load_model
+    except ImportError:
+        return {
+            "success": False,
+            "error": "The 'mlflow' package is required to load saved models. Please install it with: pip install sktime[mlflow]",
+        }
+
+    try:
+        instance = load_model(path)
+        estimator_name = type(instance).__name__
+
+        handle_manager = get_handle_manager()
+        handle_id = handle_manager.create_handle(
+            estimator_name=estimator_name,
+            instance=instance,
+            params={},
+            metadata={"source": "loaded", "path": path},
+        )
+        
+        handle_manager.mark_fitted(handle_id)
+
+        return {
+            "success": True,
+            "handle": handle_id,
+            "estimator": estimator_name,
+            "path": path,
+            "message": f"Successfully loaded {estimator_name}",
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Failed to load model: {str(e)}",
+        }

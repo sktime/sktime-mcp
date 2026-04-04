@@ -28,6 +28,7 @@ from sktime_mcp.tools.instantiate import (
     instantiate_pipeline_tool,
     release_handle_tool,
     list_handles_tool,
+    load_model_tool,
 )
 from sktime_mcp.tools.fit_predict import (
     fit_predict_tool,
@@ -473,6 +474,20 @@ async def list_tools() -> List[Tool]:
             },
         ),
         Tool(
+            name="load_model",
+            description="Load a saved sktime model from a local path and register it for use",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the saved model directory",
+                    },
+                },
+                "required": ["path"],
+            },
+        ),
+        Tool(
             name="cleanup_old_jobs",
             description="Remove jobs older than specified hours",
             inputSchema={
@@ -589,6 +604,8 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             result = delete_job_tool(arguments["job_id"])
         elif name == "cleanup_old_jobs":
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
+        elif name == "load_model":
+            result = load_model_tool(arguments["path"])
         else:
             result = {"error": f"Unknown tool: {name}"}
         
