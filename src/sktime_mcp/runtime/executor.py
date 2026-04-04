@@ -970,7 +970,9 @@ class Executor:
 
             # Extract the actual data from handles
             # For X handles, use 'y' field (the main data) or 'X' if available
-            X_train = X_train_data.get("X") if X_train_data.get("X") is not None else X_train_data["y"]
+            X_train = (
+                X_train_data.get("X") if X_train_data.get("X") is not None else X_train_data["y"]
+            )
             y_train = y_train_data["y"]
             X_test = X_test_data.get("X") if X_test_data.get("X") is not None else X_test_data["y"]
 
