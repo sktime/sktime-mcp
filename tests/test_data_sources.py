@@ -2,10 +2,15 @@
 Simple test to verify the data source implementation.
 """
 
+import os
 import sys
 from pathlib import Path
 
+<<<<<<< HEAD
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+=======
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+>>>>>>> 7fe3e36 (unified tool along with the test update)
 
 # Test imports
 print("Testing imports...")
@@ -94,14 +99,14 @@ try:
         handles = executor.list_data_handles()
         print(f"✓ Active data handles: {handles['count']}")
 
-        # Test instantiate and fit_predict_with_data
+        # Test instantiate and fit_predict
         est_result = executor.instantiate("NaiveForecaster", {"strategy": "last"})
         if est_result["success"]:
             print(f"✓ Estimator instantiated: {est_result['handle']}")
 
-            pred_result = executor.fit_predict_with_data(
-                estimator_handle=est_result["handle"],
-                data_handle=result["data_handle"],
+            pred_result = executor.fit_predict(
+                handle_id=est_result["handle"],
+                dataset=result["data_handle"],
                 horizon=5,
             )
 

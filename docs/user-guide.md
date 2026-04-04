@@ -10,7 +10,7 @@ Welcome to the **sktime-mcp** User Guide. This comprehensive manual will help yo
 
 Before you begin, ensure you have:
 
-- **Python 3.9+** installed.
+- **Python 3.10+** installed.
 - **pip** package manager.
 - A compatible MCP Client (like **Claude Desktop**).
 
@@ -52,7 +52,11 @@ The `sktime-mcp` server exposes a suite of tools designed for Large Language Mod
 |----------|-------|-------------|
 | **Discovery** | `list_estimators`, `search_estimators`, `describe_estimator` | Find the right model for your task (Forecasting, Classification, etc.). |
 | **Instantiation** | `instantiate_estimator`, `instantiate_pipeline` | Create model instances or complex pipelines. |
+<<<<<<< HEAD
 | **Execution** | `fit_predict`, `fit_predict_async`, `fit_predict_with_data` | Train models and generate forecasts on demo or user data. |
+=======
+| **Execution** | `fit_predict`, `fit`, `predict` | Train models and generate forecasts. |
+>>>>>>> 7fe3e36 (unified tool along with the test update)
 | **Data** | `load_data_source`, `list_available_data` | Load data from Pandas, CSV/Parquet, or SQL, and inspect demo datasets plus active handles. |
 | **Export** | `export_code`, `save_model` | Generate Python code or persist fitted estimators to a local path. |
 

@@ -180,6 +180,33 @@ class Executor:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def _get_data_for_fit_predict(self, dataset_or_handle: str) -> dict[str, Any]:
+        """Resolve dataset or data handle into y, X, and logical dataset name."""
+        if dataset_or_handle.startswith("data_"):
+            if dataset_or_handle not in self._data_handles:
+                return {
+                    "success": False,
+                    "error": f"Unknown data handle: {dataset_or_handle}",
+                    "available_handles": list(self._data_handles.keys()),
+                }
+            data = self._data_handles[dataset_or_handle]
+            return {
+                "success": True,
+                "y": data["y"],
+                "X": data.get("X"),
+                "name": f"handle {dataset_or_handle[:8]}",
+            }
+        else:
+            res = self.load_dataset(dataset_or_handle)
+            if not res["success"]:
+                return res
+            return {
+                "success": True,
+                "y": res["data"],
+                "X": res.get("exog"),
+                "name": dataset_or_handle,
+            }
+
     def fit_predict(
         self,
         handle_id: str,
@@ -188,6 +215,7 @@ class Executor:
         data_handle: Optional[str] = None,
     ) -> dict[str, Any]:
         """Convenience method: load data, fit, and predict."""
+<<<<<<< HEAD
         if data_handle is not None:
             # Use custom loaded data
             if data_handle not in self._data_handles:
@@ -207,6 +235,14 @@ class Executor:
             y = data_result["data"]
             X = data_result.get("exog")
 
+=======
+        data_result = self._get_data_for_fit_predict(dataset)
+        if not data_result["success"]:
+            return data_result
+
+        y = data_result["y"]
+        X = data_result.get("X")
+>>>>>>> 7fe3e36 (unified tool along with the test update)
         fh = list(range(1, horizon + 1))
 
         fit_result = self.fit(handle_id, y, X=X, fh=fh)
@@ -262,11 +298,11 @@ class Executor:
 
             # Step 1: Load dataset
             self._job_manager.update_job(
-                job_id, completed_steps=0, current_step=f"Loading dataset '{dataset}'..."
+                job_id, completed_steps=0, current_step=f"Loading validation for '{dataset}'..."
             )
             await asyncio.sleep(0.01)  # Yield control to event loop
 
-            data_result = self.load_dataset(dataset)
+            data_result = self._get_data_for_fit_predict(dataset)
             if not data_result["success"]:
                 self._job_manager.update_job(
                     job_id,
@@ -275,13 +311,14 @@ class Executor:
                 )
                 return data_result
 
-            y = data_result["data"]
-            X = data_result.get("exog")
+            y = data_result["y"]
+            X = data_result.get("X")
+            resolved_name = data_result.get("name", dataset)
             fh = list(range(1, horizon + 1))
 
             # Step 2: Fit model
             self._job_manager.update_job(
-                job_id, completed_steps=1, current_step=f"Fitting {estimator_name} on {dataset}..."
+                job_id, completed_steps=1, current_step=f"Fitting {estimator_name} on {resolved_name}..."
             )
             await asyncio.sleep(0.01)  # Yield control
 
@@ -818,42 +855,7 @@ class Executor:
             "changes_made": changes_made,
         }
 
-    def fit_predict_with_data(
-        self,
-        estimator_handle: str,
-        data_handle: str,
-        horizon: int = 12,
-    ) -> dict[str, Any]:
-        """
-        Fit and predict using a data handle.
 
-        Args:
-            estimator_handle: Estimator handle from instantiate_estimator
-            data_handle: Data handle from load_data_source
-            horizon: Forecast horizon
-
-        Returns:
-            Dictionary with predictions
-        """
-        if data_handle not in self._data_handles:
-            return {
-                "success": False,
-                "error": f"Unknown data handle: {data_handle}",
-                "available_handles": list(self._data_handles.keys()),
-            }
-
-        data = self._data_handles[data_handle]
-        y = data["y"]
-        X = data.get("X")
-
-        # Fit
-        fh = list(range(1, horizon + 1))
-        fit_result = self.fit(estimator_handle, y=y, X=X, fh=fh)
-        if not fit_result["success"]:
-            return fit_result
-
-        # Predict
-        return self.predict(estimator_handle, fh=fh, X=X)
 
     def list_data_handles(self) -> dict[str, Any]:
         """

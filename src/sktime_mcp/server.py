@@ -28,7 +28,6 @@ from sktime_mcp.tools.describe_estimator import (
     search_estimators_tool,
 )
 from sktime_mcp.tools.fit_predict import (
-    fit_predict_async_tool,
     fit_predict_tool,
 )
 from sktime_mcp.tools.format_tools import (
@@ -160,6 +159,7 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+<<<<<<< HEAD
             name="list_handles",
             description="List all active estimator handles in memory",
             inputSchema={"type": "object", "properties": {}},
@@ -181,6 +181,10 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="evaluate_estimator",
             description="Evaluate an estimator using cross-validation on a dataset",
+=======
+            name="fit_predict",
+            description="Fit an estimator on a dataset or active data handle and generate predictions",
+>>>>>>> 7fe3e36 (unified tool along with the test update)
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -224,13 +228,23 @@ async def list_tools() -> list[Tool]:
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
                     },
+                    "background": {
+                        "type": "boolean",
+                        "description": "If true, executes as a non-blocking background job and returns a job_id",
+                        "default": False,
+                    },
                 },
                 "required": ["estimator_handle"],
             },
         ),
         Tool(
-            name="fit_predict_async",
-            description="Fit an estimator on a dataset and generate predictions (non-blocking background job)",
+            name="fit_predict_with_data",
+            description=(
+                "Fit an estimator and generate predictions using custom data. GUIDELINES: "
+                "1. BEFORE calling this, check 'list_data_handles' or 'load_data_source' output. "
+                "2. If the metadata contains warnings about default target columns or column ambiguity, "
+                "STOP and re-load the data with explicit 'target_column' and 'time_column' mapping."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -238,9 +252,9 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Handle from instantiate_estimator",
                     },
-                    "dataset": {
+                    "data_handle": {
                         "type": "string",
-                        "description": "Dataset name: airline, sunspots, lynx, etc.",
+                        "description": "Handle from load_data_source",
                     },
                     "horizon": {
                         "type": "integer",
@@ -248,7 +262,7 @@ async def list_tools() -> list[Tool]:
                         "default": 12,
                     },
                 },
-                "required": ["estimator_handle", "dataset"],
+                "required": ["estimator_handle", "data_handle"],
             },
         ),
         Tool(
@@ -395,6 +409,7 @@ async def list_tools() -> list[Tool]:
             description="List all available data source types and their descriptions",
             inputSchema={"type": "object", "properties": {}},
         ),
+<<<<<<< HEAD
         Tool(
             name="fit_predict_with_data",
             description=(
@@ -423,6 +438,9 @@ async def list_tools() -> list[Tool]:
                 "required": ["estimator_handle", "data_handle"],
             },
         ),
+=======
+
+>>>>>>> 7fe3e36 (unified tool along with the test update)
         Tool(
             name="release_data_handle",
             description="Release a data handle and free memory",
@@ -628,7 +646,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["estimator_handle"],
                 arguments.get("dataset", ""),
                 arguments.get("horizon", 12),
+<<<<<<< HEAD
                 data_handle=arguments.get("data_handle"),
+=======
+                arguments.get("background", False),
+>>>>>>> 7fe3e36 (unified tool along with the test update)
             )
             # Sanitize immediately to handle Period objects
             result = sanitize_for_json(result)
@@ -684,12 +706,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             )
         elif name == "auto_format_on_load":
             result = auto_format_on_load_tool(arguments["enabled"])
-        elif name == "fit_predict_async":
-            result = fit_predict_async_tool(
-                arguments["estimator_handle"],
-                arguments["dataset"],
-                arguments.get("horizon", 12),
-            )
+
         elif name == "check_job_status":
             result = check_job_status_tool(arguments["job_id"])
         elif name == "list_jobs":
