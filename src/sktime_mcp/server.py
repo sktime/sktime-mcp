@@ -38,8 +38,8 @@ from sktime_mcp.tools.format_tools import (
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
     instantiate_pipeline_tool,
-    load_model_tool,
     list_handles_tool,
+    load_model_tool,
     release_handle_tool,
 )
 from sktime_mcp.tools.job_tools import (
