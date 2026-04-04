@@ -3,8 +3,9 @@ Simple test to verify the data source implementation.
 """
 
 import sys
+from pathlib import Path
 
-sys.path.insert(0, "/home/shashank/Desktop/sktime-mcp/src")
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 # Test imports
 print("Testing imports...")
@@ -14,7 +15,7 @@ try:
     print("✓ Data module imports successful")
 except ImportError as e:
     print(f"✗ Import failed: {e}")
-    sys.exit(1)
+    raise Exception(e) from e
 
 # Test registry
 print("\nTesting DataSourceRegistry...")
