@@ -5,30 +5,31 @@ Provides tools for loading data from various sources.
 """
 
 import logging
-from typing import Any, Dict
+from typing import Any
+
 from sktime_mcp.runtime.executor import get_executor
 
 logger = logging.getLogger(__name__)
 
 
-def load_data_source_tool(config: Dict[str, Any]) -> Dict[str, Any]:
+def load_data_source_tool(config: dict[str, Any]) -> dict[str, Any]:
     """
     Load data from any source (pandas, SQL, file, etc.).
-    
+
     Args:
         config: Data source configuration
             {
                 "type": "pandas" | "sql" | "file",
                 ... (type-specific configuration)
             }
-    
+
     Returns:
         Dictionary with:
         - success: bool
         - data_handle: str (handle ID for the loaded data)
         - metadata: dict (information about the data)
         - validation: dict (validation results)
-    
+
     Examples:
         # Pandas DataFrame
         >>> load_data_source_tool({
@@ -37,7 +38,7 @@ def load_data_source_tool(config: Dict[str, Any]) -> Dict[str, Any]:
         ...     "time_column": "date",
         ...     "target_column": "value"
         ... })
-        
+
         # SQL Database
         >>> load_data_source_tool({
         ...     "type": "sql",
@@ -46,7 +47,7 @@ def load_data_source_tool(config: Dict[str, Any]) -> Dict[str, Any]:
         ...     "time_column": "date",
         ...     "target_column": "value"
         ... })
-        
+
         # CSV File
         >>> load_data_source_tool({
         ...     "type": "file",
@@ -59,10 +60,10 @@ def load_data_source_tool(config: Dict[str, Any]) -> Dict[str, Any]:
     return executor.load_data_source(config)
 
 
-def list_data_sources_tool() -> Dict[str, Any]:
+def list_data_sources_tool() -> dict[str, Any]:
     """
     List all available data source types.
-    
+
     Returns:
         Dictionary with:
         - success: bool
@@ -70,9 +71,9 @@ def list_data_sources_tool() -> Dict[str, Any]:
         - descriptions: dict with descriptions for each source type
     """
     from sktime_mcp.data import DataSourceRegistry
-    
+
     sources = DataSourceRegistry.list_adapters()
-    
+
     # Get descriptions for each source
     descriptions = {}
     for source_type in sources:
@@ -81,7 +82,7 @@ def list_data_sources_tool() -> Dict[str, Any]:
             "class": info["class"],
             "description": info["docstring"].split("\n")[0] if info["docstring"] else "",
         }
-    
+
     return {
         "success": True,
         "sources": sources,
@@ -93,18 +94,18 @@ def fit_predict_with_data_tool(
     estimator_handle: str,
     data_handle: str,
     horizon: int = 12,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Fit and predict using custom data.
-    
+
     Args:
         estimator_handle: Handle from instantiate_estimator
         data_handle: Handle from load_data_source
         horizon: Forecast horizon (default: 12)
-    
+
     Returns:
         Dictionary with predictions
-    
+
     Example:
         >>> fit_predict_with_data_tool(
         ...     estimator_handle="est_abc123",
@@ -120,13 +121,13 @@ def fit_predict_with_data_tool(
     )
 
 
-def release_data_handle_tool(data_handle: str) -> Dict[str, Any]:
+def release_data_handle_tool(data_handle: str) -> dict[str, Any]:
     """
     Release a data handle and free memory.
-    
+
     Args:
         data_handle: Data handle to release
-    
+
     Returns:
         Dictionary with success status
     """
@@ -135,8 +136,8 @@ def release_data_handle_tool(data_handle: str) -> Dict[str, Any]:
 
 
 def load_data_source_async_tool(
-    config: Dict[str, Any],
-) -> Dict[str, Any]:
+    config: dict[str, Any],
+) -> dict[str, Any]:
     """
     Load data from any source in the background (non-blocking).
 
@@ -167,6 +168,7 @@ def load_data_source_async_tool(
         }
     """
     import asyncio
+
     from sktime_mcp.runtime.jobs import get_job_manager
 
     executor = get_executor()

@@ -1,9 +1,9 @@
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from sktime_mcp.runtime.executor import get_executor
 
 
-def list_available_data_tool(is_demo: Optional[bool] = None) -> Dict[str, Any]:
+def list_available_data_tool(is_demo: Optional[bool] = None) -> dict[str, Any]:
     """
     List all data available for use — system demo datasets and active data handles.
 

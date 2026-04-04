@@ -2,39 +2,41 @@
 Tests for sktime-mcp core functionality.
 """
 
-import pytest
 import sys
+
+import pytest
+
 sys.path.insert(0, "src")
 
 
 class TestRegistryInterface:
     """Tests for the Registry Interface."""
-    
+
     def test_registry_loads(self):
         """Test that the registry loads successfully."""
         from sktime_mcp.registry.interface import get_registry
-        
+
         registry = get_registry()
         estimators = registry.get_all_estimators()
-        
+
         assert len(estimators) > 0, "Registry should contain estimators"
-    
+
     def test_filter_by_task(self):
         """Test filtering by task type."""
         from sktime_mcp.registry.interface import get_registry
-        
+
         registry = get_registry()
         forecasters = registry.get_all_estimators(task="forecasting")
-        
+
         assert all(e.task == "forecasting" for e in forecasters)
-    
+
     def test_get_estimator_by_name(self):
         """Test getting a specific estimator."""
         from sktime_mcp.registry.interface import get_registry
-        
+
         registry = get_registry()
         node = registry.get_estimator_by_name("NaiveForecaster")
-        
+
         # NaiveForecaster should always exist
         if node is not None:
             assert node.name == "NaiveForecaster"
@@ -43,46 +45,46 @@ class TestRegistryInterface:
 
 class TestHandleManager:
     """Tests for the Handle Manager."""
-    
+
     def test_create_and_get_handle(self):
         """Test creating and retrieving handles."""
         from sktime_mcp.runtime.handles import HandleManager
-        
+
         manager = HandleManager()
-        
+
         # Create a dummy instance
         class DummyEstimator:
             pass
-        
+
         instance = DummyEstimator()
         handle = manager.create_handle("DummyEstimator", instance, {"param": 1})
-        
+
         assert handle.startswith("est_")
         assert manager.exists(handle)
         assert manager.get_instance(handle) is instance
-    
+
     def test_mark_fitted(self):
         """Test marking estimators as fitted."""
         from sktime_mcp.runtime.handles import HandleManager
-        
+
         manager = HandleManager()
-        
+
         class DummyEstimator:
             pass
-        
+
         handle = manager.create_handle("Dummy", DummyEstimator())
-        
+
         assert not manager.is_fitted(handle)
         manager.mark_fitted(handle)
         assert manager.is_fitted(handle)
-    
+
     def test_release_handle(self):
         """Test releasing handles."""
         from sktime_mcp.runtime.handles import HandleManager
-        
+
         manager = HandleManager()
         handle = manager.create_handle("Dummy", object())
-        
+
         assert manager.exists(handle)
         manager.release_handle(handle)
         assert not manager.exists(handle)
@@ -90,51 +92,51 @@ class TestHandleManager:
 
 class TestCompositionValidator:
     """Tests for the Composition Validator."""
-    
+
     def test_single_component_valid(self):
         """Test that a single estimator is valid."""
         from sktime_mcp.composition.validator import CompositionValidator
-        
+
         validator = CompositionValidator()
         result = validator.validate_pipeline(["NaiveForecaster"])
-        
+
         # Single forecaster should be valid if it exists
         if result.valid:
             assert len(result.errors) == 0
-    
+
     def test_empty_pipeline_invalid(self):
         """Test that empty pipeline is invalid."""
         from sktime_mcp.composition.validator import CompositionValidator
-        
+
         validator = CompositionValidator()
         result = validator.validate_pipeline([])
-        
+
         assert not result.valid
         assert "empty" in result.errors[0].lower()
-    
+
     def test_unknown_estimator_invalid(self):
         """Test that unknown estimators are caught."""
         from sktime_mcp.composition.validator import CompositionValidator
-        
+
         validator = CompositionValidator()
         result = validator.validate_pipeline(["NotARealEstimator"])
-        
+
         assert not result.valid
 
 
 class TestTools:
     """Tests for MCP tools."""
-    
+
     def test_list_estimators_tool(self):
         """Test list_estimators tool."""
         from sktime_mcp.tools.list_estimators import list_estimators_tool
-        
+
         result = list_estimators_tool(limit=5)
-        
+
         assert result["success"]
         assert "estimators" in result
         assert len(result["estimators"]) <= 5
-    
+
     def test_describe_unknown_estimator(self):
         """Test describing an unknown estimator."""
         from sktime_mcp.tools.describe_estimator import describe_estimator_tool
@@ -181,11 +183,12 @@ class TestTools:
         assert result["system_demos"] == []
         assert isinstance(result["active_handles"], list)
         assert result["total"] == len(result["active_handles"])
+
     def test_save_model_tool(self, monkeypatch, tmp_path):
         """Test save_model tool resolves handle and forwards parameters."""
+        import sktime_mcp.tools.save_model as save_model_module
         from sktime_mcp.runtime.handles import get_handle_manager
         from sktime_mcp.tools.save_model import save_model_tool
-        import sktime_mcp.tools.save_model as save_model_module
 
         calls = {}
 

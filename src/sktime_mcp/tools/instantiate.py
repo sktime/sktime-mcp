@@ -4,7 +4,7 @@ instantiate_estimator tool for sktime MCP.
 Creates executable estimator instances and pipelines.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from sktime_mcp.registry.interface import get_registry
 from sktime_mcp.runtime.executor import get_executor
@@ -28,7 +28,7 @@ def _is_safe_value(value: Any) -> bool:
 def _validate_params(
     params: Any,
     estimator_name: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Validate params for type safety and optionally check keys.
 
@@ -62,7 +62,7 @@ def _validate_params(
             return {
                 "valid": False,
                 "error": (
-                    f"Parameter keys must be strings, got {type(key).__name__} " f"for key: {key!r}"
+                    f"Parameter keys must be strings, got {type(key).__name__} for key: {key!r}"
                 ),
                 "warnings": warnings,
             }
@@ -101,8 +101,8 @@ def _validate_params(
 
 def instantiate_estimator_tool(
     estimator: str,
-    params: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    params: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
     """
     Create an estimator instance and return a handle.
 
@@ -147,9 +147,9 @@ def instantiate_estimator_tool(
 
 
 def instantiate_pipeline_tool(
-    components: List[str],
-    params_list: Optional[List[Dict[str, Any]]] = None,
-) -> Dict[str, Any]:
+    components: list[str],
+    params_list: Optional[list[dict[str, Any]]] = None,
+) -> dict[str, Any]:
     """
     Create a pipeline from a list of components and return a handle.
 
@@ -216,7 +216,7 @@ def instantiate_pipeline_tool(
     return result
 
 
-def release_handle_tool(handle: str) -> Dict[str, Any]:
+def release_handle_tool(handle: str) -> dict[str, Any]:
     """
     Release an estimator handle and free resources.
 
@@ -235,7 +235,7 @@ def release_handle_tool(handle: str) -> Dict[str, Any]:
     }
 
 
-def list_handles_tool() -> Dict[str, Any]:
+def list_handles_tool() -> dict[str, Any]:
     """
     List all active estimator handles.
 
@@ -251,7 +251,7 @@ def list_handles_tool() -> Dict[str, Any]:
     }
 
 
-def load_model_tool(path: str) -> Dict[str, Any]:
+def load_model_tool(path: str) -> dict[str, Any]:
     """
     Load a saved model from disk and register its handle.
 
@@ -261,9 +261,9 @@ def load_model_tool(path: str) -> Dict[str, Any]:
     Returns:
         Dictionary with success status and the new handle.
     """
-    import os
+    from pathlib import Path
 
-    if not os.path.exists(path):
+    if not Path(path).exists():
         return {
             "success": False,
             "error": f"Path does not exist: {path}",
@@ -288,7 +288,7 @@ def load_model_tool(path: str) -> Dict[str, Any]:
             params={},
             metadata={"source": "loaded", "path": path},
         )
-        
+
         handle_manager.mark_fitted(handle_id)
 
         return {

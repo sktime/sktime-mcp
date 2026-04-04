@@ -4,19 +4,19 @@ describe_estimator tool for sktime MCP.
 Gets detailed information about an estimator's capabilities.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from sktime_mcp.registry.interface import get_registry
 from sktime_mcp.registry.tag_resolver import get_tag_resolver
 
 
-def describe_estimator_tool(estimator: str) -> Dict[str, Any]:
+def describe_estimator_tool(estimator: str) -> dict[str, Any]:
     """
     Get detailed information about a specific estimator.
-    
+
     Args:
         estimator: Name of the estimator class (e.g., "ARIMA", "RandomForest")
-    
+
     Returns:
         Dictionary with:
         - success: bool
@@ -27,7 +27,7 @@ def describe_estimator_tool(estimator: str) -> Dict[str, Any]:
         - tags: Dict of capability tags
         - tag_explanations: Human-readable tag descriptions
         - docstring: First 500 chars of docstring
-    
+
     Example:
         >>> describe_estimator_tool("ARIMA")
         {
@@ -41,7 +41,7 @@ def describe_estimator_tool(estimator: str) -> Dict[str, Any]:
     """
     registry = get_registry()
     tag_resolver = get_tag_resolver()
-    
+
     node = registry.get_estimator_by_name(estimator)
     if node is None:
         # Try case-insensitive search
@@ -55,10 +55,10 @@ def describe_estimator_tool(estimator: str) -> Dict[str, Any]:
                 "error": f"Unknown estimator: {estimator}",
                 "suggestion": "Use list_estimators to discover available estimators",
             }
-    
+
     # Get tag explanations
     tag_explanations = tag_resolver.explain_tags(node.tags)
-    
+
     return {
         "success": True,
         "name": node.name,
@@ -71,19 +71,19 @@ def describe_estimator_tool(estimator: str) -> Dict[str, Any]:
     }
 
 
-def search_estimators_tool(query: str, limit: int = 20) -> Dict[str, Any]:
+def search_estimators_tool(query: str, limit: int = 20) -> dict[str, Any]:
     """
     Search estimators by name or description.
-    
+
     Args:
         query: Search string (case-insensitive)
         limit: Maximum results
-    
+
     Returns:
         Dictionary with matching estimators
     """
     registry = get_registry()
-    
+
     try:
         matches = registry.search_estimators(query)[:limit]
         return {

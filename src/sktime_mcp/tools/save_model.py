@@ -4,7 +4,7 @@ save_model tool for sktime MCP.
 Saves estimator instances via sktime's MLflow integration.
 """
 
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Optional
 
 from sktime_mcp.runtime.handles import get_handle_manager
 
@@ -24,8 +24,8 @@ def _get_mlflow_save_model() -> Callable[..., Any]:
 def save_model_tool(
     estimator_handle: str,
     path: str,
-    mlflow_params: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    mlflow_params: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
     """
     Save an instantiated estimator to a local path or URI using sktime+MLflow.
 

@@ -4,10 +4,10 @@ Code generation tool for sktime MCP.
 Generates Python code to recreate estimators and pipelines.
 """
 
-from typing import Any, Dict, List, Optional
-import inspect
-from sktime_mcp.runtime.handles import get_handle_manager
+from typing import Any, Optional
+
 from sktime_mcp.registry.interface import get_registry
+from sktime_mcp.runtime.handles import get_handle_manager
 
 
 def _format_value(value: Any) -> str:
@@ -45,22 +45,17 @@ def _get_estimator_module(estimator_name: str) -> Optional[str]:
 
 
 def _generate_single_estimator_code(
-    estimator_name: str,
-    params: Dict[str, Any],
-    var_name: str = "model"
-) -> Dict[str, Any]:
+    estimator_name: str, params: dict[str, Any], var_name: str = "model"
+) -> dict[str, Any]:
     """Generate Python code for a single estimator."""
     module = _get_estimator_module(estimator_name)
-    
+
     if not module:
-        return {
-            "success": False,
-            "error": f"Could not find module for estimator: {estimator_name}"
-        }
-    
+        return {"success": False, "error": f"Could not find module for estimator: {estimator_name}"}
+
     # Build import statement
     imports = [f"from {module} import {estimator_name}"]
-    
+
     # Build instantiation code
     if params:
         param_strs = []
@@ -70,11 +65,11 @@ def _generate_single_estimator_code(
         instantiation = f"{var_name} = {estimator_name}({params_str})"
     else:
         instantiation = f"{var_name} = {estimator_name}()"
-    
+
     # Combine into full code
     code_lines = imports + ["", instantiation]
     code = "\n".join(code_lines)
-    
+
     return {
         "success": True,
         "code": code,
@@ -84,35 +79,28 @@ def _generate_single_estimator_code(
 
 
 def _generate_pipeline_code(
-    components: List[str],
-    params_list: List[Dict[str, Any]],
-    var_name: str = "pipeline"
-) -> Dict[str, Any]:
+    components: list[str], params_list: list[dict[str, Any]], var_name: str = "pipeline"
+) -> dict[str, Any]:
     """Generate Python code for a pipeline."""
     registry = get_registry()
-    
+
     # Collect all imports needed
     imports = set()
-    
+
     # Get task types for components
     component_tasks = []
     for comp_name in components:
         node = registry.get_estimator_by_name(comp_name)
         if not node:
-            return {
-                "success": False,
-                "error": f"Unknown estimator in pipeline: {comp_name}"
-            }
+            return {"success": False, "error": f"Unknown estimator in pipeline: {comp_name}"}
         component_tasks.append(node.task)
         module = node.class_ref.__module__
         imports.add(f"from {module} import {comp_name}")
-    
+
     # Determine pipeline type
-    all_transformers_except_last = all(
-        task == "transformation" for task in component_tasks[:-1]
-    )
+    all_transformers_except_last = all(task == "transformation" for task in component_tasks[:-1])
     final_task = component_tasks[-1]
-    
+
     # Build component instantiations
     component_code_lines = []
     for i, (comp_name, params) in enumerate(zip(components, params_list)):
@@ -125,7 +113,7 @@ def _generate_pipeline_code(
             component_code_lines.append(f"{var} = {comp_name}({params_str})")
         else:
             component_code_lines.append(f"{var} = {comp_name}()")
-    
+
     # Build pipeline instantiation based on composition type
     if len(components) == 1:
         # Single component, no pipeline needed
@@ -133,7 +121,7 @@ def _generate_pipeline_code(
     elif all_transformers_except_last and final_task == "forecasting":
         # Use TransformedTargetForecaster
         imports.add("from sktime.forecasting.compose import TransformedTargetForecaster")
-        
+
         if len(components) == 2:
             pipeline_code = f"""{var_name} = TransformedTargetForecaster([
     ("transformer", step_0),
@@ -152,7 +140,7 @@ def _generate_pipeline_code(
     ("transformers", transformer_chain),
     ("forecaster", step_{len(components) - 1}),
 ])"""
-    
+
     elif all_transformers_except_last and final_task in ("classification", "regression"):
         # Use sklearn-style Pipeline
         imports.add("from sktime.pipeline import Pipeline")
@@ -160,7 +148,7 @@ def _generate_pipeline_code(
         pipeline_code = f"""{var_name} = Pipeline([
     {steps}
 ])"""
-    
+
     elif all(task == "transformation" for task in component_tasks):
         # All transformers - use TransformerPipeline
         imports.add("from sktime.transformations.compose import TransformerPipeline")
@@ -168,22 +156,21 @@ def _generate_pipeline_code(
         pipeline_code = f"""{var_name} = TransformerPipeline([
     {steps}
 ])"""
-    
+
     else:
-        return {
-            "success": False,
-            "error": "Unsupported pipeline composition type"
-        }
-    
+        return {"success": False, "error": "Unsupported pipeline composition type"}
+
     # Combine all code
-    code_lines = sorted(list(imports)) + [""] + component_code_lines + [""] + [pipeline_code]
+    code_lines = sorted(imports) + [""] + component_code_lines + [""] + [pipeline_code]
     code = "\n".join(code_lines)
-    
+
     return {
         "success": True,
         "code": code,
-        "imports": sorted(list(imports)),
-        "pipeline_type": "TransformedTargetForecaster" if "TransformedTargetForecaster" in str(imports) else "Pipeline",
+        "imports": sorted(imports),
+        "pipeline_type": "TransformedTargetForecaster"
+        if "TransformedTargetForecaster" in str(imports)
+        else "Pipeline",
     }
 
 
@@ -191,27 +178,27 @@ def export_code_tool(
     handle: str,
     var_name: str = "model",
     include_fit_example: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Export an estimator or pipeline as executable Python code.
-    
+
     Args:
         handle: The handle ID of the estimator/pipeline to export
         var_name: Variable name to use in generated code (default: "model")
         include_fit_example: Whether to include a fit/predict example (default: False)
-    
+
     Returns:
         Dictionary with:
         - success: bool
         - code: Generated Python code string
         - estimator_name: Name of the estimator/pipeline
         - is_pipeline: Whether this is a pipeline
-        
+
     Example:
         >>> # First create an estimator
         >>> result = instantiate_estimator_tool("ARIMA", {"order": [1, 1, 1]})
         >>> handle = result["handle"]
-        >>> 
+        >>>
         >>> # Export as code
         >>> export_code_tool(handle, var_name="arima_model")
         {
@@ -222,34 +209,31 @@ def export_code_tool(
         }
     """
     handle_manager = get_handle_manager()
-    
+
     # Get handle info
     try:
         handle_info = handle_manager.get_info(handle)
     except KeyError:
-        return {
-            "success": False,
-            "error": f"Handle not found: {handle}"
-        }
-    
+        return {"success": False, "error": f"Handle not found: {handle}"}
+
     estimator_name = handle_info.estimator_name
     params = handle_info.params
-    
+
     # Check if this is a pipeline (has components in metadata)
     is_pipeline = "components" in params
-    
+
     if is_pipeline:
         components = params["components"]
         params_list = params.get("params_list", [{}] * len(components))
         result = _generate_pipeline_code(components, params_list, var_name)
     else:
         result = _generate_single_estimator_code(estimator_name, params, var_name)
-    
+
     if not result["success"]:
         return result
-    
+
     code = result["code"]
-    
+
     # Optionally add fit/predict example
     if include_fit_example:
         example_code = f"""
@@ -268,7 +252,7 @@ predictions = {var_name}.predict(fh=fh)
 print(predictions)
 """
         code += example_code
-    
+
     return {
         "success": True,
         "code": code,
