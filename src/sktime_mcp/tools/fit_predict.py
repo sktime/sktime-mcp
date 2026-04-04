@@ -4,9 +4,10 @@ fit_predict tool for sktime MCP.
 Executes complete forecasting workflows.
 """
 
-from typing import Any, Dict, List, Optional, Union
 import logging
+from typing import Any, Dict
 
+from sktime_mcp.runtime.async_scheduler import schedule_coroutine
 from sktime_mcp.runtime.executor import get_executor
 
 # ✅ Logger added here
@@ -20,18 +21,18 @@ def fit_predict_tool(
 ) -> Dict[str, Any]:
     """
     Execute a complete fit-predict workflow.
-    
+
     Args:
         estimator_handle: Handle from instantiate_estimator
         dataset: Name of demo dataset (e.g., "airline", "sunspots")
         horizon: Forecast horizon (default: 12)
-    
+
     Returns:
         Dictionary with:
         - success: bool
         - predictions: Forecast values
         - horizon: Number of steps predicted
-    
+
     Example:
         >>> fit_predict_tool("est_abc123", "airline", horizon=12)
         {
@@ -50,11 +51,11 @@ def fit_tool(
 ) -> Dict[str, Any]:
     """
     Fit an estimator on a dataset.
-    
+
     Args:
         estimator_handle: Handle from instantiate_estimator
         dataset: Name of demo dataset
-    
+
     Returns:
         Dictionary with success status
     """
@@ -62,7 +63,7 @@ def fit_tool(
     data_result = executor.load_dataset(dataset)
     if not data_result["success"]:
         return data_result
-    
+
     return executor.fit(
         estimator_handle,
         y=data_result["data"],
@@ -76,11 +77,11 @@ def predict_tool(
 ) -> Dict[str, Any]:
     """
     Generate predictions from a fitted estimator.
-    
+
     Args:
         estimator_handle: Handle of a fitted estimator
         horizon: Forecast horizon
-    
+
     Returns:
         Dictionary with predictions
     """
@@ -96,21 +97,21 @@ def fit_predict_async_tool(
 ) -> Dict[str, Any]:
     """
     Execute a fit-predict workflow in the background (non-blocking).
-    
+
     This tool schedules the training as a background job and returns immediately
     with a job_id. Use check_job_status to monitor progress.
-    
+
     Args:
         estimator_handle: Handle from instantiate_estimator
         dataset: Name of demo dataset (e.g., "airline", "sunspots")
         horizon: Forecast horizon (default: 12)
-    
+
     Returns:
         Dictionary with:
         - success: bool
         - job_id: Job ID for tracking progress
         - message: Information about the job
-    
+
     Example:
         >>> fit_predict_async_tool("est_abc123", "airline", horizon=12)
         {
@@ -119,12 +120,11 @@ def fit_predict_async_tool(
             "message": "Training job started. Use check_job_status to monitor progress."
         }
     """
-    import asyncio
     from sktime_mcp.runtime.jobs import get_job_manager
-    
+
     executor = get_executor()
     job_manager = get_job_manager()
-    
+
     # Get estimator info
     try:
         handle_info = executor._handle_manager.get_info(estimator_handle)
@@ -132,7 +132,7 @@ def fit_predict_async_tool(
     except Exception as e:
         logger.warning(f"Could not get estimator name: {e}")
         estimator_name = "Unknown"
-    
+
     # Create job
     job_id = job_manager.create_job(
         job_type="fit_predict",
@@ -142,19 +142,11 @@ def fit_predict_async_tool(
         horizon=horizon,
         total_steps=3,
     )
-    
-    # Schedule the async coroutine on the event loop
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        # No event loop in current thread, create one
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    # Schedule the coroutine (non-blocking!)
+
+    # Schedule the coroutine (non-blocking)
     coro = executor.fit_predict_async(estimator_handle, dataset, horizon, job_id)
-    asyncio.run_coroutine_threadsafe(coro, loop)
-    
+    schedule_coroutine(coro)
+
     return {
         "success": True,
         "job_id": job_id,

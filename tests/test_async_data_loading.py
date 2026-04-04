@@ -5,15 +5,16 @@ Verifies that load_data_source_async_tool schedules data loading
 as a background job and resolves to a valid data_handle.
 """
 
-import sys
 import asyncio
+import sys
 import unittest
+import warnings
 
 sys.path.insert(0, "src")
 
-from sktime_mcp.tools.data_tools import load_data_source_async_tool
 from sktime_mcp.runtime.executor import get_executor
-from sktime_mcp.runtime.jobs import get_job_manager, JobStatus
+from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
+from sktime_mcp.tools.data_tools import load_data_source_async_tool
 
 
 class TestAsyncDataLoadingTool(unittest.TestCase):
@@ -23,8 +24,7 @@ class TestAsyncDataLoadingTool(unittest.TestCase):
         """Async load should return a job_id immediately."""
         config = {
             "type": "pandas",
-            "data": {"date": ["2020-01", "2020-02", "2020-03"],
-                     "value": [10, 20, 30]},
+            "data": {"date": ["2020-01", "2020-02", "2020-03"], "value": [10, 20, 30]},
             "time_column": "date",
             "target_column": "value",
         }
@@ -32,6 +32,26 @@ class TestAsyncDataLoadingTool(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertIn("job_id", result)
         self.assertEqual(result["source_type"], "pandas")
+
+    def test_does_not_emit_get_event_loop_deprecation_warning(self):
+        """Tool scheduling should avoid deprecated get_event_loop access."""
+        config = {
+            "type": "pandas",
+            "data": {"date": ["2020-01", "2020-02", "2020-03"], "value": [10, 20, 30]},
+            "time_column": "date",
+            "target_column": "value",
+        }
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = load_data_source_async_tool(config)
+
+        self.assertTrue(result["success"])
+        warning_messages = [str(w.message) for w in caught]
+        self.assertFalse(
+            any("There is no current event loop" in msg for msg in warning_messages),
+            f"Unexpected warning(s): {warning_messages}",
+        )
 
 
 class TestAsyncDataLoadingExecutor(unittest.TestCase):
@@ -43,14 +63,11 @@ class TestAsyncDataLoadingExecutor(unittest.TestCase):
 
         config = {
             "type": "pandas",
-            "data": {"date": ["2020-01", "2020-02", "2020-03"],
-                     "value": [10, 20, 30]},
+            "data": {"date": ["2020-01", "2020-02", "2020-03"], "value": [10, 20, 30]},
             "time_column": "date",
             "target_column": "value",
         }
-        result = asyncio.run(
-            executor.load_data_source_async(config)
-        )
+        result = asyncio.run(executor.load_data_source_async(config))
         self.assertTrue(result["success"])
         self.assertIn("data_handle", result)
 
@@ -61,20 +78,15 @@ class TestAsyncDataLoadingExecutor(unittest.TestCase):
 
         config = {
             "type": "pandas",
-            "data": {"date": ["2020-01", "2020-02", "2020-03"],
-                     "value": [10, 20, 30]},
+            "data": {"date": ["2020-01", "2020-02", "2020-03"], "value": [10, 20, 30]},
             "time_column": "date",
             "target_column": "value",
         }
-        result = asyncio.run(
-            executor.load_data_source_async(config)
-        )
+        asyncio.run(executor.load_data_source_async(config))
 
         # find the most recent data_loading job
         jobs = job_manager.list_jobs()
-        data_jobs = [
-            j for j in jobs if j.job_type == "data_loading"
-        ]
+        data_jobs = [j for j in jobs if j.job_type == "data_loading"]
         self.assertTrue(len(data_jobs) > 0)
 
         latest = data_jobs[0]
@@ -88,20 +100,15 @@ class TestAsyncDataLoadingExecutor(unittest.TestCase):
 
         config = {
             "type": "pandas",
-            "data": {"date": ["2020-01", "2020-02", "2020-03"],
-                     "value": [10, 20, 30]},
+            "data": {"date": ["2020-01", "2020-02", "2020-03"], "value": [10, 20, 30]},
             "time_column": "date",
             "target_column": "value",
         }
-        result = asyncio.run(
-            executor.load_data_source_async(config)
-        )
+        result = asyncio.run(executor.load_data_source_async(config))
         handle = result["data_handle"]
 
         # verify the handle exists
-        self.assertIn(
-            handle, executor._data_handles
-        )
+        self.assertIn(handle, executor._data_handles)
 
 
 class TestAsyncDataLoadingErrors(unittest.TestCase):
@@ -113,9 +120,7 @@ class TestAsyncDataLoadingErrors(unittest.TestCase):
 
         config = {"type": "nonexistent_source"}
 
-        result = asyncio.run(
-            executor.load_data_source_async(config)
-        )
+        result = asyncio.run(executor.load_data_source_async(config))
         self.assertFalse(result["success"])
 
 
