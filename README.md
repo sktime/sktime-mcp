@@ -22,7 +22,7 @@ This MCP is **not** just documentation or static code analysis. It is a **semant
 
 2. **Registry-First** - Instead of `File → Class → Infer Relationships`, we do `Registry → Semantics → Safe Execution`.
 
-3. **Minimal MCP Surface** - Exposes only what an LLM needs: Discovery, Description, Instantiation, Execution.
+3. **Minimal MCP Surface** - Exposes only what an LLM needs: Discovery, Description, Instantiation, Execution, and model persistence.
 
 ## 🛠️ Installation
 
@@ -235,9 +235,34 @@ Execute a complete workflow: load dataset, fit estimator, and generate predictio
 
 ---
 
+#### 9. `save_model`
+Persist a fitted estimator or pipeline handle to a local filesystem path using `sktime.utils.mlflow_sktime.save_model`.
+
+**Arguments:**
+- `estimator_handle` (required): Handle from `instantiate_estimator` or `instantiate_pipeline`
+- `path` (required): Local filesystem path where the model should be saved
+- `mlflow_params` (optional): Extra keyword arguments forwarded to `sktime.utils.mlflow_sktime.save_model`
+
+**Example:**
+```json
+{
+  "estimator_handle": "est_abc123",
+  "path": "/absolute/path/to/model_dir",
+  "mlflow_params": {
+    "serialization_format": "cloudpickle"
+  }
+}
+```
+
+**Returns:** `{"success": true, "saved_path": "/absolute/path/to/model_dir", "message": "Model saved successfully to '/absolute/path/to/model_dir'"}`
+
+**Note:** This tool requires MLflow to be available in the server environment.
+
+---
+
 ### Datasets
 
-#### 9. `list_datasets`
+#### 10. `list_datasets`
 List all available demo datasets for testing and experimentation.
 
 **Arguments:** None
@@ -248,7 +273,7 @@ List all available demo datasets for testing and experimentation.
 
 ### Handle Management
 
-#### 10. `list_handles`
+#### 11. `list_handles`
 List all active estimator handles and their status.
 
 **Arguments:** None
@@ -257,7 +282,7 @@ List all active estimator handles and their status.
 
 ---
 
-#### 11. `release_handle`
+#### 12. `release_handle`
 Release an estimator handle and free memory.
 
 **Arguments:**

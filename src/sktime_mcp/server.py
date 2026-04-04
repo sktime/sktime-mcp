@@ -8,29 +8,26 @@ that exposes sktime's registry and execution capabilities to LLMs.
 import asyncio
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+from mcp.types import TextContent, Tool
 
-from sktime_mcp.tools.list_estimators import (
-    list_estimators_tool,
-    get_available_tasks,
-    get_available_tags,
+from sktime_mcp.composition.validator import get_composition_validator
+from sktime_mcp.tools.codegen import export_code_tool
+from sktime_mcp.tools.data_tools import (
+    fit_predict_with_data_tool,
+    list_data_sources_tool,
+    load_data_source_async_tool,
+    load_data_source_tool,
+    release_data_handle_tool,
 )
 from sktime_mcp.tools.describe_estimator import (
     describe_estimator_tool,
     search_estimators_tool,
 )
-from sktime_mcp.tools.instantiate import (
-    instantiate_estimator_tool,
-    instantiate_pipeline_tool,
-    release_handle_tool,
-    list_handles_tool,
-)
 from sktime_mcp.tools.fit_predict import (
-    fit_predict_tool,
     fit_predict_async_tool,
     fit_tool,
     predict_tool,
@@ -44,25 +41,38 @@ from sktime_mcp.tools.data_tools import (
     fit_predict_with_data_tool,
     list_data_handles_tool,
     release_data_handle_tool,
+    fit_predict_tool,
 )
 from sktime_mcp.tools.format_tools import (
-    format_time_series_tool,
     auto_format_on_load_tool,
+    format_time_series_tool,
+)
+from sktime_mcp.tools.instantiate import (
+    instantiate_estimator_tool,
+    instantiate_pipeline_tool,
+    list_handles_tool,
+    load_model_tool,
+    release_handle_tool,
 )
 from sktime_mcp.tools.job_tools import (
-    check_job_status_tool,
-    list_jobs_tool,
     cancel_job_tool,
-    delete_job_tool,
+    check_job_status_tool,
     cleanup_old_jobs_tool,
+    delete_job_tool,
+    list_jobs_tool,
 )
-from sktime_mcp.composition.validator import get_composition_validator
+from sktime_mcp.tools.list_available_data import list_available_data_tool
+from sktime_mcp.tools.list_estimators import (
+    get_available_tags,
+    list_estimators_tool,
+)
+from sktime_mcp.tools.save_model import save_model_tool
 
 # Configure logging to stderr with detailed format
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
@@ -76,15 +86,14 @@ def sanitize_for_json(obj):
         return {str(k): sanitize_for_json(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return [sanitize_for_json(item) for item in obj]
-    elif hasattr(obj, '__dict__') and not isinstance(obj, (str, int, float, bool, type(None))):
+    elif hasattr(obj, "__dict__") and not isinstance(obj, (str, int, float, bool, type(None))):
         return str(obj)
     else:
         return obj
 
 
-
 @server.list_tools()
-async def list_tools() -> List[Tool]:
+async def list_tools() -> list[Tool]:
     """List all available MCP tools."""
     return [
         Tool(
@@ -162,6 +171,25 @@ async def list_tools() -> List[Tool]:
             },
         ),
         Tool(
+            name="list_handles",
+            description="List all active estimator handles in memory",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="release_handle",
+            description="Release an estimator handle and free it from memory",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "handle": {
+                        "type": "string",
+                        "description": "Handle ID to release",
+                    },
+                },
+                "required": ["handle"],
+            },
+        ),
+        Tool(
             name="fit_predict",
             description="Fit an estimator on a dataset and generate predictions",
             inputSchema={
@@ -223,13 +251,36 @@ async def list_tools() -> List[Tool]:
             },
         ),
         Tool(
-            name="list_datasets",
-            description="List available demo datasets",
-            inputSchema={"type": "object", "properties": {}},
+            name="list_available_data",
+            description=(
+                "list all data available for use - system demo datasets and active "
+                "user-loaded data handles - in a single unified response. "
+                "replaces list_datasets and list_data_handles. "
+                "Use is_demo=true for demos only, is_demo=false for handles only, "
+                "or omit is_demo to get both."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "is_demo": {
+                        "type": "boolean",
+                        "description": (
+                            "optional filter: true returns only system demo datasets, "
+                            "false returns only active data handles, "
+                            "omit to return both."
+                        ),
+                    },
+                },
+            },
         ),
         Tool(
             name="get_available_tags",
-            description="List all queryable capability tags",
+            description=(
+                "List all queryable capability tags with rich metadata. "
+                "Returns tag name, description, expected value type, and which "
+                "estimator types the tag applies to. ALWAYS call this before "
+                "using tags in list_estimators to ensure correct tag names and values."
+            ),
             inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
@@ -309,6 +360,27 @@ async def list_tools() -> List[Tool]:
             },
         ),
         Tool(
+            name="load_data_source_async",
+            description=(
+                "Load data from any source in the background "
+                "(non-blocking). Returns a job_id to track "
+                "progress. The data_handle is available in "
+                "the job result when completed."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "config": {
+                        "type": "object",
+                        "description": (
+                            "Data source configuration. Same format as load_data_source."
+                        ),
+                    },
+                },
+                "required": ["config"],
+            },
+        ),
+        Tool(
             name="list_data_sources",
             description="List all available data source types and their descriptions",
             inputSchema={"type": "object", "properties": {}},
@@ -340,11 +412,6 @@ async def list_tools() -> List[Tool]:
                 },
                 "required": ["estimator_handle", "data_handle"],
             },
-        ),
-        Tool(
-            name="list_data_handles",
-            description="List all loaded data handles and their metadata",
-            inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
             name="release_data_handle",
@@ -465,6 +532,20 @@ async def list_tools() -> List[Tool]:
             },
         ),
         Tool(
+            name="load_model",
+            description="Load a saved sktime model from a local path and register it for use",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the saved model directory",
+                    },
+                },
+                "required": ["path"],
+            },
+        ),
+        Tool(
             name="cleanup_old_jobs",
             description="Remove jobs older than specified hours",
             inputSchema={
@@ -478,15 +559,37 @@ async def list_tools() -> List[Tool]:
                 },
             },
         ),
+        Tool(
+            name="save_model",
+            description="Save an estimator/pipeline handle using sktime MLflow integration",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle ID of the estimator to save",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Local directory or URI where the model will be saved",
+                    },
+                    "mlflow_params": {
+                        "type": "object",
+                        "description": "Optional extra parameters for sktime.utils.mlflow_sktime.save_model",
+                    },
+                },
+                "required": ["estimator_handle", "path"],
+            },
+        ),
     ]
 
 
 @server.call_tool()
-async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
+async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Handle tool calls."""
     logger.info(f"=== Tool Call: {name} ===")
     logger.info(f"Arguments: {json.dumps(arguments, indent=2)}")
-    
+
     try:
         if name == "list_estimators":
             result = list_estimators_tool(
@@ -506,6 +609,11 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 arguments["components"],
                 arguments.get("params_list"),
             )
+        elif name == "list_handles":
+            result = list_handles_tool()
+        elif name == "release_handle":
+            result = release_handle_tool(arguments["handle"])
+
         elif name == "fit_predict":
             result = fit_predict_tool(
                 arguments["estimator_handle"],
@@ -518,8 +626,8 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             validator = get_composition_validator()
             validation = validator.validate_pipeline(arguments["components"])
             result = validation.to_dict()
-        elif name == "list_datasets":
-            result = list_datasets_tool()
+        elif name == "list_available_data":
+            result = list_available_data_tool(arguments.get("is_demo"))
         elif name == "get_available_tags":
             result = get_available_tags()
         elif name == "search_estimators":
@@ -537,6 +645,8 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             result = await load_data_source_async_tool(arguments["config"])
         elif name == "load_data_source":
             result = load_data_source_tool(arguments["config"])
+        elif name == "load_data_source_async":
+            result = load_data_source_async_tool(arguments["config"])
         elif name == "list_data_sources":
             result = list_data_sources_tool()
         elif name == "fit_predict_with_data":
@@ -547,8 +657,6 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             )
             # Sanitize immediately to handle Period objects
             result = sanitize_for_json(result)
-        elif name == "list_data_handles":
-            result = list_data_handles_tool()
         elif name == "release_data_handle":
             result = release_data_handle_tool(arguments["data_handle"])
         elif name == "format_time_series":
@@ -579,15 +687,23 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             result = delete_job_tool(arguments["job_id"])
         elif name == "cleanup_old_jobs":
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
+        elif name == "load_model":
+            result = load_model_tool(arguments["path"])
+        elif name == "save_model":
+            result = save_model_tool(
+                arguments["estimator_handle"],
+                arguments["path"],
+                arguments.get("mlflow_params"),
+            )
         else:
             result = {"error": f"Unknown tool: {name}"}
-        
+
         logger.info(f"=== Result for {name} ===")
-        
+
         # Sanitize result for JSON serialization
         sanitized_result = sanitize_for_json(result)
         logger.info(f"{json.dumps(sanitized_result, indent=2, default=str)}")
-        
+
         return [TextContent(type="text", text=json.dumps(sanitized_result, indent=2, default=str))]
     except Exception as e:
         logger.exception(f"Error in tool {name}")

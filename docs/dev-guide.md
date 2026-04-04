@@ -4,13 +4,25 @@ This guide explains how the project is structured, how to develop new features, 
 
 ## Development Prerequisites
 
-- Python 3.9+
+- Python 3.10+
 - pip
 - Optional: `mkdocs` if you want to build the documentation site
 
 ## Setup
 
 From the repo root:
+
+```bash
+pip install -e ".[dev]"
+```
+
+Validate the environment before running tests:
+
+```bash
+python -c "import sktime; print(sktime.__version__)"
+```
+
+If this command fails with `ModuleNotFoundError: No module named 'sktime'`, reinstall project dependencies in the active virtual environment:
 
 ```bash
 pip install -e ".[dev]"

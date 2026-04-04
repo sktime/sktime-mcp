@@ -1,10 +1,11 @@
+from sktime.datasets import load_airline
 from sktime.forecasting.naive._naive import NaiveForecaster
 
 forecaster = NaiveForecaster()
 
 # Example usage:
 # Load data
-from sktime.datasets import load_airline
+
 y = load_airline()
 
 # Fit the model
