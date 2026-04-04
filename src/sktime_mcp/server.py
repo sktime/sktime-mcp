@@ -53,6 +53,10 @@ from sktime_mcp.tools.list_estimators import (
     list_estimators_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
+from sktime_mcp.tools.classify import (
+    fit_predict_classification_tool,
+    fit_predict_regression_tool,
+)
 
 # Configure logging to stderr with detailed format
 logging.basicConfig(
@@ -534,6 +538,66 @@ async def list_tools() -> list[Tool]:
                 "required": ["estimator_handle", "path"],
             },
         ),
+        Tool(
+            name="fit_predict_classification",
+            description="Fit a time series classifier on training data and predict class labels on test data. Use with classification estimators like RocketClassifier, HIVECOTEV2, etc.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle from instantiate_estimator (must be a classifier)",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Demo dataset name: arrow_head, gunpoint, basic_motions, italy_power_demand",
+                    },
+                    "X_train_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom training features",
+                    },
+                    "y_train_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom training labels",
+                    },
+                    "X_test_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom test features",
+                    },
+                },
+                "required": ["estimator_handle"],
+            },
+        ),
+        Tool(
+            name="fit_predict_regression",
+            description="Fit a time series regressor on training data and predict continuous target values on test data. Use with regression estimators like TimeSeriesForestRegressor, etc.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle from instantiate_estimator (must be a regressor)",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Demo dataset name: covid_3month, cardano_sentiment",
+                    },
+                    "X_train_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom training features",
+                    },
+                    "y_train_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom training target values",
+                    },
+                    "X_test_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom test features",
+                    },
+                },
+                "required": ["estimator_handle"],
+            },
+        ),
     ]
 
 
@@ -641,6 +705,24 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["path"],
                 arguments.get("mlflow_params"),
             )
+        elif name == "fit_predict_classification":
+            result = fit_predict_classification_tool(
+                estimator_handle=arguments["estimator_handle"],
+                dataset=arguments.get("dataset"),
+                X_train_handle=arguments.get("X_train_handle"),
+                y_train_handle=arguments.get("y_train_handle"),
+                X_test_handle=arguments.get("X_test_handle"),
+            )
+            result = sanitize_for_json(result)
+        elif name == "fit_predict_regression":
+            result = fit_predict_regression_tool(
+                estimator_handle=arguments["estimator_handle"],
+                dataset=arguments.get("dataset"),
+                X_train_handle=arguments.get("X_train_handle"),
+                y_train_handle=arguments.get("y_train_handle"),
+                X_test_handle=arguments.get("X_test_handle"),
+            )
+            result = sanitize_for_json(result)
         else:
             result = {"error": f"Unknown tool: {name}"}
 
