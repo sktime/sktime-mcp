@@ -57,6 +57,7 @@ from sktime_mcp.tools.job_tools import (
     delete_job_tool,
     cleanup_old_jobs_tool,
 )
+from sktime_mcp.tools.save_model import save_model_tool
 from sktime_mcp.composition.validator import get_composition_validator
 
 # Configure logging to stderr with detailed format
@@ -501,6 +502,28 @@ async def list_tools() -> List[Tool]:
                 },
             },
         ),
+        Tool(
+            name="save_model",
+            description="Save an estimator/pipeline handle using sktime MLflow integration",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle ID of the estimator to save",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Local directory or URI where the model will be saved",
+                    },
+                    "mlflow_params": {
+                        "type": "object",
+                        "description": "Optional extra parameters for sktime.utils.mlflow_sktime.save_model",
+                    },
+                },
+                "required": ["estimator_handle", "path"],
+            },
+        ),
     ]
 
 
@@ -606,6 +629,12 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
         elif name == "load_model":
             result = load_model_tool(arguments["path"])
+        elif name == "save_model":
+            result = save_model_tool(
+                arguments["estimator_handle"],
+                arguments["path"],
+                arguments.get("mlflow_params"),
+            )
         else:
             result = {"error": f"Unknown tool: {name}"}
         

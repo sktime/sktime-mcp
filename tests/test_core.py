@@ -153,6 +153,36 @@ class TestTools:
         assert not result["success"]
         assert "error" in result
 
+    def test_save_model_tool(self, monkeypatch, tmp_path):
+        """Test save_model tool resolves handle and forwards parameters."""
+        from sktime_mcp.runtime.handles import get_handle_manager
+        from sktime_mcp.tools.save_model import save_model_tool
+        import sktime_mcp.tools.save_model as save_model_module
+
+        calls = {}
+
+        def fake_save_model(**kwargs):
+            calls.update(kwargs)
+
+        monkeypatch.setattr(save_model_module, "_get_mlflow_save_model", lambda: fake_save_model)
+
+        handle_manager = get_handle_manager()
+        handle = handle_manager.create_handle("DummyEstimator", object())
+
+        try:
+            result = save_model_tool(
+                estimator_handle=handle,
+                path=str(tmp_path / "model_dir"),
+                mlflow_params={"serialization_format": "pickle"},
+            )
+        finally:
+            handle_manager.release_handle(handle)
+
+        assert result["success"]
+        assert result["saved_path"] == str(tmp_path / "model_dir")
+        assert calls["path"] == str(tmp_path / "model_dir")
+        assert calls["serialization_format"] == "pickle"
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

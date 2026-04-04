@@ -4,6 +4,7 @@ Test background job management.
 
 import asyncio
 import time
+import pytest
 from sktime_mcp.runtime.executor import get_executor
 from sktime_mcp.runtime.jobs import get_job_manager, JobStatus
 
@@ -122,6 +123,7 @@ def test_list_jobs():
     job_manager.delete_job(job3)
 
 
+@pytest.mark.asyncio
 async def test_async_fit_predict():
     """Test async fit_predict."""
     executor = get_executor()
