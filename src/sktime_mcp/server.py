@@ -160,6 +160,25 @@ async def list_tools() -> List[Tool]:
             },
         ),
         Tool(
+            name="list_handles",
+            description="List all active estimator handles in memory",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="release_handle",
+            description="Release an estimator handle and free it from memory",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "handle": {
+                        "type": "string",
+                        "description": "Handle ID to release",
+                    },
+                },
+                "required": ["handle"],
+            },
+        ),
+        Tool(
             name="fit_predict",
             description="Fit an estimator on a dataset and generate predictions",
             inputSchema={
@@ -503,6 +522,11 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 arguments["components"],
                 arguments.get("params_list"),
             )
+        elif name == "list_handles":
+            result = list_handles_tool()
+        elif name == "release_handle":
+            result = release_handle_tool(arguments["handle"])
+
         elif name == "fit_predict":
             result = fit_predict_tool(
                 arguments["estimator_handle"],
