@@ -301,7 +301,29 @@ Execute a complete workflow: load dataset, fit estimator, and generate predictio
 
 ---
 
-#### 9. `save_model`
+#### 9. `fit`
+Fit an estimator on a dataset without generating predictions.
+
+**Arguments:**
+- `estimator_handle` (required): Handle from `instantiate_estimator` or `instantiate_pipeline`
+- `dataset` (required): Dataset name (e.g., `"airline"`, `"sunspots"`, `"lynx"`)
+
+**Returns:** `{"success": true, ...}`
+
+---
+
+#### 10. `predict`
+Generate predictions from a previously fitted estimator.
+
+**Arguments:**
+- `estimator_handle` (required): Handle of a fitted estimator
+- `horizon` (optional): Forecast horizon (default: 12)
+
+**Returns:** `{"success": true, "predictions": {...}, "horizon": 12}`
+
+---
+
+#### 11. `save_model`
 Persist a fitted estimator or pipeline handle to a local filesystem path using `sktime.utils.mlflow_sktime.save_model`.
 
 **Arguments:**

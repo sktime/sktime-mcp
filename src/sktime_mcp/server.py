@@ -30,6 +30,8 @@ from sktime_mcp.tools.describe_estimator import (
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
     fit_predict_tool,
+    fit_tool,
+    predict_tool,
 )
 from sktime_mcp.tools.format_tools import (
     auto_format_on_load_tool,
@@ -161,12 +163,12 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="list_handles",
-            description="List all active estimator handles in memory",
+            description="List all active estimator handles and their metadata",
             inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
             name="release_handle",
-            description="Release an estimator handle and free it from memory",
+            description="Release an estimator handle and free memory",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -218,6 +220,43 @@ async def list_tools() -> list[Tool]:
                     "data_handle": {
                         "type": "string",
                         "description": "Handle from load_data_source (use this instead of dataset for custom data)",
+                    },
+                    "horizon": {
+                        "type": "integer",
+                        "description": "Forecast horizon (default: 12)",
+                        "default": 12,
+                    },
+                },
+                "required": ["estimator_handle"],
+            },
+        ),
+        Tool(
+            name="fit",
+            description="Fit an estimator on a dataset",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle from instantiate_estimator",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Dataset name: airline, sunspots, lynx, etc.",
+                    },
+                },
+                "required": ["estimator_handle", "dataset"],
+            },
+        ),
+        Tool(
+            name="predict",
+            description="Generate predictions from a fitted estimator",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle of a fitted estimator",
                     },
                     "horizon": {
                         "type": "integer",
@@ -622,7 +661,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = list_handles_tool()
         elif name == "release_handle":
             result = release_handle_tool(arguments["handle"])
-
         elif name == "fit_predict":
             result = fit_predict_tool(
                 arguments["estimator_handle"],
@@ -637,6 +675,16 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["estimator_handle"],
                 arguments["dataset"],
                 arguments.get("cv_folds", 3),
+            )
+        elif name == "fit":
+            result = fit_tool(
+                arguments["estimator_handle"],
+                arguments["dataset"],
+            )
+        elif name == "predict":
+            result = predict_tool(
+                arguments["estimator_handle"],
+                arguments.get("horizon", 12),
             )
             result = sanitize_for_json(result)
         elif name == "validate_pipeline":
