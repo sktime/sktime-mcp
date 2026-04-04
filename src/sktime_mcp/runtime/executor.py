@@ -1047,7 +1047,7 @@ class Executor:
                 "success": True,
                 "predictions": pred_list,
                 "n_predictions": len(pred_list),
-                "classes": sorted(list(set(pred_list))),
+                "classes": sorted(set(pred_list)),
             }
 
             # Add accuracy if ground truth is available

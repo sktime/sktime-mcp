@@ -15,6 +15,10 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 from sktime_mcp.composition.validator import get_composition_validator
+from sktime_mcp.tools.classify import (
+    fit_predict_classification_tool,
+    fit_predict_regression_tool,
+)
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     fit_predict_with_data_tool,
@@ -53,10 +57,6 @@ from sktime_mcp.tools.list_estimators import (
     list_estimators_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
-from sktime_mcp.tools.classify import (
-    fit_predict_classification_tool,
-    fit_predict_regression_tool,
-)
 
 # Configure logging to stderr with detailed format
 logging.basicConfig(
