@@ -28,6 +28,9 @@ jobs:
       - name: Run ruff format
         run: ruff format --check .
 
+      - name: Run black
+        run: black --check .
+
   test:
     name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
