@@ -466,9 +466,13 @@ class Executor:
                 "traceback": traceback.format_exc(),
             }
 
-    def list_datasets(self) -> list[str]:
-        """List available demo datasets."""
-        return list(DEMO_DATASETS.keys())
+    def list_datasets(self) -> dict[str, list[str]]:
+        """List all available demo datasets, grouped by task type."""
+        return {
+            "forecasting": list(DEMO_DATASETS.keys()),
+            "classification": list(CLASSIFICATION_DATASETS.keys()),
+            "regression": list(REGRESSION_DATASETS.keys()),
+        }
 
     def load_data_source(self, config: dict[str, Any]) -> dict[str, Any]:
         """
