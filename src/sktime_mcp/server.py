@@ -39,6 +39,7 @@ from sktime_mcp.tools.fit_predict import (
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_tool,
+    load_data_source_async_tool,
     list_data_sources_tool,
     fit_predict_with_data_tool,
     list_data_handles_tool,
@@ -271,6 +272,20 @@ async def list_tools() -> List[Tool]:
                     },
                 },
                 "required": ["handle"],
+            },
+        ),
+        Tool(
+            name="load_data_source_async",
+            description="Load data from various sources in the background (non-blocking). Recommended for large URLs or SQL queries.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "config": {
+                        "type": "object",
+                        "description": "Data source configuration. Must include 'type' (pandas, sql, file, url).",
+                    },
+                },
+                "required": ["config"],
             },
         ),
         Tool(
@@ -518,6 +533,8 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 arguments.get("var_name", "model"),
                 arguments.get("include_fit_example", False),
             )
+        elif name == "load_data_source_async":
+            result = await load_data_source_async_tool(arguments["config"])
         elif name == "load_data_source":
             result = load_data_source_tool(arguments["config"])
         elif name == "list_data_sources":

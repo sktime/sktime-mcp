@@ -15,7 +15,7 @@ def load_data_source_tool(config: Dict[str, Any]) -> Dict[str, Any]:
     Args:
         config: Data source configuration
             {
-                "type": "pandas" | "sql" | "file",
+                "type": "pandas" | "sql" | "file" | "url",
                 ... (type-specific configuration)
             }
     
@@ -25,35 +25,39 @@ def load_data_source_tool(config: Dict[str, Any]) -> Dict[str, Any]:
         - data_handle: str (handle ID for the loaded data)
         - metadata: dict (information about the data)
         - validation: dict (validation results)
-    
-    Examples:
-        # Pandas DataFrame
-        >>> load_data_source_tool({
-        ...     "type": "pandas",
-        ...     "data": {"date": [...], "value": [...]},
-        ...     "time_column": "date",
-        ...     "target_column": "value"
-        ... })
-        
-        # SQL Database
-        >>> load_data_source_tool({
-        ...     "type": "sql",
-        ...     "connection_string": "postgresql://user:pass@host:5432/db",
-        ...     "query": "SELECT date, value FROM sales",
-        ...     "time_column": "date",
-        ...     "target_column": "value"
-        ... })
-        
-        # CSV File
-        >>> load_data_source_tool({
-        ...     "type": "file",
-        ...     "path": "/path/to/data.csv",
-        ...     "time_column": "date",
-        ...     "target_column": "value"
-        ... })
     """
     executor = get_executor()
     return executor.load_data_source(config)
+
+
+async def load_data_source_async_tool(config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Load data asynchronously from any source.
+    
+    Returns a job_id immediately.
+    """
+    executor = get_executor()
+    
+    # Create the job first so we can return the ID immediately
+    from sktime_mcp.runtime.jobs import get_job_manager
+    job_manager = get_job_manager()
+    job_id = job_manager.create_job(
+        job_type="load_data",
+        estimator_handle="N/A",
+        dataset_name=config.get("type", "unknown"),
+        total_steps=4,
+    )
+    
+    # Run the loading in the background
+    import asyncio
+    asyncio.create_task(executor.load_data_source_async(config, job_id=job_id))
+    
+    return {
+        "success": True,
+        "job_id": job_id,
+        "status": "pending",
+        "message": "Data loading started in background"
+    }
 
 
 def list_data_sources_tool() -> Dict[str, Any]:
@@ -101,13 +105,6 @@ def fit_predict_with_data_tool(
     
     Returns:
         Dictionary with predictions
-    
-    Example:
-        >>> fit_predict_with_data_tool(
-        ...     estimator_handle="est_abc123",
-        ...     data_handle="data_xyz789",
-        ...     horizon=12
-        ... )
     """
     executor = get_executor()
     return executor.fit_predict_with_data(
