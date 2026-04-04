@@ -1,23 +1,3 @@
-# Implements issue #5: https://github.com/sktime/sktime-mcp/issues/5
-#
-# Context:
-# The codebase had two separate tools for discovering available data:
-#   - list_datasets      -> static sktime demo datasets ("airline", "sunspots", etc.)
-#   - list_data_handles  -> runtime handles loaded by the user via load_data_source
-#
-# Problem:
-# An LLM asking "what data can I use?" had to call two tools and mentally merge
-# the results. This is unnecessary friction and a poor tool UX.
-#
-# Solution:
-# This module introduces list_available_data, a single unified tool that aggregates
-# both sources into one response with clear labelling:
-#   - "system_demos"    -> always-available built-in datasets
-#   - "active_handles"  -> user-loaded data handles for this session
-#
-# The old tools are kept but marked deprecated, pointing here.
-# An optional is_demo boolean lets callers filter to one category if needed.
-
 from typing import Any, Dict, Optional
 
 from sktime_mcp.runtime.executor import get_executor
