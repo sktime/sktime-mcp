@@ -49,12 +49,13 @@ class EstimatorNode:
             "docstring": self.docstring[:500] if self.docstring else None, # L-1: Truncate docstring to 500 characters, we can also try summarization
         }
     
-    def to_summary(self) -> Dict[str, str]:
+    def to_summary(self) -> Dict[str, Any]:
         """Return a minimal summary for list operations."""
         return {
             "name": self.name,
             "task": self.task,
             "module": self.module,
+            "tags": self.tags,
         }
 
 

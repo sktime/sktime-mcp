@@ -159,3 +159,23 @@ When you are done with an estimator, it's good practice to release it to free up
   }
 }
 ```
+
+### Model Persistence
+
+**Save a Fitted Estimator**
+Use `save_model` after fitting an estimator or pipeline handle. The underlying `sktime.utils.mlflow_sktime.save_model` API saves to a local filesystem path.
+
+```json
+{
+  "name": "save_model",
+  "arguments": {
+    "estimator_handle": "est_abc123",
+    "path": "/absolute/path/to/model_dir",
+    "mlflow_params": {
+      "serialization_format": "pickle"
+    }
+  }
+}
+```
+
+*Returns:* `{"success": true, "saved_path": "/absolute/path/to/model_dir", "message": "Model saved successfully to '/absolute/path/to/model_dir'"}`

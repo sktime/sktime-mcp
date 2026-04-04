@@ -5,8 +5,12 @@ Executes complete forecasting workflows.
 """
 
 from typing import Any, Dict, List, Optional, Union
+import logging
 
 from sktime_mcp.runtime.executor import get_executor
+
+# ✅ Logger added here
+logger = logging.getLogger(__name__)
 
 
 def fit_predict_tool(
@@ -159,4 +163,3 @@ def fit_predict_async_tool(
         "dataset": dataset,
         "horizon": horizon,
     }
-

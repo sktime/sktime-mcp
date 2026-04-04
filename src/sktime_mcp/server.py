@@ -28,6 +28,7 @@ from sktime_mcp.tools.instantiate import (
     instantiate_pipeline_tool,
     release_handle_tool,
     list_handles_tool,
+    load_model_tool,
 )
 from sktime_mcp.tools.fit_predict import (
     fit_predict_tool,
@@ -38,6 +39,7 @@ from sktime_mcp.tools.fit_predict import (
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_tool,
+    load_data_source_async_tool,
     list_data_sources_tool,
     fit_predict_with_data_tool,
     release_data_handle_tool,
@@ -54,6 +56,7 @@ from sktime_mcp.tools.job_tools import (
     delete_job_tool,
     cleanup_old_jobs_tool,
 )
+from sktime_mcp.tools.save_model import save_model_tool
 from sktime_mcp.composition.validator import get_composition_validator
 
 # Configure logging to stderr with detailed format
@@ -311,6 +314,28 @@ async def list_tools() -> List[Tool]:
             },
         ),
         Tool(
+            name="load_data_source_async",
+            description=(
+                "Load data from any source in the background "
+                "(non-blocking). Returns a job_id to track "
+                "progress. The data_handle is available in "
+                "the job result when completed."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "config": {
+                        "type": "object",
+                        "description": (
+                            "Data source configuration. "
+                            "Same format as load_data_source."
+                        ),
+                    },
+                },
+                "required": ["config"],
+            },
+        ),
+        Tool(
             name="list_data_sources",
             description="List all available data source types and their descriptions",
             inputSchema={"type": "object", "properties": {}},
@@ -462,6 +487,20 @@ async def list_tools() -> List[Tool]:
             },
         ),
         Tool(
+            name="load_model",
+            description="Load a saved sktime model from a local path and register it for use",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the saved model directory",
+                    },
+                },
+                "required": ["path"],
+            },
+        ),
+        Tool(
             name="cleanup_old_jobs",
             description="Remove jobs older than specified hours",
             inputSchema={
@@ -473,6 +512,28 @@ async def list_tools() -> List[Tool]:
                         "default": 24,
                     },
                 },
+            },
+        ),
+        Tool(
+            name="save_model",
+            description="Save an estimator/pipeline handle using sktime MLflow integration",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle ID of the estimator to save",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Local directory or URI where the model will be saved",
+                    },
+                    "mlflow_params": {
+                        "type": "object",
+                        "description": "Optional extra parameters for sktime.utils.mlflow_sktime.save_model",
+                    },
+                },
+                "required": ["estimator_handle", "path"],
             },
         ),
     ]
@@ -532,6 +593,10 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             )
         elif name == "load_data_source":
             result = load_data_source_tool(arguments["config"])
+        elif name == "load_data_source_async":
+            result = load_data_source_async_tool(
+                arguments["config"]
+            )
         elif name == "list_data_sources":
             result = list_data_sources_tool()
         elif name == "fit_predict_with_data":
@@ -572,6 +637,14 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             result = delete_job_tool(arguments["job_id"])
         elif name == "cleanup_old_jobs":
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
+        elif name == "load_model":
+            result = load_model_tool(arguments["path"])
+        elif name == "save_model":
+            result = save_model_tool(
+                arguments["estimator_handle"],
+                arguments["path"],
+                arguments.get("mlflow_params"),
+            )
         else:
             result = {"error": f"Unknown tool: {name}"}
         
