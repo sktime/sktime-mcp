@@ -6,6 +6,7 @@ and running fit/predict operations.
 """
 
 import asyncio
+import inspect
 import logging
 import uuid
 from typing import Any, Optional, Union
@@ -19,17 +20,25 @@ from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 logger = logging.getLogger(__name__)
 
 
-# Available demo datasets
-# L-5: We can add more datasets here by directly wrapping on top of sktime datasets (https://www.sktime.net/en/latest/api_reference/datasets.html)
-# L-6: We can also add custom datasets here
-DEMO_DATASETS = {
-    "airline": "sktime.datasets.load_airline",
-    "longley": "sktime.datasets.load_longley",
-    "lynx": "sktime.datasets.load_lynx",
-    "shampoo": "sktime.datasets.load_shampoo_sales",
-    "sunspots": "sktime.datasets.load_sunspot",
-    "uschange": "sktime.datasets.load_uschange",
-}
+# Dynamically discover all available sktime demo datasets at import time.
+# This replaces the old hardcoded dictionary and automatically exposes every
+# load_* function in sktime.datasets to the MCP server.
+def _discover_demo_datasets() -> dict:
+    """Return a mapping of dataset name -> dotted module path for every
+    ``load_*`` function exported by ``sktime.datasets``."""
+    try:
+        import sktime.datasets as _ds_module
+
+        return {
+            name.removeprefix("load_"): f"sktime.datasets.{name}"
+            for name, obj in inspect.getmembers(_ds_module, inspect.isfunction)
+            if name.startswith("load_")
+        }
+    except Exception:  # pragma: no cover
+        return {}  # fallback: empty dict if sktime not installed
+
+
+DEMO_DATASETS = _discover_demo_datasets()
 
 
 class Executor:
