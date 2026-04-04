@@ -135,15 +135,6 @@ class TestTools:
         assert "estimators" in result
         assert len(result["estimators"]) <= 5
     
-    def test_list_datasets_tool(self):
-        """Test list_datasets tool."""
-        from sktime_mcp.tools.fit_predict import list_datasets_tool
-        
-        result = list_datasets_tool()
-        
-        assert result["success"]
-        assert "airline" in result["datasets"]
-    
     def test_describe_unknown_estimator(self):
         """Test describing an unknown estimator."""
         from sktime_mcp.tools.describe_estimator import describe_estimator_tool

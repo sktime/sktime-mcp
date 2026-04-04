@@ -34,14 +34,12 @@ from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
     fit_tool,
     predict_tool,
-    list_datasets_tool,
 )
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_tool,
     list_data_sources_tool,
     fit_predict_with_data_tool,
-    list_data_handles_tool,
     release_data_handle_tool,
 )
 from sktime_mcp.tools.format_tools import (
@@ -223,11 +221,6 @@ async def list_tools() -> List[Tool]:
             },
         ),
         Tool(
-            name="list_datasets",
-            description="[Deprecated] List available demo datasets. Use list_available_data instead.",
-            inputSchema={"type": "object", "properties": {}},
-        ),
-        Tool(
             name="list_available_data",
             description=(
                 "list all data available for use - system demo datasets and active "
@@ -349,11 +342,6 @@ async def list_tools() -> List[Tool]:
                 },
                 "required": ["estimator_handle", "data_handle"],
             },
-        ),
-        Tool(
-            name="list_data_handles",
-            description="[Deprecated] List all loaded data handles and their metadata. Use list_available_data instead.",
-            inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
             name="release_data_handle",
@@ -527,8 +515,6 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             validator = get_composition_validator()
             validation = validator.validate_pipeline(arguments["components"])
             result = validation.to_dict()
-        elif name == "list_datasets":
-            result = list_datasets_tool()
         elif name == "list_available_data":
             result = list_available_data_tool(arguments.get("is_demo"))
         elif name == "get_available_tags":
@@ -556,8 +542,6 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             )
             # Sanitize immediately to handle Period objects
             result = sanitize_for_json(result)
-        elif name == "list_data_handles":
-            result = list_data_handles_tool()
         elif name == "release_data_handle":
             result = release_data_handle_tool(arguments["data_handle"])
         elif name == "format_time_series":
