@@ -5,7 +5,7 @@ Supports loading data from local files with automatic format detection.
 """
 
 import pandas as pd
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 from pathlib import Path
 from ..base import DataSourceAdapter
 
@@ -125,6 +125,116 @@ class FileAdapter(DataSourceAdapter):
         }
         
         return df
+
+    async def load_async(self, job_id: Optional[str] = None) -> pd.DataFrame:
+        """Async load from file."""
+        import asyncio
+        from sktime_mcp.runtime.jobs import get_job_manager
+        job_manager = get_job_manager()
+        
+        path_str = self.config.get("path")
+        if not path_str:
+            raise ValueError("Config must contain 'path' key")
+        
+        path = Path(path_str)
+        file_format = self.config.get("format") or self._detect_format(path)
+        
+        if job_id:
+            job_manager.update_job(job_id, current_step=f"Preparing {file_format} load...")
+            
+        loop = asyncio.get_event_loop()
+        
+        # Special case for CSV to show progress
+        if file_format == "csv":
+            df = await loop.run_in_executor(None, self._load_csv_incremental, path, job_id)
+        else:
+            # Other formats: use thread executor for the whole load
+            df = await loop.run_in_executor(None, self.load)
+            
+        if job_id:
+            job_manager.update_job(job_id, current_step="File load complete")
+            
+        return df
+
+    def _load_csv_incremental(self, path: Path, job_id: Optional[str] = None) -> pd.DataFrame:
+        """Load CSV in chunks to report progress via JobManager."""
+        csv_options = self.config.get("csv_options", {}).copy()
+        csv_options.setdefault("sep", ",")
+        csv_options.setdefault("header", 0)
+        
+        if path.suffix.lower() == ".tsv":
+            csv_options["sep"] = "\t"
+            
+        parse_dates = self.config.get("parse_dates", True)
+        if parse_dates and self.config.get("time_column"):
+            csv_options["parse_dates"] = [self.config["time_column"]]
+            
+        from sktime_mcp.runtime.jobs import get_job_manager
+        job_manager = get_job_manager()
+        
+        # Read in chunks
+        chunk_size = 10000
+        chunks = []
+        rows_read = 0
+        
+        try:
+            reader = pd.read_csv(path, chunksize=chunk_size, **csv_options)
+            for chunk in reader:
+                chunks.append(chunk)
+                rows_read += len(chunk)
+                if job_id:
+                    job_manager.update_job(
+                        job_id, 
+                        current_step=f"Reading CSV: {rows_read:,} rows..."
+                    )
+            
+            df = pd.concat(chunks, ignore_index=True)
+            
+            # Set time index
+            time_col = self.config.get("time_column")
+            if time_col and time_col in df.columns:
+                if self.config.get("parse_dates", True):
+                    try:
+                        df[time_col] = pd.to_datetime(df[time_col])
+                    except Exception:
+                        pass
+                df = df.set_index(time_col)
+            
+            if not isinstance(df.index, pd.DatetimeIndex) and time_col:
+                df.index = pd.to_datetime(df.index)
+            
+            df = df.sort_index()
+            freq = self.config.get("frequency")
+            if freq:
+                try:
+                    df = df.asfreq(freq)
+                except Exception:
+                    pass
+                    
+            self._data = df
+            
+            # Metadata
+            if isinstance(df.index, pd.DatetimeIndex):
+                freq_str = str(df.index.freq) if df.index.freq else pd.infer_freq(df.index)
+            else:
+                freq_str = "Integer"
+                
+            self._metadata = {
+                "source": "file",
+                "path": str(path.absolute()),
+                "format": "csv",
+                "file_size_bytes": path.stat().st_size,
+                "rows": len(df),
+                "columns": list(df.columns),
+                "frequency": freq_str,
+                "start_date": str(df.index.min()),
+                "end_date": str(df.index.max()),
+            }
+            return df
+            
+        except Exception as e:
+            # If chunked reading fails, try standard load as fallback
+            return self.load()
     
     def _detect_format(self, path: Path) -> str:
         """Detect file format from extension."""

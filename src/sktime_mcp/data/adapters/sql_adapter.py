@@ -5,7 +5,7 @@ Supports loading data from SQL databases using SQLAlchemy.
 """
 
 import pandas as pd
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 from ..base import DataSourceAdapter
 
 
@@ -75,6 +75,10 @@ class SQLAdapter(DataSourceAdapter):
         finally:
             engine.dispose()
         
+        return self._process_dataframe(df, conn_string)
+
+    def _process_dataframe(self, df: pd.DataFrame, conn_string: str) -> pd.DataFrame:
+        """Common processing for SQL dataframes."""
         # Set time index
         time_col = self.config.get("time_column")
         if time_col and time_col in df.columns:
@@ -106,6 +110,45 @@ class SQLAdapter(DataSourceAdapter):
             "end_date": str(df.index.max()),
         }
         
+        return df
+
+    async def load_async(self, job_id: Optional[str] = None) -> pd.DataFrame:
+        """Async load from SQL database."""
+        conn_string = self._get_connection_string()
+        query = self._get_query()
+        dialect = self.config.get("dialect") or conn_string.split(":")[0]
+        
+        import asyncio
+        from sktime_mcp.runtime.jobs import get_job_manager
+        job_manager = get_job_manager()
+        
+        if job_id:
+            job_manager.update_job(job_id, current_step=f"Executing {dialect} query...")
+            
+        # SQLite special case
+        if dialect == "sqlite" or conn_string.startswith("sqlite"):
+            try:
+                import aiosqlite
+                # sqlite:///path/to/db -> path/to/db
+                db_path = conn_string.replace("sqlite:///", "")
+                
+                async with aiosqlite.connect(db_path) as db:
+                    async with db.execute(query) as cursor:
+                        rows = await cursor.fetchall()
+                        columns = [description[0] for description in cursor.description]
+                        df = pd.DataFrame(rows, columns=columns)
+                        
+                        if job_id:
+                            job_manager.update_job(job_id, current_step="Processing SQL data...")
+                            
+                        return self._process_dataframe(df, conn_string)
+            except Exception:
+                # Fallback to executor if aiosqlite fails or is not available
+                pass
+
+        # Default fallback for all dialects: run sync load in executor
+        loop = asyncio.get_event_loop()
+        df = await loop.run_in_executor(None, self.load)
         return df
     
     def _get_connection_string(self) -> str:
