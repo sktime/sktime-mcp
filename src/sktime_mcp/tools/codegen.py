@@ -168,9 +168,11 @@ def _generate_pipeline_code(
         "success": True,
         "code": code,
         "imports": sorted(imports),
-        "pipeline_type": "TransformedTargetForecaster"
-        if "TransformedTargetForecaster" in str(imports)
-        else "Pipeline",
+        "pipeline_type": (
+            "TransformedTargetForecaster"
+            if "TransformedTargetForecaster" in str(imports)
+            else "Pipeline"
+        ),
     }
 
 

@@ -500,7 +500,8 @@ class Executor:
             metadata["columns"] = [y.name if hasattr(y, "name") and y.name else "target"]
             if X is not None:
                 metadata["exog_columns"] = list(X.columns)
-
+            # Inject column dtypes so LLMs can distinguish time index vs target
+            metadata["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
             # Generate handle
             data_handle = f"data_{uuid.uuid4().hex[:8]}"
 
@@ -533,11 +534,12 @@ class Executor:
                 except Exception as e:
                     logger.warning(f"Auto-formatting failed: {e}")
                     # Continue with unformatted data if formatting fails
-
+            _final_meta = adapter.get_metadata().copy()
+            _final_meta["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
             return {
                 "success": True,
                 "data_handle": data_handle,
-                "metadata": adapter.get_metadata(),
+                "metadata": _final_meta,
                 "validation": validation_report,
             }
 
@@ -621,7 +623,8 @@ class Executor:
             metadata["columns"] = [y.name if hasattr(y, "name") and y.name else "target"]
             if X is not None:
                 metadata["exog_columns"] = list(X.columns)
-
+            # Inject column dtypes so LLMs can distinguish time index vs target
+            metadata["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
             data_handle = f"data_{uuid.uuid4().hex[:8]}"
 
             self._data_handles[data_handle] = {
