@@ -3,6 +3,7 @@ Tests for sktime-mcp core functionality.
 """
 
 import pytest
+import asyncio
 import sys
 sys.path.insert(0, "src")
 
@@ -152,6 +153,38 @@ class TestTools:
         
         assert not result["success"]
         assert "error" in result
+
+    def test_list_handles_and_release_handle_tools(self):
+        """Test handle listing and release tool flow."""
+        from sktime_mcp.tools.instantiate import (
+            instantiate_estimator_tool,
+            list_handles_tool,
+            release_handle_tool,
+        )
+
+        create_result = instantiate_estimator_tool("NaiveForecaster")
+        assert create_result["success"]
+        handle = create_result["handle"]
+
+        handles_result = list_handles_tool()
+        assert handles_result["success"]
+        handle_ids = {h["handle_id"] for h in handles_result["handles"]}
+        assert handle in handle_ids
+
+        release_result = release_handle_tool(handle)
+        assert release_result["success"]
+
+    def test_server_exposes_quick_win_tools(self):
+        """Test MCP server lists the newly exposed tools."""
+        from sktime_mcp.server import list_tools
+
+        tools = asyncio.run(list_tools())
+        tool_names = {tool.name for tool in tools}
+
+        assert "list_handles" in tool_names
+        assert "release_handle" in tool_names
+        assert "fit" in tool_names
+        assert "predict" in tool_names
 
 
 if __name__ == "__main__":

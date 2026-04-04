@@ -235,9 +235,31 @@ Execute a complete workflow: load dataset, fit estimator, and generate predictio
 
 ---
 
+#### 9. `fit`
+Fit an estimator on a dataset without generating predictions.
+
+**Arguments:**
+- `estimator_handle` (required): Handle from `instantiate_estimator` or `instantiate_pipeline`
+- `dataset` (required): Dataset name (e.g., `"airline"`, `"sunspots"`, `"lynx"`)
+
+**Returns:** `{"success": true, ...}`
+
+---
+
+#### 10. `predict`
+Generate predictions from a previously fitted estimator.
+
+**Arguments:**
+- `estimator_handle` (required): Handle of a fitted estimator
+- `horizon` (optional): Forecast horizon (default: 12)
+
+**Returns:** `{"success": true, "predictions": {...}, "horizon": 12}`
+
+---
+
 ### Datasets
 
-#### 9. `list_datasets`
+#### 11. `list_datasets`
 List all available demo datasets for testing and experimentation.
 
 **Arguments:** None
@@ -248,7 +270,7 @@ List all available demo datasets for testing and experimentation.
 
 ### Handle Management
 
-#### 10. `list_handles`
+#### 12. `list_handles`
 List all active estimator handles and their status.
 
 **Arguments:** None
@@ -257,7 +279,7 @@ List all active estimator handles and their status.
 
 ---
 
-#### 11. `release_handle`
+#### 13. `release_handle`
 Release an estimator handle and free memory.
 
 **Arguments:**

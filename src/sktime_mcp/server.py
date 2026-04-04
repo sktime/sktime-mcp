@@ -162,6 +162,25 @@ async def list_tools() -> List[Tool]:
             },
         ),
         Tool(
+            name="list_handles",
+            description="List all active estimator handles and their metadata",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="release_handle",
+            description="Release an estimator handle and free memory",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "handle": {
+                        "type": "string",
+                        "description": "Handle to release",
+                    },
+                },
+                "required": ["handle"],
+            },
+        ),
+        Tool(
             name="fit_predict",
             description="Fit an estimator on a dataset and generate predictions",
             inputSchema={
@@ -182,6 +201,43 @@ async def list_tools() -> List[Tool]:
                     },
                 },
                 "required": ["estimator_handle", "dataset"],
+            },
+        ),
+        Tool(
+            name="fit",
+            description="Fit an estimator on a dataset",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle from instantiate_estimator",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Dataset name: airline, sunspots, lynx, etc.",
+                    },
+                },
+                "required": ["estimator_handle", "dataset"],
+            },
+        ),
+        Tool(
+            name="predict",
+            description="Generate predictions from a fitted estimator",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle of a fitted estimator",
+                    },
+                    "horizon": {
+                        "type": "integer",
+                        "description": "Forecast horizon (default: 12)",
+                        "default": 12,
+                    },
+                },
+                "required": ["estimator_handle"],
             },
         ),
         Tool(
@@ -514,10 +570,26 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 arguments["components"],
                 arguments.get("params_list"),
             )
+        elif name == "list_handles":
+            result = list_handles_tool()
+        elif name == "release_handle":
+            result = release_handle_tool(arguments["handle"])
         elif name == "fit_predict":
             result = fit_predict_tool(
                 arguments["estimator_handle"],
                 arguments["dataset"],
+                arguments.get("horizon", 12),
+            )
+            # Sanitize immediately to handle Period objects
+            result = sanitize_for_json(result)
+        elif name == "fit":
+            result = fit_tool(
+                arguments["estimator_handle"],
+                arguments["dataset"],
+            )
+        elif name == "predict":
+            result = predict_tool(
+                arguments["estimator_handle"],
                 arguments.get("horizon", 12),
             )
             # Sanitize immediately to handle Period objects
