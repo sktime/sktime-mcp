@@ -589,7 +589,7 @@ async def list_tools() -> list[Tool]:
                         "type": "object",
                         "description": (
                             "Parameter grid to search, e.g. "
-                            '{\"strategy\": [\"mean\", \"last\"], \"sp\": [1, 12]}'
+                            '{"strategy": ["mean", "last"], "sp": [1, 12]}'
                         ),
                     },
                     "method": {

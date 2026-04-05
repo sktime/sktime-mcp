@@ -906,7 +906,7 @@ class Executor:
             fh: Forecasting horizon for CV evaluation
             window_length: Training window length for CV splitter (None = use full history)
             n_iter: Number of iterations for random search
-            scoring: Metric to optimise (None = default MeanAbsolutePercentageError)
+            scoring: Metric to optimise (None = use sktime's default scoring metric)
 
         Returns:
             Dictionary with best_params, best_score, and a new handle for the best forecaster

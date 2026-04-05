@@ -7,8 +7,8 @@ and ForecastingOptunaSearchCV as MCP tools.
 
 from typing import Any, Optional
 
-from sktime_mcp.runtime.executor import get_executor
 from sktime_mcp.registry.interface import get_registry
+from sktime_mcp.runtime.executor import get_executor
 
 
 def tune_forecaster_tool(
@@ -77,8 +77,7 @@ def get_param_grid_suggestions_tool(estimator_name: str) -> dict[str, Any]:
         if isinstance(default, bool):
             suggestions[param] = [True, False]
         elif isinstance(default, int):
-            low = max(1, default - 1)
-            suggestions[param] = [low, default, default + 1]
+            suggestions[param] = list(dict.fromkeys([default - 1, default, default + 1]))
         elif isinstance(default, float):
             suggestions[param] = [default * 0.5, default, default * 2.0]
         elif isinstance(default, str):
