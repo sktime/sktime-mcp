@@ -896,7 +896,7 @@ class Executor:
         scoring=None,
     ) -> dict[str, Any]:
         """
-        Tune a forecaster's hyperparameters using cross-validation search.
+        Tune a forecaster's hyperparameters using single-split evaluation search.
 
         Args:
             estimator_handle: Handle of the instantiated forecaster to tune
@@ -905,7 +905,8 @@ class Executor:
             method: Search method — "grid", "random", or "optuna"
             fh: Forecasting horizon for CV evaluation
             window_length: Training window length for CV splitter (None = use full history)
-            n_iter: Number of iterations for random search
+            n_iter: Number of parameter combinations to try. Used as n_iter for
+                random search and n_evals for optuna. Ignored for grid search.
             scoring: Metric to optimise (None = use sktime's default scoring metric)
 
         Returns:
@@ -930,7 +931,7 @@ class Executor:
         y = data["y"]
         X = data.get("X")
 
-        # Build CV splitter
+        # Build single-split evaluation splitter
         try:
             from sktime.split import SingleWindowSplitter
 
@@ -998,6 +999,7 @@ class Executor:
                     cv=cv,
                     param_grid=param_grid,
                     scoring=scoring,
+                    n_evals=n_iter,
                 )
             else:
                 return {

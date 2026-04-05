@@ -22,7 +22,7 @@ def tune_forecaster_tool(
     scoring: Optional[str] = None,
 ) -> dict[str, Any]:
     """
-    Tune a forecaster's hyperparameters using cross-validation search.
+    Tune a forecaster's hyperparameters using single-split evaluation search.
 
     Args:
         estimator_handle: Handle of the instantiated forecaster to tune
@@ -77,7 +77,8 @@ def get_param_grid_suggestions_tool(estimator_name: str) -> dict[str, Any]:
         if isinstance(default, bool):
             suggestions[param] = [True, False]
         elif isinstance(default, int):
-            suggestions[param] = list(dict.fromkeys([default - 1, default, default + 1]))
+            candidates = [default - 1, default, default + 1] if default > 0 else [default, default + 1]
+            suggestions[param] = list(dict.fromkeys(candidates))
         elif isinstance(default, float):
             suggestions[param] = [default * 0.5, default, default * 2.0]
         elif isinstance(default, str):
