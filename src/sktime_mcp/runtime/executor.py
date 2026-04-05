@@ -942,16 +942,23 @@ class Executor:
         if scoring is not None:
             try:
                 import sktime.performance_metrics.forecasting as pmf
+            except Exception as e:
+                return {"success": False, "error": f"Failed to load forecasting metrics: {e}"}
 
-                metric_cls = getattr(pmf, scoring, None)
-                if metric_cls is None:
-                    return {
-                        "success": False,
-                        "error": f"Unknown metric: '{scoring}'. Use list_metrics to see available metrics.",
-                    }
+            metric_name = scoring
+            metric_cls = getattr(pmf, metric_name, None)
+            if metric_cls is None:
+                return {
+                    "success": False,
+                    "error": f"Unknown metric: '{metric_name}'. Use list_metrics to see available metrics.",
+                }
+            try:
                 scoring = metric_cls()
             except Exception as e:
-                return {"success": False, "error": f"Failed to build scoring metric: {e}"}
+                return {
+                    "success": False,
+                    "error": f"Failed to instantiate scoring metric '{metric_name}': {e}",
+                }
 
         # Instantiate and fit tuning estimator
         try:

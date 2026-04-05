@@ -329,6 +329,46 @@ class TestTuningTools:
         assert not result["success"]
         assert "error" in result
 
+    def test_tune_forecaster_valid_scoring_metric(self):
+        """tune_forecaster accepts a valid metric name and runs successfully."""
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+        h = executor.instantiate("NaiveForecaster", {})
+        data_handle = self._make_data_handle(executor)
+
+        result = executor.tune_forecaster(
+            estimator_handle=h["handle"],
+            data_handle=data_handle,
+            param_grid={"strategy": ["mean", "last"]},
+            method="grid",
+            fh=12,
+            scoring="MeanAbsolutePercentageError",
+        )
+
+        assert result["success"]
+        assert "best_params" in result
+
+    def test_tune_forecaster_invalid_scoring_metric(self):
+        """tune_forecaster returns a structured error for an unknown metric name."""
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+        h = executor.instantiate("NaiveForecaster", {})
+        data_handle = self._make_data_handle(executor)
+
+        result = executor.tune_forecaster(
+            estimator_handle=h["handle"],
+            data_handle=data_handle,
+            param_grid={"strategy": ["mean"]},
+            method="grid",
+            fh=12,
+            scoring="NotARealMetric",
+        )
+
+        assert not result["success"]
+        assert "NotARealMetric" in result["error"]
+
     def test_tune_forecaster_invalid_method(self):
         """tune_forecaster returns an error for an unsupported search method."""
         from sktime_mcp.runtime.executor import Executor
