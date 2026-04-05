@@ -47,6 +47,10 @@ from sktime_mcp.tools.list_estimators import (
     list_estimators_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
+from sktime_mcp.tools.tuning_tools import (
+    get_param_grid_suggestions_tool,
+    tune_forecaster_tool,
+)
 
 # ---------------------------------------------------------------------------
 # Server configuration via environment variables
@@ -561,6 +565,79 @@ async def list_tools() -> list[Tool]:
                 "required": ["job_id"],
             },
         ),
+        Tool(
+            name="tune_forecaster",
+            description=(
+                "Tune a forecaster's hyperparameters using single-split evaluation search. "
+                "Supports grid search, random search, and Optuna-based search. "
+                "Returns the best parameters, best score, and a new handle for the "
+                "best fitted forecaster. Use get_param_grid_suggestions to build a "
+                "starting param_grid."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle of the instantiated forecaster to tune",
+                    },
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Handle of the loaded dataset",
+                    },
+                    "param_grid": {
+                        "type": "object",
+                        "description": (
+                            "Parameter grid to search, e.g. "
+                            '{\"strategy\": [\"mean\", \"last\"], \"sp\": [1, 12]}'
+                        ),
+                    },
+                    "method": {
+                        "type": "string",
+                        "enum": ["grid", "random", "optuna"],
+                        "description": "Search method: 'grid', 'random', or 'optuna' (requires optuna installed)",
+                    },
+                    "fh": {
+                        "type": "integer",
+                        "description": "Forecasting horizon for CV evaluation (default: 12)",
+                    },
+                    "window_length": {
+                        "type": "integer",
+                        "description": "Training window length for the CV splitter (default: full history)",
+                    },
+                    "n_iter": {
+                        "type": "integer",
+                        "description": "Number of parameter combinations to try: n_iter for random search, n_evals for optuna. Ignored for grid search (default: 10)",
+                    },
+                    "scoring": {
+                        "type": "string",
+                        "description": (
+                            "Metric class name to optimise, e.g. 'MeanAbsolutePercentageError'. "
+                            "Use list_metrics to see all options. Defaults to sktime's default scoring."
+                        ),
+                    },
+                },
+                "required": ["estimator_handle", "data_handle", "param_grid"],
+            },
+        ),
+        Tool(
+            name="get_param_grid_suggestions",
+            description=(
+                "Return a suggested parameter grid for a given estimator based on its "
+                "hyperparameter types and default values. Use this before tune_forecaster "
+                "to get a starting point for the param_grid argument."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_name": {
+                        "type": "string",
+                        "description": "Name of the sktime estimator, e.g. 'NaiveForecaster'",
+                    },
+                },
+                "required": ["estimator_name"],
+            },
+        ),
     ]
 
 
@@ -737,6 +814,19 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
 
+        elif name == "tune_forecaster":
+            result = tune_forecaster_tool(
+                estimator_handle=arguments["estimator_handle"],
+                data_handle=arguments["data_handle"],
+                param_grid=arguments["param_grid"],
+                method=arguments.get("method", "grid"),
+                fh=arguments.get("fh", 12),
+                window_length=arguments.get("window_length"),
+                n_iter=arguments.get("n_iter", 10),
+                scoring=arguments.get("scoring"),
+            )
+        elif name == "get_param_grid_suggestions":
+            result = get_param_grid_suggestions_tool(arguments["estimator_name"])
         else:
             result = {"error": f"Unknown tool: {name}"}
 
