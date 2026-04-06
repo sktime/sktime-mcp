@@ -167,8 +167,7 @@ def load_data_source_async_tool(
             "message": "Data loading job started..."
         }
     """
-    import asyncio
-
+    from sktime_mcp.runtime.async_scheduler import get_async_scheduler
     from sktime_mcp.runtime.jobs import get_job_manager
 
     executor = get_executor()
@@ -184,15 +183,10 @@ def load_data_source_async_tool(
         total_steps=3,  # load, validate, format
     )
 
-    # schedule on event loop
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
+    # Schedule via the managed async scheduler (non-blocking)
+    scheduler = get_async_scheduler()
     coro = executor.load_data_source_async(config, job_id)
-    asyncio.run_coroutine_threadsafe(coro, loop)
+    scheduler.schedule(coro)
 
     return {
         "success": True,
