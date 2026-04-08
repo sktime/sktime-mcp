@@ -1,12 +1,8 @@
-"""
-Registry Interface for sktime MCP.
-
-This module provides the core interface to sktime's estimator registry,
-exposing structured semantic information about all available estimators.
-"""
+"""Registry interface to sktime's estimator registry."""
 
 import inspect
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -15,21 +11,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class EstimatorNode:
-    """
-    Represents a single estimator in the sktime registry.
-
-    This is the semantic representation of an estimator that gets
-    exposed to the LLM through the MCP.
-
-    Attributes:
-        name: The class name of the estimator (e.g., "ARIMA")
-        task: The task type (e.g., "forecaster", "transformer", "classifier")
-        class_ref: Reference to the actual Python class
-        module: Full module path to the estimator
-        tags: Dictionary of capability tags
-        hyperparameters: List of hyperparameter names with their defaults
-        docstring: The estimator's docstring for understanding usage
-    """
+    """Semantic representation of an sktime estimator exposed through the MCP."""
 
     name: str
     task: str
@@ -63,14 +45,7 @@ class EstimatorNode:
 
 
 class RegistryInterface:
-    """
-    Interface to sktime's estimator registry.
-
-    This class wraps sktime's `all_estimators` function and provides
-    structured access to estimator metadata, tags, and documentation.
-
-    The registry is the single source of truth for all estimator information.
-    """
+    """Single source of truth for sktime estimator metadata, tags, and documentation."""
 
     # Map of sktime estimator types to task names
     TASK_MAP = {
@@ -86,49 +61,112 @@ class RegistryInterface:
     }
 
     def __init__(self):
-        """Initialize the registry interface."""
         self._cache: dict[str, EstimatorNode] = {}
         self._all_tags: set = set()
         self._loaded = False
+        self._lock = threading.Lock()
 
     def _ensure_loaded(self):
-        """Lazy-load the registry on first access."""
-        if not self._loaded:
-            self._load_registry()
-            self._loaded = True
+        """Lazy-load the registry on first access (thread-safe via double-checked locking).
 
+        _loaded is set only on success.  If _load_registry raises (e.g. sktime not
+        installed → RuntimeError), _loaded stays False so the next call retries and
+        re-raises — intentional: the error should surface on every access until the
+        environment is fixed, not be silently swallowed into an empty cache.
+        """
+        if not self._loaded:
+            with self._lock:
+                if not self._loaded:
+                    self._load_registry()
+                    self._loaded = True
+
+    # Pre-existing risks (thread safety, partial install, TASK_MAP=None) are documented in issue #91.
     def _load_registry(self):
-        """Load all estimators from sktime's registry."""
-        # L-3: Sometimes, We need to import other packages as well to load the estimators
+        """Populate the internal cache with all estimators found in sktime's registry.
+
+        Issues a single ``all_estimators`` call to avoid re-crawling the module
+        tree once per TASK_MAP key.  Estimators whose ``object_type`` tag does not
+        resolve to a TASK_MAP key are skipped silently and logged at DEBUG so they
+        remain visible during development without polluting production logs.
+        """
         try:
             from sktime.registry import all_estimators
         except ImportError as e:
             logger.error(f"Failed to import sktime registry: {e}")
             raise RuntimeError("sktime must be installed to use sktime-mcp") from e
 
-        # Load each type of estimator
-        for estimator_type in self.TASK_MAP:
+        try:
+            # Pass estimator_types so sktime's inheritance filter excludes types not in
+            # TASK_MAP (e.g. BasePairwiseTransformerPanel) rather than relying solely on
+            # the object_type tag.  This is the canonical single-call approach (A MEDIUM)
+            # and prevents pairwise transformers leaking into task='transformation' (R HIGH).
+            estimators = all_estimators(
+                estimator_types=list(self.TASK_MAP.keys()),
+                return_names=True,
+                as_dataframe=False,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to load estimators: {e}")
+            return
+
+        for name, cls in estimators:
             try:
-                estimators = all_estimators(
-                    estimator_types=estimator_type,
-                    return_names=True,
-                    as_dataframe=False,
-                )
-
-                for name, cls in estimators:
-                    try:
-                        node = self._create_node(name, cls, estimator_type)
-                        self._cache[name] = node
-                        self._all_tags.update(node.tags.keys())
-                    except Exception as e:
-                        logger.debug(f"Failed to load estimator {name}: {e}")
-                        continue
-
+                estimator_type = self._get_estimator_type(cls)
+                if not estimator_type:
+                    logger.debug(f"Skipping {name!r}: object_type tag unresolvable")
+                    continue
+                node = self._create_node(name, cls, estimator_type)
+                if name in self._cache:
+                    logger.debug(
+                        f"Name collision: {name!r} already in cache; overwriting with {cls.__module__}.{cls.__name__}"
+                    )
+                self._cache[name] = node
+                self._all_tags.update(node.tags.keys())
             except Exception as e:
-                logger.warning(f"Failed to load estimator type {estimator_type}: {e}")
+                logger.debug(f"Failed to load estimator {name!r}: {e}")
                 continue
 
         logger.info(f"Loaded {len(self._cache)} estimators from sktime registry")
+
+    def _get_estimator_type(self, cls: type) -> str:
+        """Return the TASK_MAP key that best describes this estimator class.
+
+        Reads the ``object_type`` class tag rather than accepting a caller-supplied
+        type argument, so the mapping is always grounded in the class's own
+        declaration.  Multi-role estimators (list-valued or tuple-valued tag) resolve
+        via two-pass strategy: exact match across all candidates first, then
+        dash-prefix fallback across all candidates.  Subtype tags such as
+        ``"transformer-pairwise-panel"`` resolve via dash-prefix fallback so that
+        new subtypes require no code change here.
+
+        Args:
+            cls: An sktime estimator class that exposes ``get_class_tags()``.
+
+        Returns:
+            A key present in ``self.TASK_MAP`` (e.g. ``"forecaster"``), or ``""``
+            when the tag is absent, unresolvable, or ``get_class_tags()`` raises.
+        """
+        try:
+            tags = cls.get_class_tags()
+            raw = tags.get("object_type", "")
+            candidates = raw if isinstance(raw, (list, tuple)) else [raw]
+            normalized = [c.lower() for c in candidates if isinstance(c, str)]
+            # Pass 1: exact match — first hit in candidate list wins (E MEDIUM: tie-breaking is
+            # candidate-order, i.e. the order returned by get_class_tags(); not documented by sktime
+            # as stable, but matches observed behaviour for all known multi-role estimators).
+            for candidate in normalized:
+                if candidate in self.TASK_MAP:
+                    return candidate
+            # Pass 2: dash-prefix fallback — first prefix match in TASK_MAP insertion order wins.
+            # New subtypes (e.g. "transformer-pairwise") are handled here without code changes,
+            # but they are excluded upstream by the estimator_types filter in _load_registry.
+            for candidate in normalized:
+                for key in self.TASK_MAP:
+                    if candidate.startswith(key + "-"):
+                        return key
+            return ""
+        except Exception:
+            return ""
 
     def _create_node(self, name: str, cls: type, estimator_type: str) -> EstimatorNode:
         """Create an EstimatorNode from a class."""
@@ -197,16 +235,7 @@ class RegistryInterface:
         task: Optional[str] = None,
         tags: Optional[dict[str, Any]] = None,
     ) -> list[EstimatorNode]:
-        """
-        Get all estimators, optionally filtered by task and tags.
-
-        Args:
-            task: Filter by task type (e.g., "forecasting", "classification")
-            tags: Filter by capability tags (e.g., {"capability:pred_int": True})
-
-        Returns:
-            List of matching EstimatorNode objects
-        """
+        """Return all estimators, optionally filtered by task and tags."""
         self._ensure_loaded()
 
         results = list(self._cache.values())
@@ -243,15 +272,7 @@ class RegistryInterface:
         return filtered
 
     def get_estimator_by_name(self, name: str) -> Optional[EstimatorNode]:
-        """
-        Get a specific estimator by its class name.
-
-        Args:
-            name: The class name of the estimator (e.g., "ARIMA")
-
-        Returns:
-            EstimatorNode if found, None otherwise
-        """
+        """Return the EstimatorNode for the given class name, or None if not found."""
         self._ensure_loaded()
         return self._cache.get(name)
 
@@ -260,14 +281,7 @@ class RegistryInterface:
         return list(self.TASK_MAP.values())
 
     def get_available_tags(self) -> list[dict[str, Any]]:
-        """Get rich metadata for all available tags using sktime's registry.
-
-        Returns a list of dicts, each containing:
-        - tag: the tag name (e.g., "scitype:y")
-        - description: human-readable explanation of what the tag means
-        - value_type: the expected value type (e.g., "bool", "str")
-        - applies_to: list of estimator types this tag applies to
-        """
+        """Return rich metadata for all available tags from sktime's registry."""
         self._ensure_loaded()
 
         try:
@@ -305,15 +319,7 @@ class RegistryInterface:
         return result
 
     def search_estimators(self, query: str) -> list[EstimatorNode]:
-        """
-        Search estimators by name or docstring.
-
-        Args:
-            query: Search string (case-insensitive)
-
-        Returns:
-            List of matching EstimatorNode objects
-        """
+        """Return estimators whose name or docstring contains the query string (case-insensitive)."""
         self._ensure_loaded()
         query_lower = query.lower()
 
