@@ -828,6 +828,60 @@ class TestRegistrySingleCall:
             f"Unexpected WARNING log(s): {[r.message for r in warnings]}"
         )
 
+    def test_name_collision_emits_warning(self, caplog):
+        """Proves a WARNING (not DEBUG) is emitted when two estimators share the same name.
+
+        Collision-resolution order changes between the old per-key loop and the new single
+        call; a WARNING ensures the event is auditable in production logs.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        cls_a = _make_fake_cls("forecaster", "DupEstimator")
+        cls_b = _make_fake_cls("transformer", "DupEstimator")
+        cls_b.__module__ = "sktime.fake.dup_b"
+
+        with patch(
+            "sktime.registry.all_estimators",
+            return_value=[("DupEstimator", cls_a), ("DupEstimator", cls_b)],
+        ):
+            with caplog.at_level(logging.WARNING, logger="sktime_mcp.registry.interface"):
+                ri._load_registry()
+
+        warning_msgs = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+        assert any("DupEstimator" in m and "collision" in m.lower() for m in warning_msgs), (
+            f"Expected a WARNING mentioning 'DupEstimator' and 'collision'. Got: {warning_msgs}"
+        )
+
+    def test_space_separated_object_type_is_silently_dropped(self, caplog):
+        """Proves a space-separated object_type string ('forecaster transformer') is dropped
+        cleanly — it becomes a single candidate that fails both exact and dash-prefix match.
+
+        Behaviour contract: drop silently at DEBUG level (not WARNING), because the root
+        cause is an unusual tag value in an upstream class, not a local code error.
+        The estimator must not appear in the cache and must not raise.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        cls = _make_fake_cls("forecaster transformer", "SpaceTyped")
+
+        with patch(
+            "sktime.registry.all_estimators",
+            return_value=[("SpaceTyped", cls)],
+        ):
+            with caplog.at_level(logging.DEBUG, logger="sktime_mcp.registry.interface"):
+                ri._load_registry()
+
+        assert "SpaceTyped" not in ri._cache, (
+            "Estimator with space-separated object_type must not appear in cache"
+        )
+        # Must not raise and must emit a DEBUG skip log (not WARNING — this is upstream data)
+        warning_msgs = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+        assert not any("SpaceTyped" in m for m in warning_msgs), (
+            f"Space-separated type drop should be DEBUG, not WARNING. Got warnings: {warning_msgs}"
+        )
+
     def test_debug_log_emitted_for_skipped_estimator_with_name_and_reason(self, caplog):
         """Proves DEBUG log for skipped estimators contains both the name and the reason.
 

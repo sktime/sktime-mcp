@@ -117,7 +117,7 @@ class RegistryInterface:
                     continue
                 node = self._create_node(name, cls, estimator_type)
                 if name in self._cache:
-                    logger.debug(
+                    logger.warning(
                         f"Name collision: {name!r} already in cache; overwriting with {cls.__module__}.{cls.__name__}"
                     )
                 self._cache[name] = node
