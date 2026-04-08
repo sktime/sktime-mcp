@@ -165,7 +165,8 @@ class RegistryInterface:
                     if candidate.startswith(key + "-"):
                         return key
             return ""
-        except Exception:
+        except Exception as e:
+            logger.debug(f"_get_estimator_type failed for {cls}: {e}")
             return ""
 
     def _create_node(self, name: str, cls: type, estimator_type: str) -> EstimatorNode:

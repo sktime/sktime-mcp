@@ -656,6 +656,33 @@ class TestRegistrySingleCall:
 
         assert ri._loaded
 
+    def test_missing_sktime_keeps_loaded_false_and_reraises_on_retry(self):
+        """When sktime is absent, _ensure_loaded raises RuntimeError and _loaded stays False.
+
+        Documented retry semantics: every call re-raises until the environment is fixed,
+        rather than caching an empty registry on the first failure.
+        This tests the ImportError → RuntimeError path (line 96 in _load_registry),
+        which is distinct from the inner try/except that catches all_estimators() failures.
+        """
+        import sys
+
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+
+        with patch.dict(sys.modules, {"sktime.registry": None}):
+            with pytest.raises(RuntimeError, match="sktime must be installed"):
+                ri._ensure_loaded()
+
+        assert not ri._loaded, (
+            "_loaded must stay False when RuntimeError propagates — retry semantics require this"
+        )
+
+        # Second call must also raise, not silently swallow the error
+        with patch.dict(sys.modules, {"sktime.registry": None}):
+            with pytest.raises(RuntimeError, match="sktime must be installed"):
+                ri._ensure_loaded()
+
     def test_loaded_flag_set_when_all_estimators_call_raises(self):
         """Call-level exception caught by inner try/except in _load_registry.
         _ensure_loaded must still set _loaded=True.
