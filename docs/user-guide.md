@@ -52,7 +52,7 @@ The `sktime-mcp` server exposes a suite of tools designed for Large Language Mod
 |----------|-------|-------------|
 | **Discovery** | `list_estimators`, `search_estimators`, `describe_estimator` | Find the right model for your task (Forecasting, Classification, etc.). |
 | **Instantiation** | `instantiate_estimator`, `instantiate_pipeline` | Create model instances or complex pipelines. |
-| **Execution** | `fit_predict`, `fit`, `predict` | Train models and generate forecasts. |
+| **Execution** | `fit_predict`, `fit_predict_classification`, `fit_predict_regression` | Train models and generate forecasts, class labels, or regression outputs. |
 | **Data** | `load_data_source`, `list_available_data` | Load data from Pandas, CSV/Parquet, or SQL, and inspect demo datasets plus active handles. |
 | **Export** | `export_code`, `save_model` | Generate Python code or persist fitted estimators to a local path. |
 
@@ -114,7 +114,52 @@ Check if components work together (e.g., Deseasonalizer -> Detrender -> ARIMA).
 }
 ```
 
-### 3. Save a Fitted Model
+### 3. Supervised Classification with Data Handles
+
+#### Query - Train a classifier on custom data and predict labels on a second dataset.
+
+**Step 1: Load supervised training data**
+```json
+{
+  "tool": "load_data_source",
+  "arguments": {
+    "config": {
+      "type": "pandas",
+      "data": "X_train_with_target",
+      "target_column": "label"
+    }
+  }
+}
+```
+
+**Step 2: Load feature-only prediction data**
+```json
+{
+  "tool": "load_data_source",
+  "arguments": {
+    "config": {
+      "type": "pandas",
+      "data": "X_test_only",
+      "feature_only": true
+    }
+  }
+}
+```
+
+**Step 3: Instantiate and run the classifier**
+```json
+{
+  "tool": "fit_predict_classification",
+  "arguments": {
+    "estimator_handle": "est_classifier123",
+    "train_data_handle": "data_train123",
+    "predict_data_handle": "data_test123",
+    "return_probabilities": true
+  }
+}
+```
+
+### 4. Save a Fitted Model
 
 Persist a trained estimator to a local filesystem path using sktime's MLflow integration.
 

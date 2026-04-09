@@ -88,7 +88,7 @@ Discover estimators by task type and capability tags.
 }
 ```
 
-**Returns:** List of matching estimators with name, task, and summary info.
+**Returns:** List of matching estimators with name, task, tags, tag counts, hyperparameter counts, and a short docstring preview.
 
 ---
 
@@ -215,7 +215,7 @@ Check if a proposed pipeline composition is valid before instantiation.
 ### Execution
 
 #### 8. `fit_predict`
-Execute a complete workflow: load dataset, fit estimator, and generate predictions.
+Execute a complete forecasting workflow on a built-in demo dataset.
 
 **Arguments:**
 - `estimator_handle` (required): Handle from `instantiate_estimator` or `instantiate_pipeline`
@@ -235,7 +235,51 @@ Execute a complete workflow: load dataset, fit estimator, and generate predictio
 
 ---
 
-#### 9. `save_model`
+#### 9. `fit_predict_classification`
+Fit a classifier on supervised data and predict class labels.
+
+**Arguments:**
+- `estimator_handle` (required): Handle from `instantiate_estimator` or `instantiate_pipeline`
+- `train_data_handle` (required): Handle loaded with `target_column` set
+- `predict_data_handle` (optional): Feature-only or supervised handle for inference. If omitted, predictions are generated on the training features.
+- `return_probabilities` (optional): Include `predict_proba` output when supported
+
+**Example:**
+```json
+{
+  "estimator_handle": "est_cls123",
+  "train_data_handle": "data_train123",
+  "predict_data_handle": "data_test123",
+  "return_probabilities": true
+}
+```
+
+**Returns:** `{"success": true, "predictions": ["class_a", "class_b"], "probabilities": [[0.8, 0.2], ...], "classes": ["class_a", "class_b"]}`
+
+---
+
+#### 10. `fit_predict_regression`
+Fit a regressor on supervised data and predict numeric targets.
+
+**Arguments:**
+- `estimator_handle` (required): Handle from `instantiate_estimator` or `instantiate_pipeline`
+- `train_data_handle` (required): Handle loaded with `target_column` set
+- `predict_data_handle` (optional): Feature-only or supervised handle for inference. If omitted, predictions are generated on the training features.
+
+**Example:**
+```json
+{
+  "estimator_handle": "est_reg123",
+  "train_data_handle": "data_train123",
+  "predict_data_handle": "data_test123"
+}
+```
+
+**Returns:** `{"success": true, "predictions": [10.2, 10.5, 10.7], "task": "regression"}`
+
+---
+
+#### 11. `save_model`
 Persist a fitted estimator or pipeline handle to a local filesystem path using `sktime.utils.mlflow_sktime.save_model`.
 
 **Arguments:**

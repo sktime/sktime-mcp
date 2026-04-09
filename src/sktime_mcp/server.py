@@ -55,6 +55,10 @@ from sktime_mcp.tools.list_estimators import (
     list_estimators_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
+from sktime_mcp.tools.supervised import (
+    fit_predict_classification_tool,
+    fit_predict_regression_tool,
+)
 
 # Configure logging to stderr with detailed format
 logging.basicConfig(
@@ -388,6 +392,63 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="fit_predict_classification",
+            description=(
+                "Fit a classifier on supervised data and predict class labels. "
+                "Use a training handle loaded with target_column set, and optionally "
+                "a second feature-only handle loaded with feature_only=true."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle from instantiate_estimator or instantiate_pipeline",
+                    },
+                    "train_data_handle": {
+                        "type": "string",
+                        "description": "Data handle with target and feature columns",
+                    },
+                    "predict_data_handle": {
+                        "type": "string",
+                        "description": "Optional feature-only or supervised data handle for inference",
+                    },
+                    "return_probabilities": {
+                        "type": "boolean",
+                        "description": "Include predict_proba output when available",
+                        "default": False,
+                    },
+                },
+                "required": ["estimator_handle", "train_data_handle"],
+            },
+        ),
+        Tool(
+            name="fit_predict_regression",
+            description=(
+                "Fit a regressor on supervised data and predict numeric targets. "
+                "Use a training handle loaded with target_column set, and optionally "
+                "a second feature-only handle loaded with feature_only=true."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle from instantiate_estimator or instantiate_pipeline",
+                    },
+                    "train_data_handle": {
+                        "type": "string",
+                        "description": "Data handle with target and feature columns",
+                    },
+                    "predict_data_handle": {
+                        "type": "string",
+                        "description": "Optional feature-only or supervised data handle for inference",
+                    },
+                },
+                "required": ["estimator_handle", "train_data_handle"],
+            },
+        ),
+        Tool(
             name="release_data_handle",
             description="Release a data handle and free memory",
             inputSchema={
@@ -628,6 +689,21 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("horizon", 12),
             )
             # Sanitize immediately to handle Period objects
+            result = sanitize_for_json(result)
+        elif name == "fit_predict_classification":
+            result = fit_predict_classification_tool(
+                arguments["estimator_handle"],
+                arguments["train_data_handle"],
+                arguments.get("predict_data_handle"),
+                arguments.get("return_probabilities", False),
+            )
+            result = sanitize_for_json(result)
+        elif name == "fit_predict_regression":
+            result = fit_predict_regression_tool(
+                arguments["estimator_handle"],
+                arguments["train_data_handle"],
+                arguments.get("predict_data_handle"),
+            )
             result = sanitize_for_json(result)
         elif name == "release_data_handle":
             result = release_data_handle_tool(arguments["data_handle"])

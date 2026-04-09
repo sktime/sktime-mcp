@@ -136,6 +136,127 @@ class TestTools:
         assert result["success"]
         assert "estimators" in result
         assert len(result["estimators"]) <= 5
+        if result["estimators"]:
+            estimator = result["estimators"][0]
+            assert "tags" in estimator
+            assert "tag_count" in estimator
+            assert "hyperparameter_count" in estimator
+            assert "docstring_preview" in estimator
+
+    def test_fit_predict_classification_tool(self):
+        """Classification tool should fit on supervised data and predict on feature-only data."""
+        from sktime.datasets import load_basic_motions
+
+        from sktime_mcp.tools.data_tools import load_data_source_tool, release_data_handle_tool
+        from sktime_mcp.tools.instantiate import instantiate_estimator_tool, release_handle_tool
+        from sktime_mcp.tools.supervised import fit_predict_classification_tool
+
+        X_train, y_train = load_basic_motions(split="train")
+        X_test, _ = load_basic_motions(split="test")
+
+        train_df = X_train.copy()
+        train_df["target"] = y_train
+
+        train_result = load_data_source_tool(
+            {
+                "type": "pandas",
+                "data": train_df,
+                "target_column": "target",
+            }
+        )
+        predict_result = load_data_source_tool(
+            {
+                "type": "pandas",
+                "data": X_test.copy(),
+                "feature_only": True,
+            }
+        )
+        estimator_result = instantiate_estimator_tool(
+            "DummyClassifier",
+            {"strategy": "most_frequent"},
+        )
+
+        try:
+            assert train_result["success"]
+            assert predict_result["success"]
+            assert predict_result["metadata"]["feature_only"] is True
+            assert estimator_result["success"]
+
+            result = fit_predict_classification_tool(
+                estimator_result["handle"],
+                train_result["data_handle"],
+                predict_result["data_handle"],
+                return_probabilities=True,
+            )
+
+            assert result["success"]
+            assert result["task"] == "classification"
+            assert len(result["predictions"]) == len(X_test)
+            assert len(result["probabilities"]) == len(X_test)
+            assert "classes" in result
+        finally:
+            if estimator_result.get("success"):
+                release_handle_tool(estimator_result["handle"])
+            if train_result.get("success"):
+                release_data_handle_tool(train_result["data_handle"])
+            if predict_result.get("success"):
+                release_data_handle_tool(predict_result["data_handle"])
+
+    def test_fit_predict_regression_tool(self):
+        """Regression tool should fit on supervised data and predict numeric outputs."""
+        from sktime.datasets import load_tecator
+
+        from sktime_mcp.tools.data_tools import load_data_source_tool, release_data_handle_tool
+        from sktime_mcp.tools.instantiate import instantiate_estimator_tool, release_handle_tool
+        from sktime_mcp.tools.supervised import fit_predict_regression_tool
+
+        X_train, y_train = load_tecator(split="train")
+        X_test, _ = load_tecator(split="test")
+
+        train_df = X_train.copy()
+        train_df["target"] = y_train
+
+        train_result = load_data_source_tool(
+            {
+                "type": "pandas",
+                "data": train_df,
+                "target_column": "target",
+            }
+        )
+        predict_result = load_data_source_tool(
+            {
+                "type": "pandas",
+                "data": X_test.copy(),
+                "feature_only": True,
+            }
+        )
+        estimator_result = instantiate_estimator_tool(
+            "DummyRegressor",
+            {"strategy": "mean"},
+        )
+
+        try:
+            assert train_result["success"]
+            assert predict_result["success"]
+            assert estimator_result["success"]
+
+            result = fit_predict_regression_tool(
+                estimator_result["handle"],
+                train_result["data_handle"],
+                predict_result["data_handle"],
+            )
+
+            assert result["success"]
+            assert result["task"] == "regression"
+            assert len(result["predictions"]) == len(X_test)
+            assert all(isinstance(value, (float, int)) for value in result["predictions"])
+        finally:
+            if estimator_result.get("success"):
+                release_handle_tool(estimator_result["handle"])
+            if train_result.get("success"):
+                release_data_handle_tool(train_result["data_handle"])
+            if predict_result.get("success"):
+                release_data_handle_tool(predict_result["data_handle"])
 
     def test_describe_unknown_estimator(self):
         """Test describing an unknown estimator."""
