@@ -260,14 +260,18 @@ Persist a fitted estimator or pipeline handle to a local filesystem path using `
 
 ---
 
-### Datasets
+### Data Availability
 
-#### 10. `list_datasets`
-List all available demo datasets for testing and experimentation.
+#### 10. `list_available_data`
+List available data in one unified response: built-in demo datasets and active loaded data handles.
 
-**Arguments:** None
+**Arguments:**
+- `is_demo` (optional):
+  - `true` → return only demo datasets
+  - `false` → return only active data handles
+  - omitted → return both
 
-**Returns:** `{"success": true, "datasets": ["airline", "sunspots", "lynx", "shampoo", ...]}`
+**Returns:** `{"success": true, "system_demos": ["airline", "sunspots", ...], "active_handles": [...], "total": 12}`
 
 ---
 

@@ -4,7 +4,7 @@ This guide explains how the project is structured, how to develop new features, 
 
 ## Development Prerequisites
 
-- Python 3.10+
+- Python 3.9+
 - pip
 - Optional: `mkdocs` if you want to build the documentation site
 

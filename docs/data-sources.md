@@ -96,13 +96,20 @@ List all available data source types.
 - `sources` (list): Available source types
 - `descriptions` (dict): Description for each source
 
-### `list_data_handles`
+### `list_available_data`
 
-List all currently loaded data handles.
+List available data in a single response, including demo datasets and active handles.
+
+**Arguments (optional):**
+- `is_demo` (bool):
+    - `true` → only demo datasets
+    - `false` → only active data handles
+    - omitted → both
 
 **Returns:**
-- `count` (int): Number of loaded data handles
-- `handles` (list): List of data handle information
+- `system_demos` (list): Built-in demo dataset names
+- `active_handles` (list): Active data handle information
+- `total` (int): Combined count of returned entries
 
 ### `release_data_handle`
 
