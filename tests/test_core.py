@@ -215,5 +215,82 @@ class TestTools:
         assert calls["serialization_format"] == "pickle"
 
 
+class TestFitPredictSeparate:
+    """Tests for separate fit and predict tools (Issue #92)."""
+
+    def test_fit_then_predict(self):
+        """fit + predict should produce the same result as fit_predict."""
+        from sktime_mcp.tools.fit_predict import fit_tool, predict_tool
+        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+
+        # Instantiate
+        inst = instantiate_estimator_tool("NaiveForecaster")
+        assert inst["success"]
+        handle = inst["handle"]
+
+        # Fit
+        fit_result = fit_tool(handle, "airline")
+        assert fit_result["success"]
+        assert fit_result["fitted"] is True
+
+        # Predict
+        pred_result = predict_tool(handle, horizon=6)
+        assert pred_result["success"]
+        assert len(pred_result["predictions"]) == 6
+
+    def test_predict_without_fit_fails(self):
+        """predict on an unfitted estimator should fail."""
+        from sktime_mcp.tools.fit_predict import predict_tool
+        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+
+        inst = instantiate_estimator_tool("NaiveForecaster")
+        assert inst["success"]
+
+        pred = predict_tool(inst["handle"], horizon=3)
+        assert not pred["success"]
+        assert "not fitted" in pred["error"].lower() or "error" in pred
+
+    def test_fit_then_predict_different_horizons(self):
+        """After fitting once, predict should work with different horizons."""
+        from sktime_mcp.tools.fit_predict import fit_tool, predict_tool
+        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+
+        inst = instantiate_estimator_tool("NaiveForecaster")
+        handle = inst["handle"]
+
+        fit_tool(handle, "airline")
+
+        pred_3 = predict_tool(handle, horizon=3)
+        pred_12 = predict_tool(handle, horizon=12)
+
+        assert pred_3["success"]
+        assert pred_12["success"]
+        assert len(pred_3["predictions"]) == 3
+        assert len(pred_12["predictions"]) == 12
+
+    def test_list_handles_shows_fitted_status(self):
+        """list_handles should reflect fitted status after fit."""
+        from sktime_mcp.tools.fit_predict import fit_tool
+        from sktime_mcp.tools.instantiate import (
+            instantiate_estimator_tool,
+            list_handles_tool,
+        )
+
+        inst = instantiate_estimator_tool("NaiveForecaster")
+        handle = inst["handle"]
+
+        # Before fit
+        handles = list_handles_tool()
+        match = [h for h in handles["handles"] if h["handle_id"] == handle]
+        assert len(match) == 1
+        assert match[0]["fitted"] is False
+
+        # After fit
+        fit_tool(handle, "airline")
+        handles = list_handles_tool()
+        match = [h for h in handles["handles"] if h["handle_id"] == handle]
+        assert match[0]["fitted"] is True
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
