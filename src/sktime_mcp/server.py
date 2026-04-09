@@ -30,6 +30,8 @@ from sktime_mcp.tools.describe_estimator import (
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
     fit_predict_tool,
+    fit_tool,
+    predict_tool,
 )
 from sktime_mcp.tools.format_tools import (
     auto_format_on_load_tool,
@@ -175,6 +177,53 @@ async def list_tools() -> list[Tool]:
                     },
                 },
                 "required": ["handle"],
+            },
+        ),
+        Tool(
+            name="fit",
+            description=(
+                "Fit an estimator on a dataset WITHOUT predicting. "
+                "Use this when you want to train a model first and predict later "
+                "(possibly multiple times with different horizons). "
+                "The estimator_handle is marked as fitted after success."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle from instantiate_estimator or instantiate_pipeline",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Dataset name: airline, sunspots, lynx, etc.",
+                    },
+                },
+                "required": ["estimator_handle", "dataset"],
+            },
+        ),
+        Tool(
+            name="predict",
+            description=(
+                "Generate predictions from an already-fitted estimator. "
+                "The estimator must have been fitted first via the 'fit' or "
+                "'fit_predict' tool. Use this to re-predict with a different "
+                "horizon without re-fitting."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle of a fitted estimator",
+                    },
+                    "horizon": {
+                        "type": "integer",
+                        "description": "Forecast horizon — number of steps ahead (default: 12)",
+                        "default": 12,
+                    },
+                },
+                "required": ["estimator_handle"],
             },
         ),
         Tool(
@@ -588,6 +637,18 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         elif name == "release_handle":
             result = release_handle_tool(arguments["handle"])
 
+        elif name == "fit":
+            result = fit_tool(
+                arguments["estimator_handle"],
+                arguments["dataset"],
+            )
+        elif name == "predict":
+            result = predict_tool(
+                arguments["estimator_handle"],
+                arguments.get("horizon", 12),
+            )
+            # Sanitize to handle Period objects in prediction index
+            result = sanitize_for_json(result)
         elif name == "fit_predict":
             result = fit_predict_tool(
                 arguments["estimator_handle"],
