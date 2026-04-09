@@ -88,6 +88,25 @@ Fit a model and generate predictions using custom data.
 }
 ```
 
+### `fit_predict_classification`
+
+Fit a classifier on supervised training data and predict class labels.
+
+**Arguments:**
+- `estimator_handle` (str): Handle from `instantiate_estimator`
+- `train_data_handle` (str): Handle loaded with `target_column`
+- `predict_data_handle` (str, optional): Feature-only or supervised handle for inference
+- `return_probabilities` (bool, optional): Include `predict_proba` output when available
+
+### `fit_predict_regression`
+
+Fit a regressor on supervised training data and predict numeric targets.
+
+**Arguments:**
+- `estimator_handle` (str): Handle from `instantiate_estimator`
+- `train_data_handle` (str): Handle loaded with `target_column`
+- `predict_data_handle` (str, optional): Feature-only or supervised handle for inference
+
 ### `list_data_sources`
 
 List all available data source types.
@@ -121,6 +140,8 @@ Release a data handle and free memory.
     "data": df_or_dict,  # DataFrame or dict
     "time_column": "date",  # Optional, will try to detect
     "target_column": "sales",  # Optional, defaults to first column
+    "feature_only": False,  # Optional, set True for inference-only feature handles
+    "feature_columns": ["sensor_1", "sensor_2"],  # Optional explicit feature subset
     "exog_columns": ["temp", "promo"],  # Optional
     "frequency": "D"  # Optional, will try to infer
 }
@@ -211,6 +232,18 @@ Validation results are included in the response:
     "warnings": ["Missing values detected: {'sales': 5.0}"]  # Non-critical issues
 }
 ```
+
+For supervised classification/regression inference, load the prediction set with:
+
+```python
+{
+    "type": "pandas",
+    "data": X_test,
+    "feature_only": True
+}
+```
+
+This stores all columns as features without assuming there is a target column.
 
 ## Installation
 

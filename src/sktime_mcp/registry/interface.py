@@ -59,6 +59,9 @@ class EstimatorNode:
             "task": self.task,
             "module": self.module,
             "tags": self.tags,
+            "tag_count": len(self.tags),
+            "hyperparameter_count": len(self.hyperparameters),
+            "docstring_preview": self.docstring[:200] if self.docstring else None,
         }
 
 

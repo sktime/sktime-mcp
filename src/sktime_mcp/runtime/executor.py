@@ -32,6 +32,21 @@ DEMO_DATASETS = {
 }
 
 
+def _serialize_predictions(predictions: Any) -> Any:
+    """Convert model outputs to JSON-safe primitives."""
+    if isinstance(predictions, pd.Series):
+        predictions_copy = predictions.copy()
+        predictions_copy.index = predictions_copy.index.astype(str)
+        return predictions_copy.to_dict()
+
+    if isinstance(predictions, pd.DataFrame):
+        predictions_copy = predictions.copy()
+        predictions_copy.index = predictions_copy.index.astype(str)
+        return predictions_copy.to_dict(orient="list")
+
+    return predictions.tolist() if hasattr(predictions, "tolist") else predictions
+
+
 class Executor:
     """
     Execution runtime for sktime estimators.
@@ -61,6 +76,7 @@ class Executor:
                 estimator_name=estimator_name,
                 instance=instance,
                 params=params or {},
+                metadata={"task": node.task},
             )
             return {
                 "success": True,
@@ -113,12 +129,25 @@ class Executor:
     ) -> dict[str, Any]:
         """Fit an estimator."""
         try:
-            instance = self._handle_manager.get_instance(handle_id)
+            handle_info = self._handle_manager.get_info(handle_id)
+            instance = handle_info.instance
         except KeyError:
             return {"success": False, "error": f"Handle not found: {handle_id}"}
 
         try:
-            if fh is not None:
+            task = self._get_handle_task(handle_info)
+
+            if task in ("classification", "regression"):
+                if X is None:
+                    return {
+                        "success": False,
+                        "error": (
+                            f"{task.capitalize()} estimators require feature data X during fit. "
+                            "Load supervised data with a target column for training."
+                        ),
+                    }
+                instance.fit(X, y)
+            elif fh is not None:
                 instance.fit(y, X=X, fh=fh)
             elif X is not None:
                 instance.fit(y, X=X)
@@ -146,26 +175,34 @@ class Executor:
             return {"success": False, "error": "Estimator not fitted"}
 
         try:
+            task = self._get_handle_task(handle_id)
+
+            if task in ("classification", "regression"):
+                if X is None:
+                    return {
+                        "success": False,
+                        "error": (
+                            f"{task.capitalize()} prediction requires feature data X. "
+                            "Pass a feature-only or supervised data handle with columns matching training."
+                        ),
+                    }
+
+                predictions = instance.predict(X)
+                return {
+                    "success": True,
+                    "predictions": _serialize_predictions(predictions),
+                    "task": task,
+                    "n_predictions": len(predictions) if hasattr(predictions, "__len__") else None,
+                }
+
             if fh is None:
                 fh = list(range(1, 13))
 
             predictions = instance.predict(fh=fh, X=X) if X is not None else instance.predict(fh=fh)
 
-            if isinstance(predictions, pd.Series):
-                # Convert index to string to avoid JSON serialization issues with Period/DatetimeIndex
-                predictions_copy = predictions.copy()
-                predictions_copy.index = predictions_copy.index.astype(str)
-                result = predictions_copy.to_dict()
-            elif isinstance(predictions, pd.DataFrame):
-                predictions_copy = predictions.copy()
-                predictions_copy.index = predictions_copy.index.astype(str)
-                result = predictions_copy.to_dict(orient="list")
-            else:
-                result = predictions.tolist() if hasattr(predictions, "tolist") else predictions
-
             return {
                 "success": True,
-                "predictions": result,
+                "predictions": _serialize_predictions(predictions),
                 "horizon": len(fh) if hasattr(fh, "__len__") else fh,
             }
         except Exception as e:
@@ -433,6 +470,7 @@ class Executor:
                 estimator_name=pipeline_name,
                 instance=pipeline,
                 params={"components": components, "params_list": params_list},
+                metadata={"task": final_task, "components": components},
             )
 
             return {
@@ -497,9 +535,11 @@ class Executor:
 
             # Update metadata to reflect the target and used columns
             metadata = adapter.get_metadata().copy()
-            metadata["columns"] = [y.name if hasattr(y, "name") and y.name else "target"]
+            metadata["columns"] = list(data.columns)
+            metadata["target_column"] = y.name if hasattr(y, "name") and y.name else None
+            metadata["feature_only"] = y is None
             if X is not None:
-                metadata["exog_columns"] = list(X.columns)
+                metadata["feature_columns"] = list(X.columns)
             # Inject column dtypes so LLMs can distinguish time index vs target
             metadata["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
             # Generate handle
@@ -515,7 +555,10 @@ class Executor:
             }
 
             # Apply auto-formatting if enabled
-            if getattr(self, "_auto_format_enabled", True):
+            should_auto_format = y is not None and isinstance(
+                y.index, (pd.DatetimeIndex, pd.PeriodIndex)
+            )
+            if should_auto_format and getattr(self, "_auto_format_enabled", True):
                 try:
                     format_result = self.format_data_handle(
                         data_handle, auto_infer_freq=True, fill_missing=True, remove_duplicates=True
@@ -534,12 +577,10 @@ class Executor:
                 except Exception as e:
                     logger.warning(f"Auto-formatting failed: {e}")
                     # Continue with unformatted data if formatting fails
-            _final_meta = adapter.get_metadata().copy()
-            _final_meta["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
             return {
                 "success": True,
                 "data_handle": data_handle,
-                "metadata": _final_meta,
+                "metadata": metadata,
                 "validation": validation_report,
             }
 
@@ -620,9 +661,11 @@ class Executor:
             y, X = adapter.to_sktime_format(data)
 
             metadata = adapter.get_metadata().copy()
-            metadata["columns"] = [y.name if hasattr(y, "name") and y.name else "target"]
+            metadata["columns"] = list(data.columns)
+            metadata["target_column"] = y.name if hasattr(y, "name") and y.name else None
+            metadata["feature_only"] = y is None
             if X is not None:
-                metadata["exog_columns"] = list(X.columns)
+                metadata["feature_columns"] = list(X.columns)
             # Inject column dtypes so LLMs can distinguish time index vs target
             metadata["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
             data_handle = f"data_{uuid.uuid4().hex[:8]}"
@@ -636,7 +679,10 @@ class Executor:
             }
 
             # auto-format if enabled
-            if getattr(self, "_auto_format_enabled", True):
+            should_auto_format = y is not None and isinstance(
+                y.index, (pd.DatetimeIndex, pd.PeriodIndex)
+            )
+            if should_auto_format and getattr(self, "_auto_format_enabled", True):
                 try:
                     format_result = self.format_data_handle(
                         data_handle, auto_infer_freq=True, fill_missing=True, remove_duplicates=True
@@ -688,6 +734,15 @@ class Executor:
             return {"success": False, "error": f"Data handle '{data_handle}' not found"}
 
         data_info = self._data_handles[data_handle]
+        if data_info["y"] is None:
+            return {
+                "success": False,
+                "error": (
+                    "Feature-only data handles cannot be auto-formatted as time series. "
+                    "Use them directly for classification/regression inference."
+                ),
+            }
+
         y = data_info["y"].copy()
         X = data_info["X"].copy() if data_info["X"] is not None else None
 
@@ -823,6 +878,15 @@ class Executor:
         y = data["y"]
         X = data.get("X")
 
+        if y is None:
+            return {
+                "success": False,
+                "error": (
+                    "fit_predict_with_data requires a target column. "
+                    "Feature-only handles are only valid for supervised inference."
+                ),
+            }
+
         # Fit
         fh = list(range(1, horizon + 1))
         fit_result = self.fit(estimator_handle, y=y, X=X, fh=fh)
@@ -831,6 +895,82 @@ class Executor:
 
         # Predict
         return self.predict(estimator_handle, fh=fh, X=X)
+
+    def fit_predict_classification_with_data(
+        self,
+        estimator_handle: str,
+        train_data_handle: str,
+        predict_data_handle: Optional[str] = None,
+        return_probabilities: bool = False,
+    ) -> dict[str, Any]:
+        """Fit a classifier on supervised data and predict labels on feature data."""
+        train_result = self._get_supervised_data(train_data_handle, require_target=True)
+        if not train_result["success"]:
+            return train_result
+
+        predict_result = self._get_supervised_data(
+            predict_data_handle or train_data_handle,
+            require_target=False,
+        )
+        if not predict_result["success"]:
+            return predict_result
+
+        fit_result = self.fit(estimator_handle, y=train_result["y"], X=train_result["X"])
+        if not fit_result["success"]:
+            return fit_result
+
+        predictions = self.predict(estimator_handle, X=predict_result["X"])
+        if not predictions["success"]:
+            return predictions
+
+        result = {
+            **predictions,
+            "train_data_handle": train_data_handle,
+            "predict_data_handle": predict_data_handle or train_data_handle,
+            "prediction_scope": "external" if predict_data_handle else "train",
+        }
+
+        if return_probabilities:
+            proba_result = self.predict_proba(estimator_handle, X=predict_result["X"])
+            if not proba_result["success"]:
+                return proba_result
+            result["probabilities"] = proba_result["probabilities"]
+            result["classes"] = proba_result["classes"]
+
+        return result
+
+    def fit_predict_regression_with_data(
+        self,
+        estimator_handle: str,
+        train_data_handle: str,
+        predict_data_handle: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Fit a regressor on supervised data and predict numeric targets."""
+        train_result = self._get_supervised_data(train_data_handle, require_target=True)
+        if not train_result["success"]:
+            return train_result
+
+        predict_result = self._get_supervised_data(
+            predict_data_handle or train_data_handle,
+            require_target=False,
+        )
+        if not predict_result["success"]:
+            return predict_result
+
+        fit_result = self.fit(estimator_handle, y=train_result["y"], X=train_result["X"])
+        if not fit_result["success"]:
+            return fit_result
+
+        predictions = self.predict(estimator_handle, X=predict_result["X"])
+        if not predictions["success"]:
+            return predictions
+
+        return {
+            **predictions,
+            "train_data_handle": train_data_handle,
+            "predict_data_handle": predict_data_handle or train_data_handle,
+            "prediction_scope": "external" if predict_data_handle else "train",
+        }
 
     def list_data_handles(self) -> dict[str, Any]:
         """
@@ -876,6 +1016,101 @@ class Executor:
                 "success": False,
                 "error": f"Data handle '{data_handle}' not found",
             }
+
+    def _get_handle_task(self, handle_or_id: Union[str, Any]) -> Optional[str]:
+        """Resolve a handle's task, preferring explicit metadata."""
+        if isinstance(handle_or_id, str):
+            handle_info = self._handle_manager.get_info(handle_or_id)
+        else:
+            handle_info = handle_or_id
+
+        task = handle_info.metadata.get("task")
+        if task:
+            return task
+
+        node = self._registry.get_estimator_by_name(handle_info.estimator_name)
+        if node is not None:
+            return node.task
+
+        instance = handle_info.instance
+        object_type = None
+        try:
+            if hasattr(instance, "get_tag"):
+                object_type = instance.get_tag("object_type", raise_error=False)
+            elif hasattr(instance, "get_class_tag"):
+                object_type = instance.get_class_tag("object_type")
+        except Exception:
+            object_type = None
+
+        return self._registry.TASK_MAP.get(object_type, object_type)
+
+    def _get_supervised_data(
+        self,
+        data_handle: str,
+        require_target: bool,
+    ) -> dict[str, Any]:
+        """Fetch stored y/X pairs from a data handle for supervised tasks."""
+        if data_handle not in self._data_handles:
+            return {
+                "success": False,
+                "error": f"Unknown data handle: {data_handle}",
+                "available_handles": list(self._data_handles.keys()),
+            }
+
+        data = self._data_handles[data_handle]
+        y = data.get("y")
+        X = data.get("X")
+
+        if require_target and y is None:
+            return {
+                "success": False,
+                "error": (
+                    f"Data handle '{data_handle}' does not contain a target column. "
+                    "Load training data with target_column set."
+                ),
+            }
+
+        if X is None:
+            return {
+                "success": False,
+                "error": (
+                    f"Data handle '{data_handle}' does not contain feature columns. "
+                    "Load data with exogenous columns or feature_only=true."
+                ),
+            }
+
+        return {"success": True, "y": y, "X": X}
+
+    def predict_proba(
+        self,
+        handle_id: str,
+        X: Any,
+    ) -> dict[str, Any]:
+        """Generate classification probabilities from a fitted estimator."""
+        try:
+            instance = self._handle_manager.get_instance(handle_id)
+        except KeyError:
+            return {"success": False, "error": f"Handle not found: {handle_id}"}
+
+        if not self._handle_manager.is_fitted(handle_id):
+            return {"success": False, "error": "Estimator not fitted"}
+
+        if not hasattr(instance, "predict_proba"):
+            return {
+                "success": False,
+                "error": "Estimator does not expose predict_proba",
+            }
+
+        try:
+            probabilities = instance.predict_proba(X)
+            classes = getattr(instance, "classes_", None)
+            return {
+                "success": True,
+                "probabilities": _serialize_predictions(probabilities),
+                "classes": classes.tolist() if hasattr(classes, "tolist") else classes,
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
 
 _executor_instance: Optional[Executor] = None

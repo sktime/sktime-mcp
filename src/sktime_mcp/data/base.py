@@ -58,7 +58,9 @@ class DataSourceAdapter(ABC):
         """
         pass
 
-    def to_sktime_format(self, data: pd.DataFrame) -> tuple[pd.Series, Optional[pd.DataFrame]]:
+    def to_sktime_format(
+        self, data: pd.DataFrame
+    ) -> tuple[Optional[pd.Series], Optional[pd.DataFrame]]:
         """
         Convert to sktime format (y, X).
 
@@ -67,12 +69,28 @@ class DataSourceAdapter(ABC):
 
         Returns:
             Tuple of (y, X) where:
-            - y: Target time series (pd.Series with DatetimeIndex)
-            - X: Exogenous variables (pd.DataFrame, optional)
+            - y: Target values (pd.Series) or None for feature-only inference handles
+            - X: Feature matrix / exogenous variables (pd.DataFrame, optional)
         """
+        if self.config.get("feature_only", False):
+            feature_cols = self.config.get("feature_columns")
+            if feature_cols:
+                missing = [col for col in feature_cols if col not in data.columns]
+                if missing:
+                    raise ValueError(
+                        f"Feature columns not found in data: {missing}. "
+                        f"Available columns: {list(data.columns)}"
+                    )
+                X = data[feature_cols]
+            else:
+                X = data.copy()
+
+            return None, X
+
         # Get target column from config
         target_col = self.config.get("target_column")
-        exog_cols = self.config.get("exog_columns", [])
+        feature_cols = self.config.get("feature_columns")
+        exog_cols = feature_cols or self.config.get("exog_columns", [])
 
         if target_col and target_col in data.columns:
             y = data[target_col]

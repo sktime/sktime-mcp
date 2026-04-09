@@ -170,7 +170,14 @@ class PandasAdapter(DataSourceAdapter):
 
         # Check for constant values
         for col in data.columns:
-            if data[col].nunique() == 1:
+            try:
+                unique_count = data[col].nunique()
+            except TypeError:
+                # Nested sktime panel columns contain Series objects that are not hashable.
+                # Skip constant-value detection for those columns.
+                continue
+
+            if unique_count == 1:
                 warnings.append(f"Column '{col}' has constant values")
 
         # Check frequency
