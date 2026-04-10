@@ -36,6 +36,25 @@ pip install -e ".[all]"
 # Development installation
 pip install -e ".[dev]"
 ```
+## 🧭 Beginner Setup (First‑Time Users)
+
+If you are new to sktime‑mcp or to MCP‑based workflows, this section provides a minimal starting point to help you verify that your setup is working correctly.
+
+### What is MCP?
+The Model Context Protocol (MCP) allows Large Language Models (LLMs) to discover, reason about, and execute sktime workflows programmatically. This project exposes sktime’s estimator registry and semantics in a structured way so that LLMs can safely compose and run real time‑series pipelines.
+
+### Prerequisites
+- Python 3.9 or newer
+- A working Python virtual environment (recommended)
+- `pip` installed
+
+### Minimal Setup Check
+After installing the package, you can verify that the MCP server starts correctly by running:
+
+```bash
+sktime-mcp
+```
+
 
 ## 🚀 Quick Start
 
