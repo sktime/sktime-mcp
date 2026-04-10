@@ -1,13 +1,67 @@
 """
 describe_estimator tool for sktime MCP.
-
 Gets detailed information about an estimator's capabilities.
 """
 
+import importlib.util
 from typing import Any
 
 from sktime_mcp.registry.interface import get_registry
 from sktime_mcp.registry.tag_resolver import get_tag_resolver
+
+
+def _check_dependencies(tags: dict[str, Any]) -> dict[str, Any]:
+    """Check whether an estimator's soft dependencies are available.
+
+    Uses the ``python_dependencies`` tag from the estimator to determine
+    which packages are required, then checks each against the current
+    environment using ``importlib.util.find_spec``.
+
+    Parameters
+    ----------
+    tags : dict
+        Estimator tags dict, expected to contain ``python_dependencies`` key.
+
+    Returns
+    -------
+    dict with keys:
+        - dependencies_available : bool
+            True if all soft dependencies are installed, False otherwise.
+        - missing_dependencies : list of str
+            Names of packages that are not installed. Empty if all present.
+        - install_hint : str or None
+            pip install command to resolve missing deps, or None if all present.
+    """
+    raw_deps = tags.get("python_dependencies", None)
+
+    if not raw_deps:
+        return {
+            "dependencies_available": True,
+            "missing_dependencies": [],
+            "install_hint": None,
+        }
+
+    # normalize to list
+    if isinstance(raw_deps, str):
+        raw_deps = [raw_deps]
+
+    missing = []
+    for dep in raw_deps:
+        # strip version specifiers e.g. "torch>=1.9" -> "torch"
+        for sep in (">=", "<=", "==", "!=", ">", "<"):
+            dep = dep.split(sep)[0]
+        package_name = dep.strip()
+        if importlib.util.find_spec(package_name) is None:
+            missing.append(dep)
+
+    available = len(missing) == 0
+    install_hint = f"pip install {' '.join(missing)}" if missing else None
+
+    return {
+        "dependencies_available": available,
+        "missing_dependencies": missing,
+        "install_hint": install_hint,
+    }
 
 
 def describe_estimator_tool(estimator: str) -> dict[str, Any]:
@@ -15,7 +69,7 @@ def describe_estimator_tool(estimator: str) -> dict[str, Any]:
     Get detailed information about a specific estimator.
 
     Args:
-        estimator: Name of the estimator class (e.g., "ARIMA", "RandomForest")
+        estimator: Name of the estimator class (e.g., "ARIMA", "ChronosForecaster")
 
     Returns:
         Dictionary with:
@@ -27,6 +81,9 @@ def describe_estimator_tool(estimator: str) -> dict[str, Any]:
         - tags: Dict of capability tags
         - tag_explanations: Human-readable tag descriptions
         - docstring: First 500 chars of docstring
+        - dependencies_available: bool - True if all soft deps are installed
+        - missing_dependencies: list of missing package names (empty if all present)
+        - install_hint: pip install command to fix missing deps, or None
 
     Example:
         >>> describe_estimator_tool("ARIMA")
@@ -34,8 +91,19 @@ def describe_estimator_tool(estimator: str) -> dict[str, Any]:
             "success": True,
             "name": "ARIMA",
             "task": "forecasting",
-            "hyperparameters": {"order": {"default": [1,0,0], "required": False}, ...},
-            "tags": {"capability:pred_int": True, ...},
+            "dependencies_available": True,
+            "missing_dependencies": [],
+            "install_hint": None,
+            ...
+        }
+        >>> describe_estimator_tool("ChronosForecaster")
+        {
+            "success": True,
+            "name": "ChronosForecaster",
+            "task": "forecasting",
+            "dependencies_available": False,
+            "missing_dependencies": ["torch", "transformers", "accelerate"],
+            "install_hint": "pip install torch transformers accelerate",
             ...
         }
     """
@@ -59,6 +127,9 @@ def describe_estimator_tool(estimator: str) -> dict[str, Any]:
     # Get tag explanations
     tag_explanations = tag_resolver.explain_tags(node.tags)
 
+    # Check soft dependency availability
+    dep_info = _check_dependencies(node.tags)
+
     return {
         "success": True,
         "name": node.name,
@@ -68,6 +139,9 @@ def describe_estimator_tool(estimator: str) -> dict[str, Any]:
         "tags": node.tags,
         "tag_explanations": tag_explanations,
         "docstring": node.docstring[:500] if node.docstring else None,
+        "dependencies_available": dep_info["dependencies_available"],
+        "missing_dependencies": dep_info["missing_dependencies"],
+        "install_hint": dep_info["install_hint"],
     }
 
 
@@ -83,7 +157,6 @@ def search_estimators_tool(query: str, limit: int = 20) -> dict[str, Any]:
         Dictionary with matching estimators
     """
     registry = get_registry()
-
     try:
         matches = registry.search_estimators(query)[:limit]
         return {
