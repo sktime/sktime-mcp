@@ -70,6 +70,11 @@ def detect_seasonality_tool(
     """
     try:
         x = np.asarray(data, dtype=np.float64)
+        if not np.all(np.isfinite(x)):
+            return {
+                "success": False,
+                "error": "Series contains NaN or Inf values. Remove or interpolate them before analysis.",
+            }
         if len(x) < 6:
             return {
                 "success": False,
@@ -204,6 +209,11 @@ def check_structural_break_tool(
     """
     try:
         x = np.asarray(data, dtype=np.float64)
+        if not np.all(np.isfinite(x)):
+            return {
+                "success": False,
+                "error": "Series contains NaN or Inf values. Remove or interpolate them before analysis.",
+            }
         if len(x) < 10:
             return {
                 "success": False,
