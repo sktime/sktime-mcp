@@ -30,6 +30,7 @@ from sktime_mcp.tools.describe_estimator import (
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
     fit_predict_tool,
+    predict_interval_tool
 )
 from sktime_mcp.tools.format_tools import (
     auto_format_on_load_tool,
@@ -200,6 +201,38 @@ async def list_tools() -> list[Tool]:
                 "required": ["estimator_handle", "dataset"],
             },
         ),
+        
+        Tool(
+            name="predict_interval",
+            description=(
+                "Generate probabilistic interval forecasts from a fitted estimator. "
+                "Returns upper and lower confidence bounds per forecast step. "
+                "Only works with estimators tagged capability:pred_int=true, "
+                "such as ARIMA. Use list_estimators with "
+                "tags={'capability:pred_int': true} to discover compatible models."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle of a fitted estimator",
+                    },
+                    "horizon": {
+                        "type": "integer",
+                        "description": "Forecast horizon (default: 12)",
+                        "default": 12,
+                    },
+                    "coverage": {
+                        "type": "number",
+                        "description": "Confidence level between 0 and 1 (default: 0.9)",
+                        "default": 0.9,
+                    },
+                },
+                "required": ["estimator_handle"],
+            },
+        ),
+        
         Tool(
             name="fit_predict_async",
             description="Fit an estimator on a dataset and generate predictions (non-blocking background job)",
@@ -596,6 +629,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             )
             # Sanitize immediately to handle Period objects
             result = sanitize_for_json(result)
+        elif name == "predict_interval":
+            result = predict_interval_tool(
+                estimator_handle=arguments["estimator_handle"],
+                horizon=arguments.get("horizon", 12),
+                coverage=arguments.get("coverage", 0.9),
+            )
+            
+    
         elif name == "validate_pipeline":
             validator = get_composition_validator()
             validation = validator.validate_pipeline(arguments["components"])

@@ -177,3 +177,27 @@ def fit_predict_async_tool(
         "dataset": dataset,
         "horizon": horizon,
     }
+
+def predict_interval_tool(
+    estimator_handle: str,
+    horizon: int = 12,
+    coverage: float = 0.9,
+) -> dict[str, Any]:
+    """
+    Generate probabilistic interval forecasts from a fitted estimator.
+
+    Args:
+        estimator_handle: Handle of a fitted estimator
+        horizon: Forecast horizon (default: 12)
+        coverage: Confidence level between 0 and 1 (default: 0.9)
+
+    Returns:
+        Dictionary with upper and lower bounds per forecast step.
+    """
+    executor = get_executor()
+    fh = list(range(1, horizon + 1))
+    return executor.predict_interval(
+        estimator_handle,
+        fh=fh,
+        coverage=coverage,
+    )
