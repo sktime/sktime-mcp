@@ -61,6 +61,20 @@ class TestDetectSeasonality:
         assert result["success"] is False
         assert "too short" in result["error"].lower()
 
+    def test_nan_in_data_returns_error(self):
+        """Series containing NaN should return an error."""
+        data = [1.0, 2.0, float("nan"), 4.0, 5.0, 6.0, 7.0]
+        result = detect_seasonality_tool(data)
+        assert result["success"] is False
+        assert "nan" in result["error"].lower() or "inf" in result["error"].lower()
+
+    def test_inf_in_data_returns_error(self):
+        """Series containing Inf should return an error."""
+        data = [1.0, 2.0, float("inf"), 4.0, 5.0, 6.0, 7.0]
+        result = detect_seasonality_tool(data)
+        assert result["success"] is False
+        assert "nan" in result["error"].lower() or "inf" in result["error"].lower()
+
     def test_custom_max_lag(self):
         """max_lag parameter should limit the search range."""
         np.random.seed(42)
@@ -135,6 +149,20 @@ class TestCheckStructuralBreak:
         result = check_structural_break_tool([1.0, 2.0, 3.0])
         assert result["success"] is False
         assert "too short" in result["error"].lower()
+
+    def test_nan_in_data_returns_error(self):
+        """Series containing NaN should return an error."""
+        data = [1.0, 2.0, float("nan"), 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+        result = check_structural_break_tool(data)
+        assert result["success"] is False
+        assert "nan" in result["error"].lower() or "inf" in result["error"].lower()
+
+    def test_inf_in_data_returns_error(self):
+        """Series containing Inf should return an error."""
+        data = [1.0, 2.0, float("inf"), 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+        result = check_structural_break_tool(data)
+        assert result["success"] is False
+        assert "nan" in result["error"].lower() or "inf" in result["error"].lower()
 
     def test_output_structure(self):
         """Verify all expected keys are present in the output."""
