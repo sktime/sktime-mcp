@@ -27,7 +27,7 @@ DEMO_DATASETS = {
     "longley": "sktime.datasets.load_longley",
     "lynx": "sktime.datasets.load_lynx",
     "shampoo": "sktime.datasets.load_shampoo_sales",
-    "sunspots": "sktime.datasets.load_sunspot",
+    "sunspots": "sktime.datasets.load_sunspots",
     "uschange": "sktime.datasets.load_uschange",
 }
 
