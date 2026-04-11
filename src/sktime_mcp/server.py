@@ -30,6 +30,7 @@ from sktime_mcp.tools.describe_estimator import (
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
     fit_predict_tool,
+    predict_interval_tool
 )
 from sktime_mcp.tools.format_tools import (
     auto_format_on_load_tool,
@@ -55,7 +56,6 @@ from sktime_mcp.tools.list_estimators import (
     list_estimators_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
-from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 
 # Configure logging to stderr with detailed format
 logging.basicConfig(
@@ -179,31 +179,8 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
-            name="evaluate_estimator",
-            description="Evaluate an estimator using cross-validation on a dataset",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "estimator_handle": {
-                        "type": "string",
-                        "description": "Handle from instantiate_estimator",
-                    },
-                    "dataset": {
-                        "type": "string",
-                        "description": "Dataset name: airline, sunspots, lynx, etc.",
-                    },
-                    "cv_folds": {
-                        "type": "integer",
-                        "description": "Number of cross-validation folds (default: 3)",
-                        "default": 3,
-                    },
-                },
-                "required": ["estimator_handle", "dataset"],
-            },
-        ),
-        Tool(
             name="fit_predict",
-            description="Fit an estimator on a dataset and generate predictions. Accepts either a demo dataset name or a data_handle from load_data_source.",
+            description="Fit an estimator on a dataset and generate predictions",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -214,10 +191,6 @@ async def list_tools() -> list[Tool]:
                     "dataset": {
                         "type": "string",
                         "description": "Dataset name: airline, sunspots, lynx, etc.",
-                    },
-                    "data_handle": {
-                        "type": "string",
-                        "description": "Handle from load_data_source (use this instead of dataset for custom data)",
                     },
                     "horizon": {
                         "type": "integer",
@@ -225,9 +198,41 @@ async def list_tools() -> list[Tool]:
                         "default": 12,
                     },
                 },
+                "required": ["estimator_handle", "dataset"],
+            },
+        ),
+        
+        Tool(
+            name="predict_interval",
+            description=(
+                "Generate probabilistic interval forecasts from a fitted estimator. "
+                "Returns upper and lower confidence bounds per forecast step. "
+                "Only works with estimators tagged capability:pred_int=true, "
+                "such as ARIMA. Use list_estimators with "
+                "tags={'capability:pred_int': true} to discover compatible models."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle of a fitted estimator",
+                    },
+                    "horizon": {
+                        "type": "integer",
+                        "description": "Forecast horizon (default: 12)",
+                        "default": 12,
+                    },
+                    "coverage": {
+                        "type": "number",
+                        "description": "Confidence level between 0 and 1 (default: 0.9)",
+                        "default": 0.9,
+                    },
+                },
                 "required": ["estimator_handle"],
             },
         ),
+        
         Tool(
             name="fit_predict_async",
             description="Fit an estimator on a dataset and generate predictions (non-blocking background job)",
@@ -337,14 +342,6 @@ async def list_tools() -> list[Tool]:
                         "description": "Whether to include a fit/predict example (default: false)",
                         "default": False,
                     },
-                    "dataset": {
-                        "type": "string",
-                        "description": (
-                            "Optional dataset name for the fit example "
-                            "(e.g. 'airline', 'sunspots'). "
-                            "Defaults to 'airline' if omitted."
-                        ),
-                    },
                 },
                 "required": ["handle"],
             },
@@ -399,7 +396,7 @@ async def list_tools() -> list[Tool]:
             name="fit_predict_with_data",
             description=(
                 "Fit an estimator and generate predictions using custom data. GUIDELINES: "
-                "1. BEFORE calling this, check 'list_available_data' (with is_demo=false) or 'load_data_source' output. "
+                "1. BEFORE calling this, check 'list_data_handles' or 'load_data_source' output. "
                 "2. If the metadata contains warnings about default target columns or column ambiguity, "
                 "STOP and re-load the data with explicit 'target_column' and 'time_column' mapping."
             ),
@@ -478,6 +475,7 @@ async def list_tools() -> list[Tool]:
                         "default": True,
                     },
                 },
+                "required": ["enabled"],
             },
         ),
         Tool(
@@ -626,19 +624,19 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         elif name == "fit_predict":
             result = fit_predict_tool(
                 arguments["estimator_handle"],
-                arguments.get("dataset", ""),
+                arguments["dataset"],
                 arguments.get("horizon", 12),
-                data_handle=arguments.get("data_handle"),
             )
             # Sanitize immediately to handle Period objects
             result = sanitize_for_json(result)
-        elif name == "evaluate_estimator":
-            result = evaluate_estimator_tool(
-                arguments["estimator_handle"],
-                arguments["dataset"],
-                arguments.get("cv_folds", 3),
+        elif name == "predict_interval":
+            result = predict_interval_tool(
+                estimator_handle=arguments["estimator_handle"],
+                horizon=arguments.get("horizon", 12),
+                coverage=arguments.get("coverage", 0.9),
             )
-            result = sanitize_for_json(result)
+            
+    
         elif name == "validate_pipeline":
             validator = get_composition_validator()
             validation = validator.validate_pipeline(arguments["components"])
@@ -657,7 +655,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["handle"],
                 arguments.get("var_name", "model"),
                 arguments.get("include_fit_example", False),
-                arguments.get("dataset"),
             )
         elif name == "load_data_source":
             result = load_data_source_tool(arguments["config"])
@@ -684,7 +681,13 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             )
         elif name == "auto_format_on_load":
             result = auto_format_on_load_tool(arguments["enabled"])
-        elif name == "fit_predict_async":
+        elif name == "predict_interval":
+            result = predict_interval_tool(
+                estimator_handle=arguments["estimator_handle"],
+                horizon=arguments.get("horizon", 12),
+                coverage=arguments.get("coverage", 0.9),
+            )
+	elif name == "fit_predict_async":
             result = fit_predict_async_tool(
                 arguments["estimator_handle"],
                 arguments["dataset"],
