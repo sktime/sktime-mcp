@@ -121,9 +121,8 @@ def test_list_jobs():
     job_manager.delete_job(job3)
 
 
-@pytest.mark.asyncio
-async def test_async_fit_predict():
-    """Test async fit_predict."""
+async def _async_test_async_fit_predict():
+    """Inner async test logic."""
     executor = get_executor()
     job_manager = get_job_manager()
 
@@ -166,6 +165,11 @@ async def test_async_fit_predict():
 
     # Cleanup
     job_manager.delete_job(job_id)
+
+
+def test_async_fit_predict():
+    """Test async fit_predict natively."""
+    asyncio.run(_async_test_async_fit_predict())
 
 
 def test_cancel_job():
@@ -220,7 +224,7 @@ def run_all_tests():
     test_list_jobs()
 
     print("\n4. Testing async fit_predict...")
-    asyncio.run(test_async_fit_predict())
+    test_async_fit_predict()
 
     print("\n5. Testing cancel job...")
     test_cancel_job()
