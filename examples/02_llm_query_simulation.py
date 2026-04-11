@@ -143,12 +143,26 @@ def simulate_query_2():
             pred1 = fit_predict_tool(h1, "sunspots", 6)
             print_result({"success": pred1["success"], "horizon": pred1.get("horizon")})
 
+            if not pred1["success"]:
+                print("⚠️ Prediction failed for NaiveForecaster.")
+                print("Possible reasons:")
+                print("- Dataset may not be compatible")
+                print("- Horizon value may be incorrect")
+                print("- Model may require additional parameters")
+
         if h2:
             print_tool_call(
                 "fit_predict", {"estimator_handle": h2, "dataset": "sunspots", "horizon": 6}
             )
             pred2 = fit_predict_tool(h2, "sunspots", 6)
             print_result({"success": pred2["success"], "horizon": pred2.get("horizon")})
+
+            if not pred2["success"]:
+                print("⚠️ Prediction failed for ThetaForecaster.")
+                print("Possible reasons:")
+                print("- Dataset may not be compatible")
+                print("- Horizon value may be incorrect")
+                print("- Model may require additional parameters")
 
         # Step 6: Generate comparison
         print("\n🤖 LLM Response:")
