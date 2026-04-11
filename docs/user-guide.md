@@ -10,7 +10,7 @@ Welcome to the **sktime-mcp** User Guide. This comprehensive manual will help yo
 
 Before you begin, ensure you have:
 
-- **Python 3.10+** installed.
+- **Python 3.9+** installed.
 - **pip** package manager.
 - A compatible MCP Client (like **Claude Desktop**).
 
@@ -52,7 +52,7 @@ The `sktime-mcp` server exposes a suite of tools designed for Large Language Mod
 |----------|-------|-------------|
 | **Discovery** | `list_estimators`, `search_estimators`, `describe_estimator` | Find the right model for your task (Forecasting, Classification, etc.). |
 | **Instantiation** | `instantiate_estimator`, `instantiate_pipeline` | Create model instances or complex pipelines. |
-| **Execution** | `fit_predict`, `fit`, `predict` | Train models and generate forecasts. |
+| **Execution** | `fit_predict`, `fit_predict_async`, `fit_predict_with_data` | Train models and generate forecasts on demo or user data. |
 | **Data** | `load_data_source`, `list_available_data` | Load data from Pandas, CSV/Parquet, or SQL, and inspect demo datasets plus active handles. |
 | **Export** | `export_code`, `save_model` | Generate Python code or persist fitted estimators to a local path. |
 
@@ -76,12 +76,24 @@ The `sktime-mcp` server exposes a suite of tools designed for Large Language Mod
 {"tool": "list_estimators", "arguments": {"task": "forecasting", "limit": 5}}
 ```
 
-**Step 3: Instantiate & Run**
+**Step 3: Instantiate the Estimator**
+```json
+{
+  "tool": "instantiate_estimator",
+  "arguments": {
+    "estimator": "NaiveForecaster"
+  }
+}
+```
+Returns a handle, e.g. `{"success": true, "handle": "est_abc123", ...}`.  
+Use the returned `handle` value in the next step as `estimator_handle`.
+
+**Step 4: Fit & Predict**
 ```json
 {
   "tool": "fit_predict",
   "arguments": {
-    "estimator_handle": "est_id_from_step_2",
+    "estimator_handle": "est_abc123",
     "dataset": "airline",
     "horizon": 12
   }
@@ -203,9 +215,9 @@ While `sktime-mcp` is a powerful tool for prototyping, please be aware of the cu
 The server stores active handles in standard Python dictionaries.
 > **Impact**: If the server restarts or connection drops, in-memory handles are lost. Use `save_model` to persist fitted estimators to a local filesystem path when needed.
 
-#### 2. Synchronous Execution (GIL Blocking)
-Heavy operations (like `AutoARIMA` fitting) run on the main thread.
-> **Impact**: The server will not respond to other requests (like "hello") until the fitting operation completes.
+#### 2. Mixed Sync/Async Execution
+Heavy operations can still block when using synchronous tools (like `fit_predict`).
+> **Impact**: For long-running jobs, use async tools (`fit_predict_async`, `load_data_source_async`) so the server remains responsive.
 
 #### 3. "The Data Wall" (Memory Limits)
 Data Adapters read the entire dataset into RAM.

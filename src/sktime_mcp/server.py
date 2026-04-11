@@ -681,7 +681,13 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             )
         elif name == "auto_format_on_load":
             result = auto_format_on_load_tool(arguments["enabled"])
-        elif name == "fit_predict_async":
+        elif name == "predict_interval":
+            result = predict_interval_tool(
+                estimator_handle=arguments["estimator_handle"],
+                horizon=arguments.get("horizon", 12),
+                coverage=arguments.get("coverage", 0.9),
+            )
+	elif name == "fit_predict_async":
             result = fit_predict_async_tool(
                 arguments["estimator_handle"],
                 arguments["dataset"],

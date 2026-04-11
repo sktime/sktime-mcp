@@ -10,6 +10,8 @@ These flows show how an LLM would chain multiple tool calls to achieve a high-le
 
 **User Prompt:** "Forecast monthly airline passengers using a probabilistic model."
 
+The agent begins by searching for forecasting models that support the required capabilities.
+
 **1. Discover Models**
 First, the agent searches for forecasting models that support prediction intervals.
 
@@ -25,6 +27,8 @@ First, the agent searches for forecasting models that support prediction interva
 }
 ```
 
+After identifying suitable models, the agent examines a specific estimator to understand how it can be configured.
+
 **2. Inspect Choice**
 The agent inspects a specific estimator (e.g., ARIMA) to understand its parameters.
 
@@ -36,6 +40,8 @@ The agent inspects a specific estimator (e.g., ARIMA) to understand its paramete
   }
 }
 ```
+
+With the estimator selected and understood, the agent creates a concrete instance that can be fitted to data.
 
 **3. Instantiate**
 The agent instantiates the estimator with specific parameters.

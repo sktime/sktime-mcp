@@ -272,7 +272,7 @@ def load_model_tool(path: str) -> dict[str, Any]:
             "success": False,
             "error": (
                 "The 'mlflow' package is required to load saved models. "
-                "Please install it with: pip install sktime[mlflow]"
+                "Please install it with: pip install sktime-mcp[mlflow]"
             ),
         }
     try:

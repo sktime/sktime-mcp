@@ -6,6 +6,7 @@ and running fit/predict operations.
 """
 
 import asyncio
+import inspect
 import logging
 import uuid
 from typing import Any, Optional, Union
@@ -19,17 +20,25 @@ from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 logger = logging.getLogger(__name__)
 
 
-# Available demo datasets
-# L-5: We can add more datasets here by directly wrapping on top of sktime datasets (https://www.sktime.net/en/latest/api_reference/datasets.html)
-# L-6: We can also add custom datasets here
-DEMO_DATASETS = {
-    "airline": "sktime.datasets.load_airline",
-    "longley": "sktime.datasets.load_longley",
-    "lynx": "sktime.datasets.load_lynx",
-    "shampoo": "sktime.datasets.load_shampoo_sales",
-    "sunspots": "sktime.datasets.load_sunspot",
-    "uschange": "sktime.datasets.load_uschange",
-}
+# Dynamically discover all available sktime demo datasets at import time.
+# This replaces the old hardcoded dictionary and automatically exposes every
+# load_* function in sktime.datasets to the MCP server.
+def _discover_demo_datasets() -> dict:
+    """Return a mapping of dataset name -> dotted module path for every
+    ``load_*`` function exported by ``sktime.datasets``."""
+    try:
+        import sktime.datasets as _ds_module
+
+        return {
+            name.removeprefix("load_"): f"sktime.datasets.{name}"
+            for name, obj in inspect.getmembers(_ds_module, inspect.isfunction)
+            if name.startswith("load_")
+        }
+    except Exception:  # pragma: no cover
+        return {}  # fallback: empty dict if sktime not installed
+
+
+DEMO_DATASETS = _discover_demo_datasets()
 
 
 class Executor:
@@ -198,14 +207,28 @@ class Executor:
         handle_id: str,
         dataset: str,
         horizon: int = 12,
+        data_handle: Optional[str] = None,
     ) -> dict[str, Any]:
         """Convenience method: load data, fit, and predict."""
-        data_result = self.load_dataset(dataset)
-        if not data_result["success"]:
-            return data_result
+        if data_handle is not None:
+            # Use custom loaded data
+            if data_handle not in self._data_handles:
+                return {
+                    "success": False,
+                    "error": f"Unknown data handle: {data_handle}",
+                    "available_handles": list(self._data_handles.keys()),
+                }
+            data_info = self._data_handles[data_handle]
+            y = data_info["y"]
+            X = data_info.get("X")
+        else:
+            # Use demo dataset
+            data_result = self.load_dataset(dataset)
+            if not data_result["success"]:
+                return data_result
+            y = data_result["data"]
+            X = data_result.get("exog")
 
-        y = data_result["data"]
-        X = data_result.get("exog")
         fh = list(range(1, horizon + 1))
 
         fit_result = self.fit(handle_id, y, X=X, fh=fh)

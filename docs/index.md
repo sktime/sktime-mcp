@@ -18,6 +18,18 @@
 
 ---
 
+## 👋 Who is this for?
+
+sktime‑mcp is designed for:
+
+- **Developers** building LLM agents that need reliable, production‑grade time‑series forecasting.
+- **Data scientists** who want to expose sktime workflows to language models without unsafe code generation.
+- **Platform teams** integrating forecasting capabilities into tools like Claude Desktop, Cursor, or custom MCP clients.
+
+If you are new to MCP‑based workflows, start with the **Quick Start** below, then explore the **Use Cases** and **User Guide** for deeper examples.
+
+---
+
 ## 🔥 Key Features
 
 - **Semantic Discovery:** Find the perfect estimator using semantic similarity and capability tags (e.g., "probabilistic forecaster that handles missing data").
