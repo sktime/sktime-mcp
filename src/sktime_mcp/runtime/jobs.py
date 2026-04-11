@@ -6,6 +6,7 @@ Handles background training jobs with progress tracking and status updates.
 
 import threading
 import uuid
+from concurrent.futures import Future
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
@@ -47,6 +48,9 @@ class JobInfo:
     dataset_name: Optional[str] = None
     horizon: Optional[int] = None
     estimator_name: Optional[str] = None
+
+    # Reference to the scheduled Future (for cancellation)
+    future: Optional[Future] = None
 
     @property
     def progress_percentage(self) -> float:
@@ -199,6 +203,11 @@ class JobManager:
             # Update status
             if status is not None:
                 old_status = job.status
+
+                # Guard: never overwrite a CANCELLED status
+                if old_status == JobStatus.CANCELLED:
+                    return True
+
                 job.status = status
 
                 # Set timestamps based on status transitions
@@ -288,6 +297,11 @@ class JobManager:
             if job.status in (JobStatus.PENDING, JobStatus.RUNNING):
                 job.status = JobStatus.CANCELLED
                 job.end_time = datetime.now()
+
+                # Actually cancel the running Future if we have one
+                if job.future is not None:
+                    job.future.cancel()
+
                 return True
 
             return False

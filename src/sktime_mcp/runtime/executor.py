@@ -215,6 +215,13 @@ class Executor:
 
         return self.predict(handle_id, fh=fh, X=X)
 
+    def _is_job_cancelled(self, job_id: Optional[str]) -> bool:
+        """Check if a job has been cancelled."""
+        if job_id is None:
+            return False
+        job = self._job_manager.get_job(job_id)
+        return job is not None and job.status == JobStatus.CANCELLED
+
     async def fit_predict_async(
         self,
         handle_id: str,
@@ -279,6 +286,10 @@ class Executor:
             X = data_result.get("exog")
             fh = list(range(1, horizon + 1))
 
+            # Check if cancelled before fitting
+            if self._is_job_cancelled(job_id):
+                return {"success": False, "error": "Job was cancelled", "job_id": job_id}
+
             # Step 2: Fit model
             self._job_manager.update_job(
                 job_id, completed_steps=1, current_step=f"Fitting {estimator_name} on {dataset}..."
@@ -298,6 +309,10 @@ class Executor:
                     errors=[f"Fit failed: {fit_result.get('error')}"],
                 )
                 return fit_result
+
+            # Check if cancelled before predicting
+            if self._is_job_cancelled(job_id):
+                return {"success": False, "error": "Job was cancelled", "job_id": job_id}
 
             # Step 3: Generate predictions
             self._job_manager.update_job(
@@ -617,6 +632,10 @@ class Executor:
             adapter = DataSourceRegistry.create_adapter(config)
             data = await loop.run_in_executor(None, adapter.load)
 
+            # Check if cancelled before validating
+            if self._is_job_cancelled(job_id):
+                return {"success": False, "error": "Job was cancelled", "job_id": job_id}
+
             # Step 2: Validate
             self._job_manager.update_job(
                 job_id, completed_steps=1, current_step="Validating data..."
@@ -633,6 +652,10 @@ class Executor:
                     "error": "Data validation failed",
                     "validation": validation_report,
                 }
+
+            # Check if cancelled before converting
+            if self._is_job_cancelled(job_id):
+                return {"success": False, "error": "Job was cancelled", "job_id": job_id}
 
             # Step 3: Convert, store, and format
             self._job_manager.update_job(

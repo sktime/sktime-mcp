@@ -192,7 +192,12 @@ def load_data_source_async_tool(
         asyncio.set_event_loop(loop)
 
     coro = executor.load_data_source_async(config, job_id)
-    asyncio.run_coroutine_threadsafe(coro, loop)
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+
+    # Store the future in the job so cancel_job() can actually stop it
+    job = job_manager.get_job(job_id)
+    if job is not None:
+        job.future = future
 
     return {
         "success": True,

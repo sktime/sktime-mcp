@@ -167,9 +167,14 @@ def fit_predict_async_tool(
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-    # Schedule the coroutine (non-blocking!)
+    # Schedule the coroutine (non-blocking!) and store Future for cancellation
     coro = executor.fit_predict_async(estimator_handle, dataset, horizon, job_id)
-    asyncio.run_coroutine_threadsafe(coro, loop)
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+
+    # Store the future in the job so cancel_job() can actually stop it
+    job = job_manager.get_job(job_id)
+    if job is not None:
+        job.future = future
 
     return {
         "success": True,
