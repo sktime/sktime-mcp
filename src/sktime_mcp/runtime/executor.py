@@ -185,14 +185,28 @@ class Executor:
         handle_id: str,
         dataset: str,
         horizon: int = 12,
+        data_handle: Optional[str] = None,
     ) -> dict[str, Any]:
         """Convenience method: load data, fit, and predict."""
-        data_result = self.load_dataset(dataset)
-        if not data_result["success"]:
-            return data_result
+        if data_handle is not None:
+            # Use custom loaded data
+            if data_handle not in self._data_handles:
+                return {
+                    "success": False,
+                    "error": f"Unknown data handle: {data_handle}",
+                    "available_handles": list(self._data_handles.keys()),
+                }
+            data_info = self._data_handles[data_handle]
+            y = data_info["y"]
+            X = data_info.get("X")
+        else:
+            # Use demo dataset
+            data_result = self.load_dataset(dataset)
+            if not data_result["success"]:
+                return data_result
+            y = data_result["data"]
+            X = data_result.get("exog")
 
-        y = data_result["data"]
-        X = data_result.get("exog")
         fh = list(range(1, horizon + 1))
 
         fit_result = self.fit(handle_id, y, X=X, fh=fh)

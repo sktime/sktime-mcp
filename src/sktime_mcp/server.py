@@ -179,7 +179,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="fit_predict",
-            description="Fit an estimator on a dataset and generate predictions",
+            description="Fit an estimator on a dataset and generate predictions. Accepts either a demo dataset name or a data_handle from load_data_source.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -191,13 +191,17 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Dataset name: airline, sunspots, lynx, etc.",
                     },
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Handle from load_data_source (use this instead of dataset for custom data)",
+                    },
                     "horizon": {
                         "type": "integer",
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
                     },
                 },
-                "required": ["estimator_handle", "dataset"],
+                "required": ["estimator_handle"],
             },
         ),
         Tool(
@@ -591,8 +595,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         elif name == "fit_predict":
             result = fit_predict_tool(
                 arguments["estimator_handle"],
-                arguments["dataset"],
+                arguments.get("dataset", ""),
                 arguments.get("horizon", 12),
+                data_handle=arguments.get("data_handle"),
             )
             # Sanitize immediately to handle Period objects
             result = sanitize_for_json(result)

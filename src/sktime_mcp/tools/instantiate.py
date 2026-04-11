@@ -253,34 +253,31 @@ def list_handles_tool() -> dict[str, Any]:
 
 def load_model_tool(path: str) -> dict[str, Any]:
     """
-    Load a saved model from disk and register its handle.
+    Load a saved model from a local path or MLflow URI and register its handle.
 
     Args:
-        path: Path to the saved model directory.
-
+        path: Local directory path or MLflow URI to the saved model.
+              Examples:
+                - "/tmp/my_arima_model"
+                - "runs:/<run_id>/model"
+                - "mlflow-artifacts:/<run_id>/artifacts/model"
+                - "models:/<model_name>/<version>"
     Returns:
         Dictionary with success status and the new handle.
     """
-    from pathlib import Path
-
-    if not Path(path).exists():
-        return {
-            "success": False,
-            "error": f"Path does not exist: {path}",
-        }
-
     try:
         from sktime.utils.mlflow_sktime import load_model
     except ImportError:
         return {
             "success": False,
-            "error": "The 'mlflow' package is required to load saved models. Please install it with: pip install sktime[mlflow]",
+            "error": (
+                "The 'mlflow' package is required to load saved models. "
+                "Please install it with: pip install sktime[mlflow]"
+            ),
         }
-
     try:
         instance = load_model(path)
         estimator_name = type(instance).__name__
-
         handle_manager = get_handle_manager()
         handle_id = handle_manager.create_handle(
             estimator_name=estimator_name,
@@ -288,9 +285,7 @@ def load_model_tool(path: str) -> dict[str, Any]:
             params={},
             metadata={"source": "loaded", "path": path},
         )
-
         handle_manager.mark_fitted(handle_id)
-
         return {
             "success": True,
             "handle": handle_id,
@@ -298,8 +293,9 @@ def load_model_tool(path: str) -> dict[str, Any]:
             "path": path,
             "message": f"Successfully loaded {estimator_name}",
         }
-    except Exception as e:
+    except Exception as exc:
         return {
             "success": False,
-            "error": f"Failed to load model: {str(e)}",
+            "error": f"Failed to load model: {str(exc)}",
+            "path": path,
         }
