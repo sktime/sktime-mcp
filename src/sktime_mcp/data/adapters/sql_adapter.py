@@ -4,6 +4,7 @@ SQL adapter for database connections.
 Supports loading data from SQL databases using SQLAlchemy.
 """
 
+import re
 from typing import Any
 
 import pandas as pd
@@ -57,7 +58,7 @@ class SQLAdapter(DataSourceAdapter):
         conn_string = self._get_connection_string()
 
         # Get query
-        query = self._get_query()
+        query, query_params = self._get_query()
 
         # Create engine and load data
         engine = create_engine(conn_string)
@@ -68,7 +69,12 @@ class SQLAdapter(DataSourceAdapter):
             if not parse_dates and self.config.get("time_column"):
                 parse_dates = [self.config["time_column"]]
 
-            df = pd.read_sql(query, engine, parse_dates=parse_dates if parse_dates else None)
+            df = pd.read_sql(
+                query,
+                engine,
+                params=query_params if query_params else None,
+                parse_dates=parse_dates if parse_dates else None,
+            )
         finally:
             engine.dispose()
 
@@ -134,36 +140,56 @@ class SQLAdapter(DataSourceAdapter):
 
         return f"{dialect}://{auth}{host}{port_str}/{database}"
 
-    def _get_query(self) -> str:
-        """Get SQL query from config."""
+    def _get_query(self) -> tuple[Any, dict[str, Any]]:
+        """Get SQL query and parameters from config."""
+        from sqlalchemy import text
+
         # Check if query is provided directly
         if "query" in self.config:
-            return self.config["query"]
+            return self.config["query"], self.config.get("query_params", {})
 
         # Build query from table and filters
         table = self.config.get("table")
         if not table:
             raise ValueError("Must provide 'query' or 'table'")
+        table = self._validate_identifier(table, "table")
 
         # Simple query builder
         query = f"SELECT * FROM {table}"
+        query_params: dict[str, Any] = {}
 
         # Add filters if provided
         filters = self.config.get("filters", {})
         if filters:
             conditions = []
-            for col, value in filters.items():
+            for param_idx, (col, value) in enumerate(filters.items()):
+                column_name = self._validate_identifier(col, "column")
+                param_name = f"filter_{param_idx}"
+
                 # Simple filter handling
                 if isinstance(value, str) and value.startswith((">=", "<=", ">", "<", "!=")):
                     operator = value[:2] if value[:2] in [">=", "<=", "!="] else value[0]
                     val = value[2:] if len(operator) == 2 else value[1:]
-                    conditions.append(f"{col} {operator} '{val}'")
+                    conditions.append(f"{column_name} {operator} :{param_name}")
+                    query_params[param_name] = val
                 else:
-                    conditions.append(f"{col} = '{value}'")
+                    conditions.append(f"{column_name} = :{param_name}")
+                    query_params[param_name] = value
 
             query += " WHERE " + " AND ".join(conditions)
 
-        return query
+        return text(query), query_params
+
+    def _validate_identifier(self, identifier: str, kind: str) -> str:
+        """Allow only safe SQL identifiers."""
+        if not isinstance(identifier, str):
+            raise ValueError(f"Invalid {kind} identifier: {identifier}")
+
+        if not re.fullmatch(r"[a-zA-Z0-9_.]+", identifier):
+            raise ValueError(
+                f"Invalid {kind} identifier '{identifier}'. Only [a-zA-Z0-9_.] are allowed."
+            )
+        return identifier
 
     def _sanitize_connection_string(self, conn_string: str) -> str:
         """Remove credentials from connection string for metadata."""
