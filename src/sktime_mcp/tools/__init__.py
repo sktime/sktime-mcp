@@ -9,6 +9,7 @@ from sktime_mcp.tools.format_tools import (
 )
 from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 from sktime_mcp.tools.list_estimators import list_estimators_tool
+from sktime_mcp.tools.metrics import compute_metric_tool, list_metrics_tool
 from sktime_mcp.tools.save_model import save_model_tool
 
 __all__ = [
@@ -20,4 +21,6 @@ __all__ = [
     "save_model_tool",
     "format_time_series_tool",
     "auto_format_on_load_tool",
+    "list_metrics_tool",
+    "compute_metric_tool",
 ]
