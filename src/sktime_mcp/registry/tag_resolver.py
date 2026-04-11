@@ -6,6 +6,7 @@ utilities for working with tags and understanding their meanings.
 """
 
 import logging
+import threading
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -286,11 +287,14 @@ class TagResolver:
 
 # Singleton instance
 _resolver_instance: Optional[TagResolver] = None
+_resolver_lock = threading.Lock()
 
 
 def get_tag_resolver() -> TagResolver:
     """Get the singleton tag resolver instance."""
     global _resolver_instance
     if _resolver_instance is None:
-        _resolver_instance = TagResolver()
+        with _resolver_lock:
+            if _resolver_instance is None:
+                _resolver_instance = TagResolver()
     return _resolver_instance

@@ -15,6 +15,7 @@ This prevents invalid pipelines at planning time.
 """
 
 import logging
+import threading
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
@@ -400,11 +401,14 @@ class CompositionValidator:
 
 # Singleton instance
 _validator_instance: Optional[CompositionValidator] = None
+_validator_lock = threading.Lock()
 
 
 def get_composition_validator() -> CompositionValidator:
     """Get the singleton composition validator instance."""
     global _validator_instance
     if _validator_instance is None:
-        _validator_instance = CompositionValidator()
+        with _validator_lock:
+            if _validator_instance is None:
+                _validator_instance = CompositionValidator()
     return _validator_instance

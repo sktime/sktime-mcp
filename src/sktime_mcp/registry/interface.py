@@ -7,6 +7,7 @@ exposing structured semantic information about all available estimators.
 
 import inspect
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -333,11 +334,14 @@ class RegistryInterface:
 
 # Singleton instance for shared use
 _registry_instance: Optional[RegistryInterface] = None
+_registry_lock = threading.Lock()
 
 
 def get_registry() -> RegistryInterface:
     """Get the singleton registry instance."""
     global _registry_instance
     if _registry_instance is None:
-        _registry_instance = RegistryInterface()
+        with _registry_lock:
+            if _registry_instance is None:
+                _registry_instance = RegistryInterface()
     return _registry_instance

@@ -5,6 +5,7 @@ Manages references to instantiated estimator objects.
 """
 
 import logging
+import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -111,10 +112,14 @@ class HandleManager:
 
 
 _handle_manager_instance: Optional[HandleManager] = None
+_handle_manager_lock = threading.Lock()
 
 
 def get_handle_manager() -> HandleManager:
+    """Get the singleton handle manager instance."""
     global _handle_manager_instance
     if _handle_manager_instance is None:
-        _handle_manager_instance = HandleManager()
+        with _handle_manager_lock:
+            if _handle_manager_instance is None:
+                _handle_manager_instance = HandleManager()
     return _handle_manager_instance

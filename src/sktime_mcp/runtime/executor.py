@@ -8,6 +8,7 @@ and running fit/predict operations.
 import asyncio
 import inspect
 import logging
+import threading
 import uuid
 from typing import Any, Optional, Union
 
@@ -902,10 +903,14 @@ class Executor:
 
 
 _executor_instance: Optional[Executor] = None
+_executor_lock = threading.Lock()
 
 
 def get_executor() -> Executor:
+    """Get the singleton executor instance."""
     global _executor_instance
     if _executor_instance is None:
-        _executor_instance = Executor()
+        with _executor_lock:
+            if _executor_instance is None:
+                _executor_instance = Executor()
     return _executor_instance
