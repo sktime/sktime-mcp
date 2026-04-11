@@ -213,7 +213,17 @@ class Executor:
         if not fit_result["success"]:
             return fit_result
 
-        return self.predict(handle_id, fh=fh, X=X)
+        predict_result = self.predict(handle_id, fh=fh)
+
+        if X is not None and predict_result.get("success"):
+            predict_result.setdefault("warnings", []).append(
+                "Exogenous variables (X) were used during fitting but are not "
+                "available for the forecast horizon. Predictions use endogenous "
+                "data only. For exogenous-aware predictions, call fit and predict "
+                "separately with future X values."
+            )
+
+        return predict_result
 
     async def fit_predict_async(
         self,
@@ -307,9 +317,10 @@ class Executor:
             )
             await asyncio.sleep(0.01)  # Yield control
 
-            # Run predict in executor
+            # Run predict in executor (do not pass training X — it has the
+            # wrong shape/index for the forecast horizon)
             predict_result = await loop.run_in_executor(
-                None, lambda: self.predict(handle_id, fh=fh, X=X)
+                None, lambda: self.predict(handle_id, fh=fh)
             )
 
             if not predict_result["success"]:
@@ -319,6 +330,14 @@ class Executor:
                     errors=[f"Prediction failed: {predict_result.get('error')}"],
                 )
                 return predict_result
+
+            if X is not None:
+                predict_result.setdefault("warnings", []).append(
+                    "Exogenous variables (X) were used during fitting but are not "
+                    "available for the forecast horizon. Predictions use endogenous "
+                    "data only. For exogenous-aware predictions, call fit and predict "
+                    "separately with future X values."
+                )
 
             # Mark as completed
             self._job_manager.update_job(
@@ -818,11 +837,50 @@ class Executor:
             "changes_made": changes_made,
         }
 
+    def _align_future_exog(
+        self,
+        future_X: Any,
+        training_y: pd.Series,
+        training_X: Any,
+        horizon: int,
+    ) -> pd.DataFrame:
+        """Align future exogenous data so its index continues from training."""
+        # Convert Series → DataFrame matching training X column structure
+        if isinstance(future_X, pd.Series):
+            col_name = "exog"
+            if training_X is not None and hasattr(training_X, "columns") and len(training_X.columns) > 0:
+                col_name = training_X.columns[0]
+            future_X = future_X.to_frame(name=col_name)
+
+        future_X = future_X.iloc[:horizon].copy()
+
+        # Build an index that continues from the training data's last index
+        last_idx = training_y.index[-1]
+
+        if isinstance(training_y.index, pd.DatetimeIndex):
+            freq = training_y.index.freq
+            if freq is None and len(training_y.index) > 1:
+                freq = training_y.index[-1] - training_y.index[-2]
+            new_index = pd.date_range(
+                start=last_idx, periods=horizon + 1, freq=freq
+            )[1:]
+        elif isinstance(training_y.index, pd.PeriodIndex):
+            new_index = pd.period_range(
+                start=last_idx + 1, periods=horizon, freq=training_y.index.freq
+            )
+        else:
+            step = int(training_y.index[-1] - training_y.index[-2]) if len(training_y.index) > 1 else 1
+            new_index = pd.Index([int(last_idx) + step * (i + 1) for i in range(horizon)])
+
+        future_X.index = new_index[: len(future_X)]
+        return future_X
+
     def fit_predict_with_data(
         self,
         estimator_handle: str,
         data_handle: str,
         horizon: int = 12,
+        future_data_handle: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         Fit and predict using a data handle.
@@ -831,6 +889,10 @@ class Executor:
             estimator_handle: Estimator handle from instantiate_estimator
             data_handle: Data handle from load_data_source
             horizon: Forecast horizon
+            future_data_handle: Optional data handle containing future exogenous
+                variables (X) for the forecast horizon. If the training data
+                includes exogenous variables and this is not provided, predictions
+                will be generated without exogenous inputs.
 
         Returns:
             Dictionary with predictions
@@ -852,8 +914,34 @@ class Executor:
         if not fit_result["success"]:
             return fit_result
 
+        # Resolve future exogenous data for prediction
+        future_X = None
+        if future_data_handle is not None:
+            if future_data_handle not in self._data_handles:
+                return {
+                    "success": False,
+                    "error": f"Unknown future data handle: {future_data_handle}",
+                    "available_handles": list(self._data_handles.keys()),
+                }
+            future_X = self._data_handles[future_data_handle].get("X")
+            if future_X is None:
+                future_X = self._data_handles[future_data_handle].get("y")
+
+            future_X = self._align_future_exog(future_X, y, X, horizon)
+
         # Predict
-        return self.predict(estimator_handle, fh=fh, X=X)
+        predict_result = self.predict(estimator_handle, fh=fh, X=future_X)
+
+        if X is not None and future_X is None and predict_result.get("success"):
+            predict_result.setdefault("warnings", []).append(
+                "Exogenous variables (X) were used during fitting but no "
+                "future_data_handle was provided for the forecast horizon. "
+                "Predictions use endogenous data only. To include future "
+                "exogenous values, load them as a separate data source and "
+                "pass the handle via 'future_data_handle'."
+            )
+
+        return predict_result
 
     def list_data_handles(self) -> dict[str, Any]:
         """

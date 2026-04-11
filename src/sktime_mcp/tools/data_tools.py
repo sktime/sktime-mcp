@@ -94,6 +94,7 @@ def fit_predict_with_data_tool(
     estimator_handle: str,
     data_handle: str,
     horizon: int = 12,
+    future_data_handle: str | None = None,
 ) -> dict[str, Any]:
     """
     Fit and predict using custom data.
@@ -102,6 +103,9 @@ def fit_predict_with_data_tool(
         estimator_handle: Handle from instantiate_estimator
         data_handle: Handle from load_data_source
         horizon: Forecast horizon (default: 12)
+        future_data_handle: Optional handle containing future exogenous
+            variables for the forecast horizon. Required for accurate
+            predictions when training data includes exogenous columns.
 
     Returns:
         Dictionary with predictions
@@ -118,6 +122,7 @@ def fit_predict_with_data_tool(
         estimator_handle,
         data_handle,
         horizon,
+        future_data_handle=future_data_handle,
     )
 
 

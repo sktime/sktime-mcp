@@ -369,7 +369,10 @@ async def list_tools() -> list[Tool]:
                 "Fit an estimator and generate predictions using custom data. GUIDELINES: "
                 "1. BEFORE calling this, check 'list_data_handles' or 'load_data_source' output. "
                 "2. If the metadata contains warnings about default target columns or column ambiguity, "
-                "STOP and re-load the data with explicit 'target_column' and 'time_column' mapping."
+                "STOP and re-load the data with explicit 'target_column' and 'time_column' mapping. "
+                "3. If your training data has exogenous columns and you have future values for them, "
+                "load the future values as a separate data source and pass the handle via "
+                "'future_data_handle' for accurate predictions."
             ),
             inputSchema={
                 "type": "object",
@@ -386,6 +389,14 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
+                    },
+                    "future_data_handle": {
+                        "type": "string",
+                        "description": (
+                            "Optional handle containing future exogenous variables "
+                            "for the forecast horizon. Load future X values as a "
+                            "separate data source first, then pass that handle here."
+                        ),
                     },
                 },
                 "required": ["estimator_handle", "data_handle"],
@@ -631,6 +642,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["estimator_handle"],
                 arguments["data_handle"],
                 arguments.get("horizon", 12),
+                future_data_handle=arguments.get("future_data_handle"),
             )
             # Sanitize immediately to handle Period objects
             result = sanitize_for_json(result)
