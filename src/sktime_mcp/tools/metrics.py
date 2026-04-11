@@ -5,7 +5,7 @@ Exposes sktime's forecasting performance metrics so LLM agents can
 discover available metrics and compute them on explicit y_true / y_pred pairs.
 """
 
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 
@@ -66,8 +66,7 @@ _METRICS: dict[str, dict[str, Any]] = {
     },
     "RMSSE": {
         "description": (
-            "Root Mean Squared Scaled Error — RMSE scaled by in-sample naive. "
-            "Requires y_train."
+            "Root Mean Squared Scaled Error — RMSE scaled by in-sample naive. " "Requires y_train."
         ),
         "lower_is_better": True,
         "scale_dependent": False,
@@ -210,7 +209,7 @@ def compute_metric_tool(
     metric: str,
     y_true: list[float],
     y_pred: list[float],
-    y_train: list[float] | None = None,
+    y_train: Optional[list[float]] = None,
 ) -> dict[str, Any]:
     """
     Compute a forecasting performance metric on explicit y_true / y_pred values.

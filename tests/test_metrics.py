@@ -59,7 +59,13 @@ class TestListMetricsTool:
 
         result = list_metrics_tool()
 
-        required_keys = {"name", "description", "lower_is_better", "scale_dependent", "requires_y_train"}
+        required_keys = {
+            "name",
+            "description",
+            "lower_is_better",
+            "scale_dependent",
+            "requires_y_train",
+        }
         for metric in result["metrics"]:
             assert required_keys.issubset(metric.keys()), (
                 f"Metric {metric.get('name')} missing keys: "
