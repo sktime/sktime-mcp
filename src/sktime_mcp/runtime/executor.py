@@ -40,6 +40,20 @@ def _discover_demo_datasets() -> dict:
 
 DEMO_DATASETS = _discover_demo_datasets()
 
+# Classification demo datasets (return X_train, y_train with split parameter)
+CLASSIFICATION_DATASETS = {
+    "arrow_head": "sktime.datasets.load_arrow_head",
+    "gunpoint": "sktime.datasets.load_gunpoint",
+    "basic_motions": "sktime.datasets.load_basic_motions",
+    "italy_power_demand": "sktime.datasets.load_italy_power_demand",
+}
+
+# Regression demo datasets (return X_train, y_train with split parameter)
+REGRESSION_DATASETS = {
+    "covid_3month": "sktime.datasets.load_covid_3month",
+    "cardano_sentiment": "sktime.datasets.load_cardano_sentiment",
+}
+
 
 class Executor:
     """
@@ -475,9 +489,13 @@ class Executor:
                 "traceback": traceback.format_exc(),
             }
 
-    def list_datasets(self) -> list[str]:
-        """List available demo datasets."""
-        return list(DEMO_DATASETS.keys())
+    def list_datasets(self) -> dict[str, list[str]]:
+        """List all available demo datasets, grouped by task type."""
+        return {
+            "forecasting": list(DEMO_DATASETS.keys()),
+            "classification": list(CLASSIFICATION_DATASETS.keys()),
+            "regression": list(REGRESSION_DATASETS.keys()),
+        }
 
     def load_data_source(self, config: dict[str, Any]) -> dict[str, Any]:
         """
@@ -899,6 +917,258 @@ class Executor:
                 "success": False,
                 "error": f"Data handle '{data_handle}' not found",
             }
+
+    def _load_supervised_dataset(
+        self,
+        name: str,
+        dataset_registry: dict[str, str],
+    ) -> dict[str, Any]:
+        """
+        Load a supervised (classification/regression) demo dataset.
+
+        These datasets support split='train' and split='test' parameters.
+
+        Args:
+            name: Dataset name
+            dataset_registry: The dataset registry dict to look up in
+
+        Returns:
+            Dictionary with X_train, y_train, X_test, y_test
+        """
+        if name not in dataset_registry:
+            return {
+                "success": False,
+                "error": f"Unknown dataset: {name}",
+                "available": list(dataset_registry.keys()),
+            }
+
+        try:
+            module_path = dataset_registry[name]
+            parts = module_path.rsplit(".", 1)
+            module = __import__(parts[0], fromlist=[parts[1]])
+            loader = getattr(module, parts[1])
+
+            X_train, y_train = loader(split="train")
+            X_test, y_test = loader(split="test")
+
+            return {
+                "success": True,
+                "name": name,
+                "X_train": X_train,
+                "y_train": y_train,
+                "X_test": X_test,
+                "y_test": y_test,
+                "train_shape": X_train.shape if hasattr(X_train, "shape") else len(X_train),
+                "test_shape": X_test.shape if hasattr(X_test, "shape") else len(X_test),
+                "n_classes": len(set(y_train)) if hasattr(y_train, "__iter__") else None,
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def _resolve_supervised_data(
+        self,
+        dataset: str = None,
+        X_train_handle: str = None,
+        y_train_handle: str = None,
+        X_test_handle: str = None,
+        dataset_registry: dict[str, str] = None,
+    ) -> dict[str, Any]:
+        """
+        Resolve data from either a demo dataset name or custom data handles.
+
+        Returns dict with X_train, y_train, X_test (and optionally y_test).
+        """
+        if dataset:
+            return self._load_supervised_dataset(dataset, dataset_registry)
+
+        if X_train_handle and y_train_handle and X_test_handle:
+            # Resolve from custom data handles
+            errors = []
+            for h in [X_train_handle, y_train_handle, X_test_handle]:
+                if h not in self._data_handles:
+                    errors.append(f"Data handle not found: {h}")
+            if errors:
+                return {"success": False, "error": "; ".join(errors)}
+
+            X_train_data = self._data_handles[X_train_handle]
+            y_train_data = self._data_handles[y_train_handle]
+            X_test_data = self._data_handles[X_test_handle]
+
+            # Extract the actual data from handles
+            # For X handles, use 'y' field (the main data) or 'X' if available
+            X_train = (
+                X_train_data.get("X") if X_train_data.get("X") is not None else X_train_data["y"]
+            )
+            y_train = y_train_data["y"]
+            X_test = X_test_data.get("X") if X_test_data.get("X") is not None else X_test_data["y"]
+
+            return {
+                "success": True,
+                "X_train": X_train,
+                "y_train": y_train,
+                "X_test": X_test,
+                "y_test": None,
+            }
+
+        return {
+            "success": False,
+            "error": "Provide either 'dataset' for a demo dataset, or all three handles: 'X_train_handle', 'y_train_handle', 'X_test_handle'",
+        }
+
+    def fit_predict_classification(
+        self,
+        estimator_handle: str,
+        dataset: str = None,
+        X_train_handle: str = None,
+        y_train_handle: str = None,
+        X_test_handle: str = None,
+    ) -> dict[str, Any]:
+        """
+        Fit a classifier and predict class labels.
+
+        Args:
+            estimator_handle: Handle from instantiate_estimator
+            dataset: Demo dataset name (arrow_head, gunpoint, etc.)
+            X_train_handle: Data handle for training features
+            y_train_handle: Data handle for training labels
+            X_test_handle: Data handle for test features
+
+        Returns:
+            Dictionary with predicted class labels
+        """
+        # Get the estimator instance
+        try:
+            instance = self._handle_manager.get_instance(estimator_handle)
+        except KeyError:
+            return {"success": False, "error": f"Handle not found: {estimator_handle}"}
+
+        # Resolve data
+        data = self._resolve_supervised_data(
+            dataset=dataset,
+            X_train_handle=X_train_handle,
+            y_train_handle=y_train_handle,
+            X_test_handle=X_test_handle,
+            dataset_registry=CLASSIFICATION_DATASETS,
+        )
+        if not data["success"]:
+            return data
+
+        X_train = data["X_train"]
+        y_train = data["y_train"]
+        X_test = data["X_test"]
+
+        try:
+            # Fit
+            instance.fit(X_train, y_train)
+            self._handle_manager.mark_fitted(estimator_handle)
+
+            # Predict
+            predictions = instance.predict(X_test)
+
+            # Convert predictions to serializable format
+            if hasattr(predictions, "tolist"):
+                pred_list = predictions.tolist()
+            else:
+                pred_list = list(predictions)
+
+            result = {
+                "success": True,
+                "predictions": pred_list,
+                "n_predictions": len(pred_list),
+                "classes": sorted(set(pred_list)),
+            }
+
+            # Add accuracy if ground truth is available
+            y_test = data.get("y_test")
+            if y_test is not None:
+                y_test_list = y_test.tolist() if hasattr(y_test, "tolist") else list(y_test)
+                correct = sum(1 for p, t in zip(pred_list, y_test_list) if p == t)
+                result["accuracy"] = round(correct / len(y_test_list), 4)
+
+            return result
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def fit_predict_regression(
+        self,
+        estimator_handle: str,
+        dataset: str = None,
+        X_train_handle: str = None,
+        y_train_handle: str = None,
+        X_test_handle: str = None,
+    ) -> dict[str, Any]:
+        """
+        Fit a regressor and predict target values.
+
+        Args:
+            estimator_handle: Handle from instantiate_estimator
+            dataset: Demo dataset name (covid_3month, etc.)
+            X_train_handle: Data handle for training features
+            y_train_handle: Data handle for training target values
+            X_test_handle: Data handle for test features
+
+        Returns:
+            Dictionary with predicted values
+        """
+        # Get the estimator instance
+        try:
+            instance = self._handle_manager.get_instance(estimator_handle)
+        except KeyError:
+            return {"success": False, "error": f"Handle not found: {estimator_handle}"}
+
+        # Resolve data
+        data = self._resolve_supervised_data(
+            dataset=dataset,
+            X_train_handle=X_train_handle,
+            y_train_handle=y_train_handle,
+            X_test_handle=X_test_handle,
+            dataset_registry=REGRESSION_DATASETS,
+        )
+        if not data["success"]:
+            return data
+
+        X_train = data["X_train"]
+        y_train = data["y_train"]
+        X_test = data["X_test"]
+
+        try:
+            # Fit
+            instance.fit(X_train, y_train)
+            self._handle_manager.mark_fitted(estimator_handle)
+
+            # Predict
+            predictions = instance.predict(X_test)
+
+            # Convert predictions to serializable format
+            if hasattr(predictions, "tolist"):
+                pred_list = predictions.tolist()
+            elif isinstance(predictions, pd.Series):
+                pred_list = predictions.values.tolist()
+            else:
+                pred_list = list(predictions)
+
+            result = {
+                "success": True,
+                "predictions": pred_list,
+                "n_predictions": len(pred_list),
+            }
+
+            # Add metrics if ground truth is available
+            y_test = data.get("y_test")
+            if y_test is not None:
+                import numpy as np
+
+                y_test_arr = np.array(y_test)
+                pred_arr = np.array(pred_list)
+                mse = float(np.mean((y_test_arr - pred_arr) ** 2))
+                result["mse"] = round(mse, 6)
+                result["rmse"] = round(float(np.sqrt(mse)), 6)
+
+            return result
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
 
 _executor_instance: Optional[Executor] = None
