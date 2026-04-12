@@ -3,17 +3,19 @@ Tests for evaluate tool.
 """
 
 import sys
+from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, "src")
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
 def test_evaluate_estimator_tool():
     """Test evaluate_estimator_tool with a simple estimator."""
-    from sktime_mcp.tools.evaluate import evaluate_estimator_tool
-    from sktime_mcp.runtime.executor import get_executor
     from sktime.forecasting.naive import NaiveForecaster
+
+    from sktime_mcp.runtime.executor import get_executor
+    from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 
     executor = get_executor()
 
@@ -27,14 +29,64 @@ def test_evaluate_estimator_tool():
         assert "results" in result
         assert result["cv_folds_run"] == 2
         assert len(result["results"]) == 2
-        
+
         # Verify result contains common metrics like test_MeanAbsolutePercentageError
-        metric_columns = [k for k in result["results"][0].keys() if "test_" in k]
+        metric_columns = [k for k in result["results"][0] if "test_" in k]
         assert len(metric_columns) > 0
 
     finally:
         # Clean up
         executor._handle_manager.release_handle(handle)
+
+
+def test_evaluate_estimator_async_tool():
+    """Test evaluate_estimator_async_tool tracks job and completes evaluation."""
+    import time
+
+    from sktime.forecasting.naive import NaiveForecaster
+
+    from sktime_mcp.runtime.executor import get_executor
+    from sktime_mcp.runtime.jobs import JobStatus
+    from sktime_mcp.tools.evaluate import evaluate_estimator_async_tool
+
+    executor = get_executor()
+
+    # Create handle manually for the test
+    handle = executor._handle_manager.create_handle("NaiveForecaster", NaiveForecaster(), {})
+
+    try:
+        # Start async evaluation
+        result = evaluate_estimator_async_tool(handle, "airline", cv_folds=2)
+
+        assert result["success"] is True
+        assert "job_id" in result
+        job_id = result["job_id"]
+
+        # Poll job manager for completion
+        max_retries = 50
+        retries = 0
+        job_manager = executor._job_manager
+
+        while retries < max_retries:
+            statusInfo = job_manager.get_job_status(job_id)
+            if statusInfo["status"] in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
+                break
+            time.sleep(0.1)
+            retries += 1
+
+        assert retries < max_retries, "Async evaluation timed out"
+
+        statusInfo = job_manager.get_job_status(job_id)
+        assert statusInfo["status"] == JobStatus.COMPLETED
+
+        eval_result = statusInfo.get("result", {})
+        assert eval_result.get("success") is True
+        assert "results" in eval_result
+        assert eval_result["cv_folds_run"] == 2
+
+    finally:
+        executor._handle_manager.release_handle(handle)
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

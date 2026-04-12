@@ -27,6 +27,10 @@ from sktime_mcp.tools.describe_estimator import (
     describe_estimator_tool,
     search_estimators_tool,
 )
+from sktime_mcp.tools.evaluate import (
+    evaluate_estimator_async_tool,
+    evaluate_estimator_tool,
+)
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
     fit_predict_tool,
@@ -55,7 +59,6 @@ from sktime_mcp.tools.list_estimators import (
     list_estimators_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
-from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 
 # Configure logging to stderr with detailed format
 logging.basicConfig(
@@ -202,6 +205,29 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="evaluate_estimator_async",
+            description="Evaluate an estimator using cross-validation (non-blocking background job)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle from instantiate_estimator",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Dataset name: airline, sunspots, lynx, etc.",
+                    },
+                    "cv_folds": {
+                        "type": "integer",
+                        "description": "Number of cross-validation folds (default: 3)",
+                        "default": 3,
+                    },
+                },
+                "required": ["estimator_handle", "dataset"],
+            },
+        ),
+        Tool(
             name="fit_predict",
             description="Fit an estimator on a dataset and generate predictions. Accepts either a demo dataset name or a data_handle from load_data_source.",
             inputSchema={
@@ -223,6 +249,11 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
+                    },
+                    "coverage": {
+                        "type": ["number", "array"],
+                        "description": "Optional coverage level (e.g., 0.90) or list of levels (e.g., [0.90, 0.95]) for prediction intervals.",
+                        "items": {"type": "number"},
                     },
                 },
                 "required": ["estimator_handle"],
@@ -246,6 +277,11 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
+                    },
+                    "coverage": {
+                        "type": ["number", "array"],
+                        "description": "Optional coverage level (e.g., 0.90) or list of levels (e.g., [0.90, 0.95]) for prediction intervals.",
+                        "items": {"type": "number"},
                     },
                 },
                 "required": ["estimator_handle", "dataset"],
@@ -629,11 +665,19 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("dataset", ""),
                 arguments.get("horizon", 12),
                 data_handle=arguments.get("data_handle"),
+                coverage=arguments.get("coverage"),
             )
             # Sanitize immediately to handle Period objects
             result = sanitize_for_json(result)
         elif name == "evaluate_estimator":
             result = evaluate_estimator_tool(
+                arguments["estimator_handle"],
+                arguments["dataset"],
+                arguments.get("cv_folds", 3),
+            )
+            result = sanitize_for_json(result)
+        elif name == "evaluate_estimator_async":
+            result = evaluate_estimator_async_tool(
                 arguments["estimator_handle"],
                 arguments["dataset"],
                 arguments.get("cv_folds", 3),
@@ -689,6 +733,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["estimator_handle"],
                 arguments["dataset"],
                 arguments.get("horizon", 12),
+                coverage=arguments.get("coverage"),
             )
         elif name == "check_job_status":
             result = check_job_status_tool(arguments["job_id"])
