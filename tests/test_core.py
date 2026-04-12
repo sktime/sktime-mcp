@@ -215,5 +215,105 @@ class TestTools:
         assert calls["serialization_format"] == "pickle"
 
 
+class TestPlotTools:
+    """Tests for plot_data and plot_forecast tools (Issue #99)."""
+
+    def test_plot_data_demo_dataset(self):
+        """plot_data with a demo dataset returns a valid base64 PNG."""
+        import base64
+
+        from sktime_mcp.tools.plot_tools import plot_data_tool
+
+        result = plot_data_tool(dataset="airline")
+
+        assert result["success"], result.get("error")
+        assert result["mime_type"] == "image/png"
+        assert result["rows"] > 0
+        decoded = base64.b64decode(result["image"])
+        assert decoded[:4] == b"\x89PNG", "Expected PNG magic bytes"
+
+    def test_plot_data_requires_handle_or_dataset(self):
+        """plot_data without arguments should return an error."""
+        from sktime_mcp.tools.plot_tools import plot_data_tool
+
+        result = plot_data_tool()
+
+        assert not result["success"]
+        assert "error" in result
+
+    def test_plot_data_unknown_handle_errors(self):
+        """plot_data with a non-existent data handle should return an error."""
+        from sktime_mcp.tools.plot_tools import plot_data_tool
+
+        result = plot_data_tool(data_handle="data_doesnotexist")
+
+        assert not result["success"]
+        assert "not found" in result["error"].lower()
+
+    def test_plot_forecast_demo_dataset(self):
+        """plot_forecast with demo dataset history returns a valid base64 PNG."""
+        import base64
+
+        from sktime_mcp.tools.fit_predict import fit_predict_tool
+        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+        from sktime_mcp.tools.plot_tools import plot_forecast_tool
+
+        inst = instantiate_estimator_tool("NaiveForecaster")
+        assert inst["success"]
+
+        fp = fit_predict_tool(inst["handle"], "airline", horizon=6)
+        assert fp["success"]
+
+        result = plot_forecast_tool(
+            predictions=fp["predictions"],
+            dataset="airline",
+        )
+
+        assert result["success"], result.get("error")
+        assert result["mime_type"] == "image/png"
+        assert result["horizon"] == 6
+        decoded = base64.b64decode(result["image"])
+        assert decoded[:4] == b"\x89PNG", "Expected PNG magic bytes"
+
+    def test_plot_forecast_without_history(self):
+        """plot_forecast works even without a historical source."""
+        import base64
+
+        from sktime_mcp.tools.fit_predict import fit_predict_tool
+        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+        from sktime_mcp.tools.plot_tools import plot_forecast_tool
+
+        inst = instantiate_estimator_tool("NaiveForecaster")
+        fp = fit_predict_tool(inst["handle"], "airline", horizon=4)
+        assert fp["success"]
+
+        result = plot_forecast_tool(predictions=fp["predictions"])
+
+        assert result["success"], result.get("error")
+        assert result["horizon"] == 4
+        decoded = base64.b64decode(result["image"])
+        assert decoded[:4] == b"\x89PNG"
+
+    def test_plot_forecast_empty_predictions_errors(self):
+        """plot_forecast with an empty predictions dict should return an error."""
+        from sktime_mcp.tools.plot_tools import plot_forecast_tool
+
+        result = plot_forecast_tool(predictions={})
+
+        assert not result["success"]
+        assert "error" in result
+
+    def test_server_exposes_plot_tools(self):
+        """list_tools should include plot_data and plot_forecast."""
+        import asyncio
+
+        from sktime_mcp.server import list_tools
+
+        tools = asyncio.run(list_tools())
+        names = {t.name for t in tools}
+        assert "plot_data" in names
+        assert "plot_forecast" in names
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
