@@ -260,7 +260,9 @@ class PaginatedSQLLoader:
         engine = create_engine(conn_string)
         try:
             parse_dates = config.get("parse_dates", [])
-            df = pd.read_sql(paginated_query, engine, parse_dates=parse_dates if parse_dates else None)
+            df = pd.read_sql(
+                paginated_query, engine, parse_dates=parse_dates if parse_dates else None
+            )
             self._current_page = page_number
             return df
         finally:

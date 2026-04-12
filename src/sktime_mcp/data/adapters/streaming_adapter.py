@@ -113,8 +113,7 @@ class StreamingDataAdapter(DataSourceAdapter):
             yield from self._load_parquet_chunks(path, chunk_size)
         else:
             raise ValueError(
-                f"Unsupported format for streaming: {file_format}. "
-                "Supported formats: csv, parquet"
+                f"Unsupported format for streaming: {file_format}. Supported formats: csv, parquet"
             )
 
     def load_iterator(self, chunk_size: Optional[int] = None):
@@ -203,7 +202,10 @@ class StreamingDataAdapter(DataSourceAdapter):
             warnings.append(f"Columns with all NaN values: {all_nan_cols}")
 
         # Check for time index
-        if not isinstance(data.index, (pd.DatetimeIndex, pd.RangeIndex)) and "time_column" in self.config:
+        if (
+            not isinstance(data.index, (pd.DatetimeIndex, pd.RangeIndex))
+            and "time_column" in self.config
+        ):
             warnings.append("Data does not have DatetimeIndex as expected")
 
         return len(errors) == 0, {
@@ -223,7 +225,9 @@ class StreamingDataAdapter(DataSourceAdapter):
         for chunk in reader:
             yield self._process_dataframe(chunk)
 
-    def _load_parquet_chunks(self, path: Path, chunk_size: int) -> Generator[pd.DataFrame, None, None]:
+    def _load_parquet_chunks(
+        self, path: Path, chunk_size: int
+    ) -> Generator[pd.DataFrame, None, None]:
         """Load Parquet file in chunks."""
         try:
             import pyarrow.parquet as pq

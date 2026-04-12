@@ -86,7 +86,7 @@ def example_1_metadata_preview():
 
     print("File Metadata (without loading everything):")
     print(f"  Format: {metadata['format']}")
-    print(f"  File Size: {metadata['file_size_bytes'] / (1024*1024):.1f} MB")
+    print(f"  File Size: {metadata['file_size_bytes'] / (1024 * 1024):.1f} MB")
     print(f"  Estimated Rows: {metadata['estimated_total_rows']:,}")
     print(f"  Estimated Memory: {metadata['memory_estimate_mb']:.0f} MB")
     print(f"  Columns: {metadata['columns']}")

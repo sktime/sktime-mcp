@@ -37,5 +37,6 @@ def test_evaluate_estimator_tool():
         # Clean up
         executor._handle_manager.release_handle(handle)
 
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

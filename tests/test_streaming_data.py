@@ -57,11 +57,13 @@ class TestStreamingDataAdapter:
 
             # Create and save large DataFrame
             dates = pd.date_range("2020-01-01", periods=100000, freq="h")
-            df = pd.DataFrame({
-                "date": dates,
-                "value": 100 + np.random.randn(100000) * 10,
-                "feature1": np.random.rand(100000),
-            })
+            df = pd.DataFrame(
+                {
+                    "date": dates,
+                    "value": 100 + np.random.randn(100000) * 10,
+                    "feature1": np.random.rand(100000),
+                }
+            )
 
             try:
                 df.to_parquet(parquet_path, index=False)
@@ -248,10 +250,12 @@ class TestChunkedFitter:
         fitter = ChunkedFitter(simple_estimator)
 
         # Create small data
-        df = pd.DataFrame({
-            "date": pd.date_range("2020-01-01", periods=100),
-            "value": np.random.randn(100),
-        })
+        df = pd.DataFrame(
+            {
+                "date": pd.date_range("2020-01-01", periods=100),
+                "value": np.random.randn(100),
+            }
+        )
 
         config = {
             "type": "pandas",
@@ -272,10 +276,12 @@ class TestChunkedFitter:
         """Test tracking of rows processed during fitting."""
         fitter = ChunkedFitter(simple_estimator)
 
-        df = pd.DataFrame({
-            "date": pd.date_range("2020-01-01", periods=1000),
-            "value": np.random.randn(1000),
-        })
+        df = pd.DataFrame(
+            {
+                "date": pd.date_range("2020-01-01", periods=1000),
+                "value": np.random.randn(1000),
+            }
+        )
 
         config = {
             "type": "pandas",

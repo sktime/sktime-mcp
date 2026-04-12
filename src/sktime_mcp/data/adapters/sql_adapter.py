@@ -276,9 +276,7 @@ class SQLAdapter(DataSourceAdapter):
                     try:
                         df.index = pd.to_datetime(df.index)
                     except Exception as e:
-                        raise ValueError(
-                            f"Could not convert index to datetime: {e}"
-                        ) from e
+                        raise ValueError(f"Could not convert index to datetime: {e}") from e
 
                 df = df.sort_index()
 
