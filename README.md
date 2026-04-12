@@ -75,7 +75,7 @@ If you are new to sktime‑mcp or to MCP‑based workflows, this section provide
 The Model Context Protocol (MCP) allows Large Language Models (LLMs) to discover, reason about, and execute sktime workflows programmatically. This project exposes sktime’s estimator registry and semantics in a structured way so that LLMs can safely compose and run real time‑series pipelines.
 
 ### Prerequisites
-- Python 3.9 or newer
+- Python 3.10 or newer
 - A working Python virtual environment (recommended)
 - `pip` installed
 
