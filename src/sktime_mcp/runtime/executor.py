@@ -363,6 +363,117 @@ class Executor:
             self._job_manager.update_job(job_id, status=JobStatus.FAILED, errors=[str(e)])
             return {"success": False, "error": str(e), "job_id": job_id}
 
+    async def evaluate_async(
+        self,
+        handle_id: str,
+        dataset: str,
+        cv_folds: int = 3,
+        job_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        Async version of cross-validation evaluation with job tracking.
+
+        This method runs the evaluation in the background without blocking the MCP server.
+        Progress is tracked via the JobManager.
+
+        Args:
+            handle_id: Estimator handle
+            dataset: Dataset name
+            cv_folds: Number of cross-validation folds
+            job_id: Optional job ID for tracking (created if not provided)
+
+        Returns:
+            Dictionary with success status and job_id
+        """
+        try:
+            handle_info = self._handle_manager.get_info(handle_id)
+            estimator_name = handle_info.estimator_name
+        except Exception as e:
+            logger.warning(f"Could not get estimator name: {e}")
+            estimator_name = "Unknown"
+
+        if job_id is None:
+            job_id = self._job_manager.create_job(
+                job_type="evaluate",
+                estimator_handle=handle_id,
+                estimator_name=estimator_name,
+                dataset_name=dataset,
+                total_steps=2,
+            )
+
+        try:
+            self._job_manager.update_job(job_id, status=JobStatus.RUNNING)
+
+            # Step 1: Load dataset
+            self._job_manager.update_job(
+                job_id, completed_steps=0, current_step=f"Loading dataset '{dataset}'..."
+            )
+            await asyncio.sleep(0.01)
+
+            data_result = self.load_dataset(dataset)
+            if not data_result["success"]:
+                self._job_manager.update_job(
+                    job_id,
+                    status=JobStatus.FAILED,
+                    errors=[f"Failed to load dataset: {data_result.get('error')}"],
+                )
+                return data_result
+
+            # Step 2: Run evaluation
+            self._job_manager.update_job(
+                job_id, completed_steps=1, current_step=f"Evaluating {estimator_name} on {dataset} (folds={cv_folds})..."
+            )
+            await asyncio.sleep(0.01)
+
+            loop = asyncio.get_event_loop()
+
+            def _run_eval():
+                from sktime.forecasting.model_evaluation import evaluate
+                from sktime.forecasting.model_selection import ExpandingWindowSplitter
+
+                # It could raise KeyError if handle is missing, though we already got handle_info above.
+                instance = self._handle_manager.get_instance(handle_id)
+                y = data_result["data"]
+                X = data_result.get("exog")
+
+                n = len(y)
+                initial_window = max(int(n * 0.5), n - cv_folds * 2)
+                if initial_window < 1:
+                    initial_window = 1
+
+                cv = ExpandingWindowSplitter(initial_window=initial_window, step_length=1, fh=[1])
+                results = evaluate(forecaster=instance, y=y, X=X, cv=cv)
+
+                if "estimator" in results.columns:
+                    results = results.drop(columns=["estimator"])
+
+                metrics = results.to_dict(orient="records")
+                return {"success": True, "results": metrics, "cv_folds_run": len(metrics)}
+
+            eval_result = await loop.run_in_executor(None, _run_eval)
+
+            if not eval_result.get("success", False):
+                self._job_manager.update_job(
+                    job_id,
+                    status=JobStatus.FAILED,
+                    errors=[f"Evaluation failed: {eval_result.get('error')}"],
+                )
+                return eval_result
+
+            self._job_manager.update_job(
+                job_id,
+                status=JobStatus.COMPLETED,
+                completed_steps=2,
+                current_step="Completed",
+                result=eval_result,
+            )
+            return eval_result
+
+        except Exception as e:
+            logger.exception(f"Error in async evaluate for job {job_id}")
+            self._job_manager.update_job(job_id, status=JobStatus.FAILED, errors=[str(e)])
+            return {"success": False, "error": str(e), "job_id": job_id}
+
     # L-9: We can add more methods here to handle diverse use cases and their pipelines
     def instantiate_pipeline(
         self,

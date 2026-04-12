@@ -67,3 +67,65 @@ def evaluate_estimator_tool(
     except Exception as e:
         logger.exception("Error during evaluate")
         return {"success": False, "error": str(e)}
+
+
+def evaluate_estimator_async_tool(
+    estimator_handle: str,
+    dataset: str,
+    cv_folds: int = 3,
+) -> dict[str, Any]:
+    """
+    Evaluate an estimator using cross-validation in the background (non-blocking).
+
+    This tool schedules the evaluation as a background job and returns immediately
+    with a job_id. Use check_job_status to monitor progress.
+
+    Args:
+        estimator_handle: Handle from instantiate_estimator
+        dataset: Name of demo dataset
+        cv_folds: Number of folds for Splitter
+
+    Returns:
+        Dictionary with:
+        - success: bool
+        - job_id: Job ID for tracking progress
+        - message: Information about the job
+    """
+    import asyncio
+    from sktime_mcp.runtime.jobs import get_job_manager
+
+    executor = get_executor()
+    job_manager = get_job_manager()
+
+    try:
+        handle_info = executor._handle_manager.get_info(estimator_handle)
+        estimator_name = handle_info.estimator_name
+    except Exception as e:
+        logger.warning(f"Could not get estimator name: {e}")
+        estimator_name = "Unknown"
+
+    job_id = job_manager.create_job(
+        job_type="evaluate",
+        estimator_handle=estimator_handle,
+        estimator_name=estimator_name,
+        dataset_name=dataset,
+        total_steps=2,
+    )
+
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    coro = executor.evaluate_async(estimator_handle, dataset, cv_folds, job_id=job_id)
+    asyncio.run_coroutine_threadsafe(coro, loop)
+
+    return {
+        "success": True,
+        "job_id": job_id,
+        "message": f"Evaluation job started for {estimator_name} on {dataset}. Use check_job_status('{job_id}') to monitor progress.",
+        "estimator": estimator_name,
+        "dataset": dataset,
+        "cv_folds": cv_folds,
+    }

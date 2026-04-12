@@ -27,7 +27,10 @@ from sktime_mcp.tools.describe_estimator import (
     describe_estimator_tool,
     search_estimators_tool,
 )
-from sktime_mcp.tools.evaluate import evaluate_estimator_tool
+from sktime_mcp.tools.evaluate import (
+    evaluate_estimator_async_tool,
+    evaluate_estimator_tool,
+)
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
     fit_predict_tool,
@@ -181,6 +184,29 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="evaluate_estimator",
             description="Evaluate an estimator using cross-validation on a dataset",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle from instantiate_estimator",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Dataset name: airline, sunspots, lynx, etc.",
+                    },
+                    "cv_folds": {
+                        "type": "integer",
+                        "description": "Number of cross-validation folds (default: 3)",
+                        "default": 3,
+                    },
+                },
+                "required": ["estimator_handle", "dataset"],
+            },
+        ),
+        Tool(
+            name="evaluate_estimator_async",
+            description="Evaluate an estimator using cross-validation (non-blocking background job)",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -645,6 +671,13 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = sanitize_for_json(result)
         elif name == "evaluate_estimator":
             result = evaluate_estimator_tool(
+                arguments["estimator_handle"],
+                arguments["dataset"],
+                arguments.get("cv_folds", 3),
+            )
+            result = sanitize_for_json(result)
+        elif name == "evaluate_estimator_async":
+            result = evaluate_estimator_async_tool(
                 arguments["estimator_handle"],
                 arguments["dataset"],
                 arguments.get("cv_folds", 3),
