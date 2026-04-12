@@ -49,6 +49,7 @@ nav:
   - User Guide: user-guide.md
   - Usage Examples: usage-examples.md
   - Data Sources: data-sources.md
+  - Lazy Loading: lazy-loading.md
   - Background Jobs: background-jobs.md
   - Architecture: architecture.md
   - Implementation: implementation.md
