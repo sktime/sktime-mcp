@@ -10,7 +10,7 @@ import inspect
 import logging
 import os
 import uuid
-from typing import Any, Optional, Union
+from typing import Any
 
 import pandas as pd
 
@@ -61,7 +61,7 @@ class Executor:
     def instantiate(
         self,
         estimator_name: str,
-        params: Optional[dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Instantiate an estimator and return a handle."""
         node = self._registry.get_estimator_by_name(estimator_name)
@@ -121,8 +121,8 @@ class Executor:
         self,
         handle_id: str,
         y: Any,
-        X: Optional[Any] = None,
-        fh: Optional[Any] = None,
+        X: Any | None = None,
+        fh: Any | None = None,
     ) -> dict[str, Any]:
         """Fit an estimator."""
         try:
@@ -146,8 +146,8 @@ class Executor:
     def predict(
         self,
         handle_id: str,
-        fh: Optional[Union[int, list[int]]] = None,
-        X: Optional[Any] = None,
+        fh: int | list[int] | None = None,
+        X: Any | None = None,
     ) -> dict[str, Any]:
         """Generate predictions."""
         try:
@@ -189,7 +189,7 @@ class Executor:
         handle_id: str,
         dataset: str,
         horizon: int = 12,
-        data_handle: Optional[str] = None,
+        data_handle: str | None = None,
     ) -> dict[str, Any]:
         """Convenience method: load data, fit, and predict."""
         if data_handle is not None:
@@ -224,7 +224,7 @@ class Executor:
         handle_id: str,
         dataset: str,
         horizon: int = 12,
-        job_id: Optional[str] = None,
+        job_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Async version of fit_predict with job tracking.
@@ -344,7 +344,7 @@ class Executor:
     def instantiate_pipeline(
         self,
         components: list[str],
-        params_list: Optional[list[dict[str, Any]]] = None,
+        params_list: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
         Instantiate a pipeline from a list of components.
@@ -581,7 +581,7 @@ class Executor:
     async def load_data_source_async(
         self,
         config: dict[str, Any],
-        job_id: Optional[str] = None,
+        job_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Async version of load_data_source with job tracking.
@@ -905,7 +905,7 @@ class Executor:
             }
 
 
-_executor_instance: Optional[Executor] = None
+_executor_instance: Executor | None = None
 
 
 def get_executor() -> Executor:

@@ -8,7 +8,7 @@ exposing structured semantic information about all available estimators.
 import inspect
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class EstimatorNode:
     module: str
     tags: dict[str, Any] = field(default_factory=dict)
     hyperparameters: dict[str, Any] = field(default_factory=dict)
-    docstring: Optional[str] = None
+    docstring: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -194,8 +194,8 @@ class RegistryInterface:
 
     def get_all_estimators(
         self,
-        task: Optional[str] = None,
-        tags: Optional[dict[str, Any]] = None,
+        task: str | None = None,
+        tags: dict[str, Any] | None = None,
     ) -> list[EstimatorNode]:
         """
         Get all estimators, optionally filtered by task and tags.
@@ -242,7 +242,7 @@ class RegistryInterface:
 
         return filtered
 
-    def get_estimator_by_name(self, name: str) -> Optional[EstimatorNode]:
+    def get_estimator_by_name(self, name: str) -> EstimatorNode | None:
         """
         Get a specific estimator by its class name.
 
@@ -332,7 +332,7 @@ class RegistryInterface:
 
 
 # Singleton instance for shared use
-_registry_instance: Optional[RegistryInterface] = None
+_registry_instance: RegistryInterface | None = None
 
 
 def get_registry() -> RegistryInterface:

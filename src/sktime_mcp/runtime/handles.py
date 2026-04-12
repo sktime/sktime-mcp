@@ -8,7 +8,7 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +47,8 @@ class HandleManager:
         self,
         estimator_name: str,
         instance: Any,
-        params: Optional[dict[str, Any]] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         if len(self._handles) >= self._max_handles:
             self._cleanup_oldest()
@@ -110,7 +110,7 @@ class HandleManager:
             del self._handles[handle_id]
 
 
-_handle_manager_instance: Optional[HandleManager] = None
+_handle_manager_instance: HandleManager | None = None
 
 
 def get_handle_manager() -> HandleManager:

@@ -52,7 +52,11 @@ def evaluate_estimator_tool(
         if initial_window < 1:
             initial_window = 1
 
-        cv = ExpandingWindowSplitter(initial_window=initial_window, step_length=1, fh=[1])
+        cv = ExpandingWindowSplitter(
+            initial_window=initial_window,
+            step_length=max(1, (n - initial_window) // cv_folds),
+            fh=[1],
+        )
 
         results = evaluate(forecaster=instance, y=y, X=X, cv=cv)
 
@@ -66,7 +70,7 @@ def evaluate_estimator_tool(
         return {
             "success": True,
             "results": metrics,
-            "cv_folds_run": len(metrics)
+            "cv_folds_run": len(metrics),
         }
     except Exception as e:
         logger.exception("Error during evaluate")

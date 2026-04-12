@@ -4,7 +4,7 @@ instantiate_estimator tool for sktime MCP.
 Creates executable estimator instances and pipelines.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from sktime_mcp.registry.interface import get_registry
 from sktime_mcp.runtime.executor import get_executor
@@ -27,7 +27,7 @@ def _is_safe_value(value: Any) -> bool:
 
 def _validate_params(
     params: Any,
-    estimator_name: Optional[str] = None,
+    estimator_name: str | None = None,
 ) -> dict[str, Any]:
     """
     Validate params for type safety and optionally check keys.
@@ -101,7 +101,7 @@ def _validate_params(
 
 def instantiate_estimator_tool(
     estimator: str,
-    params: Optional[dict[str, Any]] = None,
+    params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Create an estimator instance and return a handle.
@@ -148,7 +148,7 @@ def instantiate_estimator_tool(
 
 def instantiate_pipeline_tool(
     components: list[str],
-    params_list: Optional[list[dict[str, Any]]] = None,
+    params_list: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """
     Create a pipeline from a list of components and return a handle.
