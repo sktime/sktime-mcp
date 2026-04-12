@@ -10,7 +10,7 @@ Welcome to the **sktime-mcp** User Guide. This comprehensive manual will help yo
 
 Before you begin, ensure you have:
 
-- **Python 3.9+** installed.
+- **Python 3.10+** installed.
 - **pip** package manager.
 - A compatible MCP Client (like **Claude Desktop**).
 
