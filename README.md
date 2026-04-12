@@ -128,6 +128,19 @@ The server uses stdio transport by default, compatible with Claude Desktop, Clau
 }
 ```
 
+If you are using a virtual environment, specify the full path to the environment's Python executable in the `command` field, and run the server with `-m sktime_mcp.server`.
+
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "<project-root>/venv/bin/python",
+      "args": ["-m", "sktime_mcp.server"]
+    }
+  }
+}
+```
+
 If `sktime-mcp` is not on your `PATH`, use the full path to the executable or
 use `python -m sktime_mcp.server` as the command instead.
 
