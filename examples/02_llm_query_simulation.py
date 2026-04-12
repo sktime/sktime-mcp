@@ -94,11 +94,13 @@ def simulate_query_1():
             print("   It supports prediction intervals (capability:pred_int = True)")
             print(f"   Module: {desc['module']}")
 
-
 def simulate_query_2():
     """
     Query: "Compare ARIMA and Theta for my sunspot data"
     """
+    # This example simulates how an LLM interacts with MCP tools
+    # to compare multiple estimators and generate predictions step-by-step.
+
     print("\n" + "=" * 70)
     print("  QUERY 2: Compare Two Forecasters")
     print("=" * 70)
@@ -107,14 +109,14 @@ def simulate_query_2():
     # Step 1: LLM plans comparison
     print_llm_thought("I'll describe both estimators and run them on sunspot data")
 
-    # Step 2: Describe first estimator
+    # Step 2: Describe first estimator (NaiveForecaster)
     print_tool_call("describe_estimator", {"estimator": "NaiveForecaster"})
     desc1 = describe_estimator_tool("NaiveForecaster")
     print_result(
         {"name": desc1.get("name"), "task": desc1.get("task"), "success": desc1["success"]}
     )
 
-    # Step 3: Describe second estimator
+    # Step 3: Describe second estimator (ThetaForecaster)
     print_tool_call("describe_estimator", {"estimator": "ThetaForecaster"})
     desc2 = describe_estimator_tool("ThetaForecaster")
     print_result(
@@ -122,7 +124,7 @@ def simulate_query_2():
     )
 
     if desc1["success"] and desc2["success"]:
-        # Step 4: Instantiate both
+        # Step 4: Instantiate both estimators using MCP
         print_llm_thought("Both are valid forecasters. Let me run them...")
 
         print_tool_call(
@@ -135,38 +137,29 @@ def simulate_query_2():
         inst2 = instantiate_estimator_tool("ThetaForecaster", {})
         h2 = inst2.get("handle") if inst2["success"] else None
 
-        # Step 5: Run predictions
+        # Step 5: Run predictions for both estimators
         if h1:
             print_tool_call(
                 "fit_predict", {"estimator_handle": h1, "dataset": "sunspots", "horizon": 6}
             )
             pred1 = fit_predict_tool(h1, "sunspots", 6)
-            result1 = {
-                "success": pred1["success"],
-                "horizon": pred1.get("horizon"),
-            }
 
-            if not pred1["success"]:
-                result1["note"] = "Prediction failed. Check dataset compatibility or parameters."
-
-            print_result(result1)
+            # If success is False, prediction may have failed due to:
+            # - dataset compatibility issues
+            # - incorrect forecast horizon
+            # - missing optional dependencies
+            print_result({"success": pred1["success"], "horizon": pred1.get("horizon")})
 
         if h2:
             print_tool_call(
                 "fit_predict", {"estimator_handle": h2, "dataset": "sunspots", "horizon": 6}
             )
             pred2 = fit_predict_tool(h2, "sunspots", 6)
-            result2 = {
-                "success": pred2["success"],
-                "horizon": pred2.get("horizon"),
-            }
 
-            if not pred2["success"]:
-                result2["note"] = "Prediction failed. Check dataset compatibility or parameters."
+            # Same interpretation applies here if prediction fails
+            print_result({"success": pred2["success"], "horizon": pred2.get("horizon")})
 
-            print_result(result2)
-
-        # Step 6: Generate comparison
+        # Step 6: Display final comparison between both estimators
         print("\n🤖 LLM Response:")
         print("   Comparison of NaiveForecaster vs ThetaForecaster on Sunspots:")
         print("   - NaiveForecaster: Simple baseline, uses last season's values")
