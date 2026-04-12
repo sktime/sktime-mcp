@@ -54,8 +54,10 @@ from sktime_mcp.tools.list_estimators import (
     get_available_tags,
     list_estimators_tool,
 )
+from sktime_mcp.tools.metrics import compute_metric_tool, list_metrics_tool
 from sktime_mcp.tools.save_model import save_model_tool
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
+from sktime_mcp.tools.tune import tune_estimator_tool
 
 # Configure logging to stderr with detailed format
 logging.basicConfig(
@@ -590,6 +592,82 @@ async def list_tools() -> list[Tool]:
                 "required": ["estimator_handle", "path"],
             },
         ),
+        Tool(
+            name="list_metrics",
+            description=(
+                "List all available sktime forecasting performance metrics. "
+                "Returns metric names, descriptions, and properties such as "
+                "whether the metric is scale-dependent or requires training data. "
+                "Use the returned names with compute_metric to evaluate forecasts."
+            ),
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="compute_metric",
+            description=(
+                "Compute a forecasting performance metric on explicit y_true / y_pred values. "
+                "Supports MAE, MSE, RMSE, MAPE, SMAPE, MASE, RMSSE, and more. "
+                "Use list_metrics to see all available metric names."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "metric": {
+                        "type": "string",
+                        "description": (
+                            "Metric name (e.g., 'MAE', 'RMSE', 'MASE'). "
+                            "Call list_metrics to see all options."
+                        ),
+                    },
+                    "y_true": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "description": "Ground-truth values (list of floats).",
+                    },
+                    "y_pred": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "description": "Predicted values (list of floats, same length as y_true).",
+                    },
+                    "y_train": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "description": (
+                            "In-sample training values — required only for scale-normalised "
+                            "metrics such as MASE and RMSSE."
+                        ),
+                    },
+                },
+                "required": ["metric", "y_true", "y_pred"],
+            },
+        ),
+        Tool(
+            name="tune_estimator",
+            description="Tune an estimator using grid search cross-validation, keeping the best parameter combination in memory",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle ID of the estimator to tune",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Name of the demo dataset",
+                    },
+                    "param_grid": {
+                        "type": "object",
+                        "description": "Parameter grid dictionary mapping parameter names to lists of values to try (e.g. {'sp': [7, 12]})",
+                    },
+                    "cv_folds": {
+                        "type": "integer",
+                        "description": "Number of folds for cross-validation evaluation (default 3)",
+                        "default": 3,
+                    },
+                },
+                "required": ["estimator_handle", "dataset", "param_grid"],
+            },
+        ),
     ]
 
 
@@ -636,6 +714,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = evaluate_estimator_tool(
                 arguments["estimator_handle"],
                 arguments["dataset"],
+                arguments.get("cv_folds", 3),
+            )
+            result = sanitize_for_json(result)
+        elif name == "tune_estimator":
+            result = tune_estimator_tool(
+                arguments["estimator_handle"],
+                arguments["dataset"],
+                arguments["param_grid"],
                 arguments.get("cv_folds", 3),
             )
             result = sanitize_for_json(result)
@@ -710,6 +796,15 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["estimator_handle"],
                 arguments["path"],
                 arguments.get("mlflow_params"),
+            )
+        elif name == "list_metrics":
+            result = list_metrics_tool()
+        elif name == "compute_metric":
+            result = compute_metric_tool(
+                arguments["metric"],
+                arguments["y_true"],
+                arguments["y_pred"],
+                arguments.get("y_train"),
             )
         else:
             result = {"error": f"Unknown tool: {name}"}
