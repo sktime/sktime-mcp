@@ -31,7 +31,7 @@ class _FakeTagResolver:
     """Minimal tag resolver for demo execution."""
 
     def explain_tags(self, tags):
-        return {k: "demo tag" for k in tags}
+        return dict.fromkeys(tags, "demo tag")
 
 
 def run_demo():
