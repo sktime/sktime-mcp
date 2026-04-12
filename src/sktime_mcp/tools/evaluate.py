@@ -47,17 +47,15 @@ def evaluate_estimator_tool(
 
     try:
         n = len(y)
-        # Handle small datasets gracefully
-        initial_window = max(int(n * 0.5), n - cv_folds * 2)
-        if initial_window < 1:
-            initial_window = 1
+        # initial_window = n - cv_folds ensures ExpandingWindowSplitter
+        # produces exactly cv_folds splits with step_length=1 and fh=[1].
+        initial_window = max(n - cv_folds, 1)
 
         cv = ExpandingWindowSplitter(initial_window=initial_window, step_length=1, fh=[1])
 
         results = evaluate(forecaster=instance, y=y, X=X, cv=cv)
 
-        # Convert index or objects to strings suitable for JSON output if needed
-        # We drop objects that are complex (like estimator instances themselves) from the output
+        # Drop estimator column – it holds live Python objects that are not JSON-serialisable.
         if "estimator" in results.columns:
             results = results.drop(columns=["estimator"])
 
@@ -92,6 +90,7 @@ def evaluate_estimator_async_tool(
         - message: Information about the job
     """
     import asyncio
+
     from sktime_mcp.runtime.jobs import get_job_manager
 
     executor = get_executor()

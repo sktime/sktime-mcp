@@ -421,7 +421,9 @@ class Executor:
 
             # Step 2: Run evaluation
             self._job_manager.update_job(
-                job_id, completed_steps=1, current_step=f"Evaluating {estimator_name} on {dataset} (folds={cv_folds})..."
+                job_id,
+                completed_steps=1,
+                current_step=f"Evaluating {estimator_name} on {dataset} (folds={cv_folds})...",
             )
             await asyncio.sleep(0.01)
 
@@ -431,15 +433,14 @@ class Executor:
                 from sktime.forecasting.model_evaluation import evaluate
                 from sktime.forecasting.model_selection import ExpandingWindowSplitter
 
-                # It could raise KeyError if handle is missing, though we already got handle_info above.
                 instance = self._handle_manager.get_instance(handle_id)
                 y = data_result["data"]
                 X = data_result.get("exog")
 
                 n = len(y)
-                initial_window = max(int(n * 0.5), n - cv_folds * 2)
-                if initial_window < 1:
-                    initial_window = 1
+                # initial_window = n - cv_folds gives exactly cv_folds splits
+                # with step_length=1 and fh=[1].
+                initial_window = max(n - cv_folds, 1)
 
                 cv = ExpandingWindowSplitter(initial_window=initial_window, step_length=1, fh=[1])
                 results = evaluate(forecaster=instance, y=y, X=X, cv=cv)

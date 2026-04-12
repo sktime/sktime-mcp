@@ -66,7 +66,7 @@ def test_evaluate_estimator_async_tool():
         max_retries = 50
         retries = 0
         job_manager = executor._job_manager
-        
+
         while retries < max_retries:
             statusInfo = job_manager.get_job_status(job_id)
             if statusInfo["status"] in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
@@ -75,15 +75,15 @@ def test_evaluate_estimator_async_tool():
             retries += 1
 
         assert retries < max_retries, "Async evaluation timed out"
-        
+
         statusInfo = job_manager.get_job_status(job_id)
         assert statusInfo["status"] == JobStatus.COMPLETED
-        
+
         eval_result = statusInfo.get("result", {})
         assert eval_result.get("success") is True
         assert "results" in eval_result
         assert eval_result["cv_folds_run"] == 2
-        
+
     finally:
         executor._handle_manager.release_handle(handle)
 
