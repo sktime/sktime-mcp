@@ -49,6 +49,7 @@ nav:
   - User Guide: user-guide.md
   - Usage Examples: usage-examples.md
   - Data Sources: data-sources.md
+  - Lazy Loading: lazy-loading.md
   - Background Jobs: background-jobs.md
   - Architecture: architecture.md
   - Implementation: implementation.md
@@ -67,9 +68,6 @@ markdown_extensions:
   - tables
   - attr_list
   - md_in_html
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - toc:
       permalink: true
 

@@ -212,3 +212,76 @@ class SQLAdapter(DataSourceAdapter):
 
         pandas_adapter = PandasAdapter({"data": data})
         return pandas_adapter.validate(data)
+
+    def load_paginated(
+        self,
+        page_size: int = 10000,
+    ):
+        """
+        Load data from SQL database in pages.
+
+        This method supports lazy loading of large tables by fetching
+        data page-by-page to minimize memory usage.
+
+        Args:
+            page_size: Number of rows per page (default: 10000)
+
+        Yields:
+            DataFrame pages
+
+        Example:
+            >>> adapter = SQLAdapter(config)
+            >>> for page in adapter.load_paginated(page_size=50000):
+            ...     process_page(page)
+        """
+        try:
+            from sqlalchemy import create_engine
+        except ImportError as e:
+            raise ImportError(
+                "SQLAlchemy is required for SQL adapter. Install with: pip install sqlalchemy"
+            ) from e
+
+        conn_string = self._get_connection_string()
+        query, query_params = self._get_query()
+
+        engine = create_engine(conn_string)
+
+        try:
+            page_num = 0
+            parse_dates = self.config.get("parse_dates", [])
+            if not parse_dates and self.config.get("time_column"):
+                parse_dates = [self.config["time_column"]]
+
+            while True:
+                # Build paginated query
+                offset = page_num * page_size
+                paginated_query = f"{query} LIMIT {page_size} OFFSET {offset}"
+
+                df = pd.read_sql(
+                    paginated_query,
+                    engine,
+                    params=query_params if query_params else None,
+                    parse_dates=parse_dates if parse_dates else None,
+                )
+
+                if df.empty:
+                    break
+
+                # Apply same processing as load()
+                time_col = self.config.get("time_column")
+                if time_col and time_col in df.columns:
+                    df = df.set_index(time_col)
+
+                if not isinstance(df.index, pd.DatetimeIndex) and time_col:
+                    try:
+                        df.index = pd.to_datetime(df.index)
+                    except Exception as e:
+                        raise ValueError(f"Could not convert index to datetime: {e}") from e
+
+                df = df.sort_index()
+
+                yield df
+                page_num += 1
+
+        finally:
+            engine.dispose()

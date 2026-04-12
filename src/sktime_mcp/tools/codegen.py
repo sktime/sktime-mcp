@@ -4,7 +4,7 @@ Code generation tool for sktime MCP.
 Generates Python code to recreate estimators and pipelines.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from sktime_mcp.registry.interface import get_registry
 from sktime_mcp.runtime.executor import DEMO_DATASETS
@@ -36,7 +36,7 @@ def _format_value(value: Any) -> str:
         return repr(value)
 
 
-def _get_estimator_module(estimator_name: str) -> Optional[str]:
+def _get_estimator_module(estimator_name: str) -> str | None:
     """Get the module path for an estimator."""
     registry = get_registry()
     node = registry.get_estimator_by_name(estimator_name)
@@ -104,7 +104,7 @@ def _generate_pipeline_code(
 
     # Build component instantiations
     component_code_lines = []
-    for i, (comp_name, params) in enumerate(zip(components, params_list)):
+    for i, (comp_name, params) in enumerate(zip(components, params_list, strict=False)):
         var = f"step_{i}"
         if params:
             param_strs = []
@@ -181,7 +181,7 @@ def export_code_tool(
     handle: str,
     var_name: str = "model",
     include_fit_example: bool = False,
-    dataset: Optional[str] = None,
+    dataset: str | None = None,
 ) -> dict[str, Any]:
     """
     Export an estimator or pipeline as executable Python code.

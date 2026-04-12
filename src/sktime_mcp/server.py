@@ -27,6 +27,7 @@ from sktime_mcp.tools.describe_estimator import (
     describe_estimator_tool,
     search_estimators_tool,
 )
+from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
     fit_predict_tool,
@@ -55,7 +56,12 @@ from sktime_mcp.tools.list_estimators import (
     list_estimators_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
-from sktime_mcp.tools.evaluate import evaluate_estimator_tool
+from sktime_mcp.tools.streaming_data_tools import (
+    get_data_source_metadata_tool,
+    get_streaming_data_sample_tool,
+    load_data_paginated_sql_tool,
+    load_data_source_streaming_tool,
+)
 
 # Configure logging to stderr with detailed format
 logging.basicConfig(
@@ -590,6 +596,119 @@ async def list_tools() -> list[Tool]:
                 "required": ["estimator_handle", "path"],
             },
         ),
+        Tool(
+            name="load_data_source_streaming",
+            description=(
+                "Load large datasets efficiently using streaming/chunked loading. "
+                "Ideal for files larger than available RAM. Supports CSV and Parquet formats."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "source_type": {
+                        "type": "string",
+                        "description": "Source type: 'streaming' (recommended for files)",
+                        "default": "streaming",
+                    },
+                    "config": {
+                        "type": "object",
+                        "description": (
+                            "Data source configuration with: "
+                            "- path: File path (required) "
+                            "- format: 'csv' or 'parquet' (auto-detected if omitted) "
+                            "- chunk_size: Rows per chunk (default: 10000) "
+                            "- time_column: Name of time/date column (optional) "
+                            "- target_column: Target variable column name (optional)"
+                        ),
+                    },
+                    "chunk_size": {
+                        "type": "integer",
+                        "description": "Override chunk size (rows per chunk)",
+                    },
+                    "preview_size": {
+                        "type": "integer",
+                        "description": "Rows to preview (default: 1000)",
+                        "default": 1000,
+                    },
+                },
+                "required": ["config"],
+            },
+        ),
+        Tool(
+            name="get_data_source_metadata",
+            description=(
+                "Get metadata about a data source without loading all data. "
+                "Useful for understanding large files before processing."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "config": {
+                        "type": "object",
+                        "description": "Data source configuration (same as load_data_source_streaming)",
+                    },
+                    "sample_size": {
+                        "type": "integer",
+                        "description": "Rows to sample for analysis (default: 1000)",
+                        "default": 1000,
+                    },
+                },
+                "required": ["config"],
+            },
+        ),
+        Tool(
+            name="load_data_paginated_sql",
+            description=(
+                "Load data from SQL database with pagination. "
+                "Efficient for large tables - fetches one page at a time."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "connection_config": {
+                        "type": "object",
+                        "description": (
+                            "SQL connection configuration with: "
+                            "- dialect: postgresql, mysql, sqlite, mssql "
+                            "- host, port, database, username, password "
+                            "(or) connection_string "
+                            "- table: Table name "
+                            "- filters: Optional filter conditions"
+                        ),
+                    },
+                    "page_number": {
+                        "type": "integer",
+                        "description": "Page to load (0-indexed, default: 0)",
+                        "default": 0,
+                    },
+                    "page_size": {
+                        "type": "integer",
+                        "description": "Rows per page (default: 10000)",
+                        "default": 10000,
+                    },
+                },
+                "required": ["connection_config"],
+            },
+        ),
+        Tool(
+            name="get_streaming_data_sample",
+            description="Get a sample of data from a streaming data handle",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Handle from load_data_source_streaming",
+                    },
+                    "sample_size": {
+                        "type": "integer",
+                        "description": "Number of rows to return (default: 100)",
+                        "default": 100,
+                    },
+                },
+                "required": ["data_handle"],
+            },
+        ),
     ]
 
 
@@ -710,6 +829,29 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["estimator_handle"],
                 arguments["path"],
                 arguments.get("mlflow_params"),
+            )
+        elif name == "load_data_source_streaming":
+            result = load_data_source_streaming_tool(
+                arguments.get("source_type", "streaming"),
+                arguments["config"],
+                arguments.get("chunk_size"),
+                arguments.get("preview_size", 1000),
+            )
+        elif name == "get_data_source_metadata":
+            result = get_data_source_metadata_tool(
+                arguments["config"],
+                arguments.get("sample_size", 1000),
+            )
+        elif name == "load_data_paginated_sql":
+            result = load_data_paginated_sql_tool(
+                arguments["connection_config"],
+                arguments.get("page_number", 0),
+                arguments.get("page_size", 10000),
+            )
+        elif name == "get_streaming_data_sample":
+            result = get_streaming_data_sample_tool(
+                arguments["data_handle"],
+                arguments.get("sample_size", 100),
             )
         else:
             result = {"error": f"Unknown tool: {name}"}

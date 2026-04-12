@@ -5,7 +5,7 @@ Provides tools for checking job status, listing jobs, and cancelling jobs.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 
@@ -38,7 +38,7 @@ def check_job_status_tool(job_id: str) -> dict[str, Any]:
 
 
 def list_jobs_tool(
-    status: Optional[str] = None,
+    status: str | None = None,
     limit: int = 20,
 ) -> dict[str, Any]:
     """

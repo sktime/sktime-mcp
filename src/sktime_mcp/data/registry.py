@@ -4,7 +4,7 @@ Registry for data source adapters.
 Manages registration and creation of data source adapters.
 """
 
-from .adapters import FileAdapter, PandasAdapter, SQLAdapter, UrlAdapter
+from .adapters import FileAdapter, PandasAdapter, SQLAdapter, StreamingDataAdapter, UrlAdapter
 from .base import DataSourceAdapter
 
 
@@ -20,6 +20,7 @@ class DataSourceRegistry:
         "sql": SQLAdapter,
         "file": FileAdapter,
         "url": UrlAdapter,
+        "streaming": StreamingDataAdapter,
     }
 
     @classmethod
