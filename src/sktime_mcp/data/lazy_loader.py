@@ -7,7 +7,8 @@ loading everything into memory at once.
 
 import asyncio
 import logging
-from typing import Any, AsyncGenerator, Generator, Optional, Tuple
+from collections.abc import AsyncGenerator, Generator
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -39,9 +40,6 @@ class LazyDataLoader:
             config: Data source configuration (must use streaming adapter)
             chunk_size: Override chunk size from config
         """
-        if config.get("type") != "streaming":
-            config = {**config, "type": "streaming"}
-
         if chunk_size:
             config = {**config, "chunk_size": chunk_size}
 
@@ -62,7 +60,12 @@ class LazyDataLoader:
         Yields:
             DataFrame chunks
         """
-        for chunk in self.adapter.load_chunks(chunk_size=chunk_size):
+        if hasattr(self.adapter, "load_chunks"):
+            chunk_iterable = self.adapter.load_chunks(chunk_size=chunk_size)
+        else:
+            chunk_iterable = [self.adapter.load()]
+
+        for chunk in chunk_iterable:
             self._loaded_rows += len(chunk)
             logger.debug(f"Loaded {self._loaded_rows} rows total")
             yield chunk
@@ -80,9 +83,12 @@ class LazyDataLoader:
         Yields:
             DataFrame chunks
         """
-        loop = asyncio.get_event_loop()
+        if hasattr(self.adapter, "load_chunks"):
+            chunk_iterable = self.adapter.load_chunks(chunk_size=chunk_size)
+        else:
+            chunk_iterable = [self.adapter.load()]
 
-        for chunk in self.adapter.load_chunks(chunk_size=chunk_size):
+        for chunk in chunk_iterable:
             self._loaded_rows += len(chunk)
             logger.debug(f"Loaded {self._loaded_rows} rows total (async)")
             yield chunk
@@ -93,7 +99,10 @@ class LazyDataLoader:
         """Get file metadata without loading all data."""
         if hasattr(self.adapter, "get_metadata_from_sample"):
             return self.adapter.get_metadata_from_sample()
-        return {"note": "Metadata not available for this adapter"}
+        return {
+            "note": "Metadata not available for this adapter",
+            "type": self.config.get("type"),
+        }
 
     def get_rows_loaded(self) -> int:
         """Get number of rows loaded so far."""
@@ -205,7 +214,7 @@ class PaginatedSQLLoader:
             DataFrame for that page
         """
         try:
-            from sqlalchemy import create_engine, text
+            from sqlalchemy import create_engine
         except ImportError as e:
             raise ImportError(
                 "SQLAlchemy is required for SQL adapter. Install with: pip install sqlalchemy"
@@ -257,7 +266,7 @@ class PaginatedSQLLoader:
         finally:
             engine.dispose()
 
-    def iterate_pages(self) -> Generator[Tuple[int, pd.DataFrame], None, None]:
+    def iterate_pages(self) -> Generator[tuple[int, pd.DataFrame], None, None]:
         """
         Iterate over all pages.
 
@@ -272,15 +281,13 @@ class PaginatedSQLLoader:
             yield page_number, df
             page_number += 1
 
-    async def iterate_pages_async(self) -> AsyncGenerator[Tuple[int, pd.DataFrame], None]:
+    async def iterate_pages_async(self) -> AsyncGenerator[tuple[int, pd.DataFrame], None]:
         """
         Asynchronously iterate over all pages.
 
         Yields:
             Tuple of (page_number, DataFrame)
         """
-        loop = asyncio.get_event_loop()
-
         for page_number, df in self.iterate_pages():
             await asyncio.sleep(0)  # Yield control
             yield page_number, df

@@ -6,8 +6,9 @@ instead of loading the entire dataset into memory at once.
 """
 
 import contextlib
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Generator, Optional
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -202,9 +203,8 @@ class StreamingDataAdapter(DataSourceAdapter):
             warnings.append(f"Columns with all NaN values: {all_nan_cols}")
 
         # Check for time index
-        if not isinstance(data.index, (pd.DatetimeIndex, pd.RangeIndex)):
-            if "time_column" in self.config:
-                warnings.append("Data does not have DatetimeIndex as expected")
+        if not isinstance(data.index, (pd.DatetimeIndex, pd.RangeIndex)) and "time_column" in self.config:
+            warnings.append("Data does not have DatetimeIndex as expected")
 
         return len(errors) == 0, {
             "valid": len(errors) == 0,

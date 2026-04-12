@@ -15,15 +15,15 @@ import sys
 import tempfile
 from pathlib import Path
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 sys.path.insert(0, "src")
 
-from sktime_mcp.data.adapters.streaming_adapter import StreamingDataAdapter
-from sktime_mcp.data.lazy_loader import LazyDataLoader, ChunkedFitter
-from sktime_mcp.data.registry import DataSourceRegistry
 from sktime.forecasting.naive import NaiveForecaster
+
+from sktime_mcp.data.adapters.streaming_adapter import StreamingDataAdapter
+from sktime_mcp.data.lazy_loader import ChunkedFitter, LazyDataLoader
 
 
 def create_large_csv_file(num_rows: int = 100000, output_path: str = None) -> str:
@@ -38,15 +38,14 @@ def create_large_csv_file(num_rows: int = 100000, output_path: str = None) -> st
         Path to the created file
     """
     if output_path is None:
-        f = tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False)
-        output_path = f.name
-        f.close()
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as temp_file:
+            output_path = temp_file.name
 
     print(f"Creating test CSV file with {num_rows:,} rows...")
     print(f"Output: {output_path}")
 
     # Write header
-    with open(output_path, "w") as f:
+    with Path(output_path).open("w", encoding="utf-8") as f:
         f.write("date,revenue,cost,profit,region\n")
 
         # Generate data
@@ -61,7 +60,7 @@ def create_large_csv_file(num_rows: int = 100000, output_path: str = None) -> st
             f.write(f"{date.date()},{revenue:.2f},{cost:.2f},{profit:.2f},{region}\n")
 
     file_size_mb = Path(output_path).stat().st_size / (1024 * 1024)
-    print(f"[✓] Created: {file_size_mb:.1f} MB\n")
+    print(f"[OK] Created: {file_size_mb:.1f} MB\n")
 
     return output_path
 
@@ -95,7 +94,7 @@ def example_1_metadata_preview():
 
     # Cleanup
     Path(csv_path).unlink()
-    print("\n[✓] No OOM - metadata loaded from sample only!\n")
+    print("\n[OK] No OOM - metadata loaded from sample only!\n")
 
 
 def example_2_chunked_iteration():
@@ -133,7 +132,7 @@ def example_2_chunked_iteration():
     print(f"  Average Revenue: ${average_revenue:,.2f}")
 
     Path(csv_path).unlink()
-    print("\n[✓] Processed 50k rows in chunks without loading all at once!\n")
+    print("\n[OK] Processed 50k rows in chunks without loading all at once!\n")
 
 
 def example_3_lazy_loader_with_estimator():
@@ -170,11 +169,11 @@ def example_3_lazy_loader_with_estimator():
     fitter = ChunkedFitter(forecaster)
     fitter.fit_on_chunks(loader)
 
-    print(f"[✓] Estimator fitted on {fitter.get_rows_processed():,} rows")
-    print(f"[✓] Fitted state: {fitter.is_fitted()}\n")
+    print(f"[OK] Estimator fitted on {fitter.get_rows_processed():,} rows")
+    print(f"[OK] Fitted state: {fitter.is_fitted()}\n")
 
     Path(csv_path).unlink()
-    print("[✓] Large time series processed without OOM!\n")
+    print("[OK] Large time series processed without OOM!\n")
 
 
 def example_4_compare_approaches():
@@ -186,12 +185,12 @@ def example_4_compare_approaches():
     csv_path = create_large_csv_file(num_rows=100000)
 
     print("Approach 1: Traditional (Load All)")
-    print("  [✗] Problem: df = pd.read_csv(path) - loads all 100k rows")
-    print("  [✗] Risk: OOM error for multi-GB files\n")
+    print("  [FAIL] Problem: df = pd.read_csv(path) - loads all 100k rows")
+    print("  [FAIL] Risk: OOM error for multi-GB files\n")
 
     print("Approach 2: Streaming (Use Chunks)")
-    print("  [✓] Solution: Use StreamingDataAdapter")
-    print("  [✓] Benefit: Process only chunk_size rows at a time")
+    print("  [OK] Solution: Use StreamingDataAdapter")
+    print("  [OK] Benefit: Process only chunk_size rows at a time")
 
     config = {
         "type": "streaming",
@@ -212,7 +211,7 @@ def example_4_compare_approaches():
     for i, chunk in enumerate(adapter.load_chunks(), 1):
         print(f"    Chunk {i}: {len(chunk)} rows")
 
-    print("\n  [✓] Same results, 4x less memory!")
+    print("\n  [OK] Same results, 4x less memory!")
 
     Path(csv_path).unlink()
 

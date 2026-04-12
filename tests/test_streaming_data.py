@@ -6,21 +6,21 @@ cause out-of-memory errors.
 """
 
 import os
-import tempfile
-from pathlib import Path
-
-import pytest
-import pandas as pd
-import numpy as np
+import sqlite3
 
 # Ensure src is in path
 import sys
+import tempfile
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pytest
 
 sys.path.insert(0, "src")
 
 from sktime_mcp.data.adapters.streaming_adapter import StreamingDataAdapter
-from sktime_mcp.data.lazy_loader import LazyDataLoader, ChunkedFitter, PaginatedSQLLoader
-from sktime_mcp.data.registry import DataSourceRegistry
+from sktime_mcp.data.lazy_loader import ChunkedFitter, LazyDataLoader, PaginatedSQLLoader
 
 
 class TestStreamingDataAdapter:
@@ -45,17 +45,18 @@ class TestStreamingDataAdapter:
         yield temp_path
 
         # Cleanup
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+        path = Path(temp_path)
+        if path.exists():
+            path.unlink()
 
     @pytest.fixture
     def large_parquet_file(self):
         """Create a temporary large Parquet file for testing."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            parquet_path = os.path.join(tmpdir, "large.parquet")
+            parquet_path = Path(tmpdir) / "large.parquet"
 
             # Create and save large DataFrame
-            dates = pd.date_range("2020-01-01", periods=100000, freq="D")
+            dates = pd.date_range("2020-01-01", periods=100000, freq="h")
             df = pd.DataFrame({
                 "date": dates,
                 "value": 100 + np.random.randn(100000) * 10,
@@ -64,7 +65,7 @@ class TestStreamingDataAdapter:
 
             try:
                 df.to_parquet(parquet_path, index=False)
-                yield parquet_path
+                yield str(parquet_path)
             except Exception as e:
                 pytest.skip(f"Parquet support not available: {e}")
 
@@ -188,8 +189,9 @@ class TestLazyDataLoader:
             "target_column": "sales",
         }
 
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+        path = Path(temp_path)
+        if path.exists():
+            path.unlink()
 
     def test_lazy_loader_iteration(self, csv_config):
         """Test LazyDataLoader iteration."""
@@ -223,7 +225,7 @@ class TestLazyDataLoader:
         assert initial_count == 0
 
         # Load one chunk
-        for chunk in loader.iterate_chunks():
+        for _chunk in loader.iterate_chunks():
             assert loader.get_rows_loaded() > 0
             break
 
@@ -328,8 +330,9 @@ class TestMemoryEfficiency:
             assert chunk_count == 10, f"Expected 10 chunks, got {chunk_count}"
 
         finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+            path = Path(temp_path)
+            if path.exists():
+                path.unlink()
 
 
 class TestSQLPagination:
@@ -342,8 +345,6 @@ class TestSQLPagination:
             db_path = f.name
 
         # Create and populate database
-        import sqlite3
-
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
@@ -373,8 +374,9 @@ class TestSQLPagination:
 
         yield db_path
 
-        if os.path.exists(db_path):
-            os.remove(db_path)
+        path = Path(db_path)
+        if path.exists():
+            path.unlink()
 
     def test_sql_pagination(self, sqlite_db):
         """Test loading SQL data with pagination."""

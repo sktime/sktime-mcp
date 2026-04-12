@@ -5,12 +5,11 @@ Provides tools for loading large datasets efficiently without loading
 entire files into memory at once.
 """
 
-import asyncio
 import logging
+import uuid
 from typing import Any, Optional
 
 from sktime_mcp.data.lazy_loader import LazyDataLoader, PaginatedSQLLoader
-from sktime_mcp.data.registry import DataSourceRegistry
 from sktime_mcp.runtime.handles import get_handle_manager
 
 logger = logging.getLogger(__name__)
@@ -88,12 +87,7 @@ def load_data_source_streaming_tool(
 
         # Store handle for later use
         handle_manager = get_handle_manager()
-        handle_id = f"data_{handle_manager._handle_manager.create_handle(
-            estimator_name='_streaming_data',
-            instance=loader,
-            metadata={'source_type': source_type}
-        )}".split("est_")[1]  # Extract just the UUID part
-        data_handle = f"data_{handle_id}"
+        data_handle = f"data_{uuid.uuid4().hex[:12]}"
 
         # Store the loader for later retrieval
         if not hasattr(handle_manager, "_data_handles"):
@@ -175,7 +169,7 @@ def load_data_paginated_sql_tool(
             - dialect: postgresql, mysql, sqlite, mssql
             - host, port, database, username, password
             - (or) connection_string
-            - table: Table name  
+            - table: Table name
             - filters: Optional filter conditions
         page_number: Page to load (0-indexed)
         page_size: Rows per page
@@ -219,7 +213,7 @@ def load_data_paginated_sql_tool(
         if not hasattr(handle_manager, "_sql_loaders"):
             handle_manager._sql_loaders = {}
 
-        loader_id = f"sql_loader_{page_number}"
+        loader_id = f"sql_loader_{uuid.uuid4().hex[:12]}"
         handle_manager._sql_loaders[loader_id] = loader
 
         return {
