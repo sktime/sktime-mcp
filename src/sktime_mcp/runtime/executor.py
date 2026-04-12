@@ -144,6 +144,7 @@ class Executor:
         handle_id: str,
         fh: Optional[Union[int, list[int]]] = None,
         X: Optional[Any] = None,
+        coverage: Optional[Union[float, list[float]]] = None,
     ) -> dict[str, Any]:
         """Generate predictions."""
         try:
@@ -172,11 +173,36 @@ class Executor:
             else:
                 result = predictions.tolist() if hasattr(predictions, "tolist") else predictions
 
-            return {
+            response = {
                 "success": True,
                 "predictions": result,
                 "horizon": len(fh) if hasattr(fh, "__len__") else fh,
             }
+
+            if coverage is not None:
+                intervals = (
+                    instance.predict_interval(fh=fh, X=X, coverage=coverage)
+                    if X is not None
+                    else instance.predict_interval(fh=fh, coverage=coverage)
+                )
+                intervals_copy = intervals.copy()
+                if hasattr(intervals_copy, "index"):
+                    intervals_copy.index = intervals_copy.index.astype(str)
+                # Flatten the MultiIndex columns to single strings for JSON compatibility
+                if hasattr(intervals_copy, "columns"):
+                    intervals_copy.columns = [
+                        "_".join(map(str, col)) if isinstance(col, tuple) else str(col)
+                        for col in intervals_copy.columns
+                    ]
+
+                response["prediction_intervals"] = (
+                    intervals_copy.to_dict(orient="list")
+                    if isinstance(intervals_copy, pd.DataFrame)
+                    else intervals_copy.to_dict()
+                )
+
+            return response
+
         except Exception as e:
             return {"success": False, "error": str(e)}
 
@@ -186,6 +212,7 @@ class Executor:
         dataset: str,
         horizon: int = 12,
         data_handle: Optional[str] = None,
+        coverage: Optional[Union[float, list[float]]] = None,
     ) -> dict[str, Any]:
         """Convenience method: load data, fit, and predict."""
         if data_handle is not None:
@@ -213,7 +240,7 @@ class Executor:
         if not fit_result["success"]:
             return fit_result
 
-        return self.predict(handle_id, fh=fh, X=X)
+        return self.predict(handle_id, fh=fh, X=X, coverage=coverage)
 
     async def fit_predict_async(
         self,

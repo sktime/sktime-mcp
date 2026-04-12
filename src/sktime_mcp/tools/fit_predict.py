@@ -6,7 +6,7 @@ Executes complete forecasting workflows.
 
 import asyncio
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from sktime_mcp.runtime.executor import get_executor
 
@@ -18,6 +18,7 @@ def fit_predict_tool(
     dataset: str,
     horizon: int = 12,
     data_handle: Optional[str] = None,
+    coverage: Optional[Union[float, list[float]]] = None,
 ) -> dict[str, Any]:
     """
     Execute a complete fit-predict workflow.
@@ -27,6 +28,7 @@ def fit_predict_tool(
         dataset: Name of demo dataset (e.g., "airline", "sunspots")
         horizon: Forecast horizon (default: 12)
         data_handle: Optional handle from load_data_source for custom data
+        coverage: Optional coverage level(s) for prediction intervals
 
     Returns:
         Dictionary with:
@@ -43,7 +45,13 @@ def fit_predict_tool(
         }
     """
     executor = get_executor()
-    return executor.fit_predict(estimator_handle, dataset, horizon, data_handle=data_handle)
+    return executor.fit_predict(
+        handle_id=estimator_handle,
+        dataset=dataset,
+        horizon=horizon,
+        data_handle=data_handle,
+        coverage=coverage,
+    )
 
 
 def fit_tool(
@@ -75,6 +83,7 @@ def fit_tool(
 def predict_tool(
     estimator_handle: str,
     horizon: int = 12,
+    coverage: Optional[Union[float, list[float]]] = None,
 ) -> dict[str, Any]:
     """
     Generate predictions from a fitted estimator.
@@ -82,13 +91,14 @@ def predict_tool(
     Args:
         estimator_handle: Handle of a fitted estimator
         horizon: Forecast horizon
+        coverage: Optional coverage level(s) for prediction intervals
 
     Returns:
         Dictionary with predictions
     """
     executor = get_executor()
     fh = list(range(1, horizon + 1))
-    return executor.predict(estimator_handle, fh=fh)
+    return executor.predict(estimator_handle, fh=fh, coverage=coverage)
 
 
 def list_datasets_tool() -> dict[str, Any]:
@@ -109,6 +119,7 @@ def fit_predict_async_tool(
     estimator_handle: str,
     dataset: str,
     horizon: int = 12,
+    coverage: Optional[Union[float, list[float]]] = None,
 ) -> dict[str, Any]:
     """
     Execute a fit-predict workflow in the background (non-blocking).
@@ -120,6 +131,7 @@ def fit_predict_async_tool(
         estimator_handle: Handle from instantiate_estimator
         dataset: Name of demo dataset (e.g., "airline", "sunspots")
         horizon: Forecast horizon (default: 12)
+        coverage: Optional coverage level(s) for prediction intervals
 
     Returns:
         Dictionary with:
@@ -168,7 +180,7 @@ def fit_predict_async_tool(
         asyncio.set_event_loop(loop)
 
     # Schedule the coroutine (non-blocking!)
-    coro = executor.fit_predict_async(estimator_handle, dataset, horizon, job_id)
+    coro = executor.fit_predict_async(estimator_handle, dataset, horizon, coverage=coverage)
     asyncio.run_coroutine_threadsafe(coro, loop)
 
     return {

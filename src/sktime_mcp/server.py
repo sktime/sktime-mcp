@@ -27,6 +27,7 @@ from sktime_mcp.tools.describe_estimator import (
     describe_estimator_tool,
     search_estimators_tool,
 )
+from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
     fit_predict_tool,
@@ -55,7 +56,6 @@ from sktime_mcp.tools.list_estimators import (
     list_estimators_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
-from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 
 # Configure logging to stderr with detailed format
 logging.basicConfig(
@@ -224,6 +224,11 @@ async def list_tools() -> list[Tool]:
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
                     },
+                    "coverage": {
+                        "type": ["number", "array"],
+                        "description": "Optional coverage level (e.g., 0.90) or list of levels (e.g., [0.90, 0.95]) for prediction intervals.",
+                        "items": {"type": "number"},
+                    },
                 },
                 "required": ["estimator_handle"],
             },
@@ -246,6 +251,11 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
+                    },
+                    "coverage": {
+                        "type": ["number", "array"],
+                        "description": "Optional coverage level (e.g., 0.90) or list of levels (e.g., [0.90, 0.95]) for prediction intervals.",
+                        "items": {"type": "number"},
                     },
                 },
                 "required": ["estimator_handle", "dataset"],
@@ -629,6 +639,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("dataset", ""),
                 arguments.get("horizon", 12),
                 data_handle=arguments.get("data_handle"),
+                coverage=arguments.get("coverage"),
             )
             # Sanitize immediately to handle Period objects
             result = sanitize_for_json(result)
@@ -689,6 +700,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["estimator_handle"],
                 arguments["dataset"],
                 arguments.get("horizon", 12),
+                coverage=arguments.get("coverage"),
             )
         elif name == "check_job_status":
             result = check_job_status_tool(arguments["job_id"])

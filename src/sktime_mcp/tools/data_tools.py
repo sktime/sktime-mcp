@@ -60,23 +60,62 @@ def load_data_source_tool(config: dict[str, Any]) -> dict[str, Any]:
     return executor.load_data_source(config)
 
 
-def list_data_sources_tool() -> dict[str, Any]:
+def list_data_sources_tool(
+    limit: int = 50,
+    offset: int = 0,
+) -> dict[str, Any]:
     """
     List all available data source types.
+
+    Supports pagination via limit and offset to handle large adapter registries.
+
+    Args:
+        limit: Maximum number of results to return (default: 50).
+        offset: Number of results to skip for pagination (default: 0).
+            Use with limit to paginate through all source types.
+            Example: offset=50 returns results 51-100.
 
     Returns:
         Dictionary with:
         - success: bool
-        - sources: list of available source types
-        - descriptions: dict with descriptions for each source type
+        - sources: list of available source types in this page
+        - descriptions: dict with descriptions for each source type in this page
+        - total: Total number of source types (before pagination)
+        - count: Number of source types returned in this page
+        - offset: Current offset used
+        - limit: Current limit used
+        - has_more: True if more results exist beyond this page
+
+    Example:
+        >>> list_data_sources_tool(limit=10, offset=0)
+        {
+            "success": True,
+            "sources": ["pandas", "sql", "file"],
+            "descriptions": {...},
+            "total": 3,
+            "count": 3,
+            "offset": 0,
+            "limit": 10,
+            "has_more": False
+        }
     """
+    if offset < 0:
+        return {
+            "success": False,
+            "error": "offset must be a non-negative integer.",
+        }
+
     from sktime_mcp.data import DataSourceRegistry
 
-    sources = DataSourceRegistry.list_adapters()
+    all_sources = DataSourceRegistry.list_adapters()
+    total = len(all_sources)
 
-    # Get descriptions for each source
+    # Apply pagination
+    paged_sources = all_sources[offset: offset + limit]
+
+    # Get descriptions only for the paged sources
     descriptions = {}
-    for source_type in sources:
+    for source_type in paged_sources:
         info = DataSourceRegistry.get_adapter_info(source_type)
         descriptions[source_type] = {
             "class": info["class"],
@@ -85,8 +124,13 @@ def list_data_sources_tool() -> dict[str, Any]:
 
     return {
         "success": True,
-        "sources": sources,
+        "sources": paged_sources,
         "descriptions": descriptions,
+        "total": total,
+        "count": len(paged_sources),
+        "offset": offset,
+        "limit": limit,
+        "has_more": (offset + limit) < total,
     }
 
 
