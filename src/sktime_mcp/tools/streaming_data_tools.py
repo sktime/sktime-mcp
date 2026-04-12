@@ -7,7 +7,7 @@ entire files into memory at once.
 
 import logging
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from sktime_mcp.data.lazy_loader import LazyDataLoader, PaginatedSQLLoader
 from sktime_mcp.runtime.handles import get_handle_manager
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 def load_data_source_streaming_tool(
     source_type: str,
     config: dict[str, Any],
-    chunk_size: Optional[int] = None,
+    chunk_size: int | None = None,
     preview_size: int = 1000,
 ) -> dict[str, Any]:
     """

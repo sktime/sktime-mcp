@@ -8,7 +8,7 @@ loading everything into memory at once.
 import asyncio
 import logging
 from collections.abc import AsyncGenerator, Generator
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -31,7 +31,7 @@ class LazyDataLoader:
     def __init__(
         self,
         config: dict[str, Any],
-        chunk_size: Optional[int] = None,
+        chunk_size: int | None = None,
     ):
         """
         Initialize lazy loader.
@@ -49,7 +49,7 @@ class LazyDataLoader:
 
     def iterate_chunks(
         self,
-        chunk_size: Optional[int] = None,
+        chunk_size: int | None = None,
     ) -> Generator[pd.DataFrame, None, None]:
         """
         Iterate over data chunks.
@@ -72,7 +72,7 @@ class LazyDataLoader:
 
     async def iterate_chunks_async(
         self,
-        chunk_size: Optional[int] = None,
+        chunk_size: int | None = None,
     ) -> AsyncGenerator[pd.DataFrame, None]:
         """
         Asynchronously iterate over data chunks.
@@ -135,7 +135,7 @@ class ChunkedFitter:
     def fit_on_chunks(
         self,
         data_loader: LazyDataLoader,
-        target_column: Optional[str] = None,
+        target_column: str | None = None,
     ) -> None:
         """
         Fit estimator on chunked data progressively.

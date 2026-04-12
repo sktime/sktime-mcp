@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 
 class JobStatus(Enum):
@@ -31,8 +31,8 @@ class JobInfo:
     estimator_handle: str
     status: JobStatus = JobStatus.PENDING
     created_at: datetime = field(default_factory=datetime.now)
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
 
     # Progress tracking
     total_steps: int = 0
@@ -40,13 +40,13 @@ class JobInfo:
     current_step: str = ""
 
     # Results
-    result: Optional[dict[str, Any]] = None
+    result: dict[str, Any] | None = None
     errors: list[str] = field(default_factory=list)
 
     # Metadata
-    dataset_name: Optional[str] = None
-    horizon: Optional[int] = None
-    estimator_name: Optional[str] = None
+    dataset_name: str | None = None
+    horizon: int | None = None
+    estimator_name: str | None = None
 
     @property
     def progress_percentage(self) -> float:
@@ -56,7 +56,7 @@ class JobInfo:
         return (self.completed_steps / self.total_steps) * 100
 
     @property
-    def elapsed_time(self) -> Optional[float]:
+    def elapsed_time(self) -> float | None:
         """Calculate elapsed time in seconds."""
         if self.start_time is None:
             return None
@@ -64,7 +64,7 @@ class JobInfo:
         return (end - self.start_time).total_seconds()
 
     @property
-    def estimated_time_remaining(self) -> Optional[float]:
+    def estimated_time_remaining(self) -> float | None:
         """Estimate remaining time in seconds."""
         if self.status != JobStatus.RUNNING or self.completed_steps == 0:
             return None
@@ -78,7 +78,7 @@ class JobInfo:
         return remaining_steps * avg_time_per_step
 
     @property
-    def estimated_time_remaining_human(self) -> Optional[str]:
+    def estimated_time_remaining_human(self) -> str | None:
         """Human-readable estimated time remaining."""
         remaining = self.estimated_time_remaining
         if remaining is None:
@@ -133,9 +133,9 @@ class JobManager:
         self,
         job_type: str,
         estimator_handle: str,
-        estimator_name: Optional[str] = None,
-        dataset_name: Optional[str] = None,
-        horizon: Optional[int] = None,
+        estimator_name: str | None = None,
+        dataset_name: str | None = None,
+        horizon: int | None = None,
         total_steps: int = 3,  # Default: load data, fit, predict
     ) -> str:
         """
@@ -170,11 +170,11 @@ class JobManager:
     def update_job(
         self,
         job_id: str,
-        status: Optional[JobStatus] = None,
-        completed_steps: Optional[int] = None,
-        current_step: Optional[str] = None,
-        result: Optional[dict[str, Any]] = None,
-        errors: Optional[list[str]] = None,
+        status: JobStatus | None = None,
+        completed_steps: int | None = None,
+        current_step: str | None = None,
+        result: dict[str, Any] | None = None,
+        errors: list[str] | None = None,
     ) -> bool:
         """
         Update job status and progress.
@@ -224,7 +224,7 @@ class JobManager:
 
             return True
 
-    def get_job(self, job_id: str) -> Optional[JobInfo]:
+    def get_job(self, job_id: str) -> JobInfo | None:
         """
         Get job information.
 
@@ -239,8 +239,8 @@ class JobManager:
 
     def list_jobs(
         self,
-        status: Optional[JobStatus] = None,
-        limit: Optional[int] = None,
+        status: JobStatus | None = None,
+        limit: int | None = None,
     ) -> list[JobInfo]:
         """
         List all jobs, optionally filtered by status.
@@ -330,7 +330,7 @@ class JobManager:
 
 
 # Singleton instance
-_job_manager_instance: Optional[JobManager] = None
+_job_manager_instance: JobManager | None = None
 
 
 def get_job_manager() -> JobManager:

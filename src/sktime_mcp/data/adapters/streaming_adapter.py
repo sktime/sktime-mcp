@@ -8,7 +8,7 @@ instead of loading the entire dataset into memory at once.
 import contextlib
 from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -73,7 +73,7 @@ class StreamingDataAdapter(DataSourceAdapter):
         df = pd.concat(chunks, ignore_index=True)
         return self._process_dataframe(df)
 
-    def load_chunks(self, chunk_size: Optional[int] = None) -> Generator[pd.DataFrame, None, None]:
+    def load_chunks(self, chunk_size: int | None = None) -> Generator[pd.DataFrame, None, None]:
         """
         Load data in chunks.
 
@@ -116,7 +116,7 @@ class StreamingDataAdapter(DataSourceAdapter):
                 f"Unsupported format for streaming: {file_format}. Supported formats: csv, parquet"
             )
 
-    def load_iterator(self, chunk_size: Optional[int] = None):
+    def load_iterator(self, chunk_size: int | None = None):
         """
         Get an iterator over data chunks.
 

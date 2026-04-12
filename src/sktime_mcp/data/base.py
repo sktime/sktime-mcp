@@ -5,7 +5,7 @@ Defines the interface that all data source adapters must implement.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -58,7 +58,7 @@ class DataSourceAdapter(ABC):
         """
         pass
 
-    def to_sktime_format(self, data: pd.DataFrame) -> tuple[pd.Series, Optional[pd.DataFrame]]:
+    def to_sktime_format(self, data: pd.DataFrame) -> tuple[pd.Series, pd.DataFrame | None]:
         """
         Convert to sktime format (y, X).
 
