@@ -57,6 +57,7 @@ from sktime_mcp.tools.list_estimators import (
 from sktime_mcp.tools.metrics import compute_metric_tool, list_metrics_tool
 from sktime_mcp.tools.save_model import save_model_tool
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
+from sktime_mcp.tools.tune import tune_estimator_tool
 
 # Configure logging to stderr with detailed format
 logging.basicConfig(
@@ -640,6 +641,33 @@ async def list_tools() -> list[Tool]:
                 "required": ["metric", "y_true", "y_pred"],
             },
         ),
+        Tool(
+            name="tune_estimator",
+            description="Tune an estimator using grid search cross-validation, keeping the best parameter combination in memory",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle ID of the estimator to tune",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Name of the demo dataset",
+                    },
+                    "param_grid": {
+                        "type": "object",
+                        "description": "Parameter grid dictionary mapping parameter names to lists of values to try (e.g. {'sp': [7, 12]})",
+                    },
+                    "cv_folds": {
+                        "type": "integer",
+                        "description": "Number of folds for cross-validation evaluation (default 3)",
+                        "default": 3,
+                    },
+                },
+                "required": ["estimator_handle", "dataset", "param_grid"],
+            },
+        ),
     ]
 
 
@@ -686,6 +714,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = evaluate_estimator_tool(
                 arguments["estimator_handle"],
                 arguments["dataset"],
+                arguments.get("cv_folds", 3),
+            )
+            result = sanitize_for_json(result)
+        elif name == "tune_estimator":
+            result = tune_estimator_tool(
+                arguments["estimator_handle"],
+                arguments["dataset"],
+                arguments["param_grid"],
                 arguments.get("cv_folds", 3),
             )
             result = sanitize_for_json(result)

@@ -11,6 +11,7 @@ from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 from sktime_mcp.tools.list_estimators import list_estimators_tool
 from sktime_mcp.tools.metrics import compute_metric_tool, list_metrics_tool
 from sktime_mcp.tools.save_model import save_model_tool
+from sktime_mcp.tools.tune import tune_estimator_tool
 
 __all__ = [
     "list_estimators_tool",
@@ -23,4 +24,5 @@ __all__ = [
     "auto_format_on_load_tool",
     "list_metrics_tool",
     "compute_metric_tool",
+    "tune_estimator_tool",
 ]
