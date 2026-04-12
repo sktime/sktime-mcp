@@ -8,11 +8,11 @@ that exposes sktime's registry and execution capabilities to LLMs.
 import asyncio
 import json
 import logging
-from typing import Any
+from typing import Any, Union
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.types import ImageContent, TextContent, Tool
 
 from sktime_mcp.composition.validator import get_composition_validator
 from sktime_mcp.tools.codegen import export_code_tool
@@ -54,6 +54,7 @@ from sktime_mcp.tools.list_estimators import (
     get_available_tags,
     list_estimators_tool,
 )
+from sktime_mcp.tools.plot_tools import plot_data_tool, plot_forecast_tool
 from sktime_mcp.tools.save_model import save_model_tool
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 
@@ -590,11 +591,59 @@ async def list_tools() -> list[Tool]:
                 "required": ["estimator_handle", "path"],
             },
         ),
+        Tool(
+            name="plot_data",
+            description=(
+                "Plot a time series as a line chart and return it as an inline image. "
+                "Accepts a loaded data handle (from load_data_source) OR a demo dataset "
+                "name (airline, sunspots, lynx, …). "
+                "Use this to give the LLM visual context before choosing a model."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Handle from load_data_source (optional)",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Demo dataset name: airline, sunspots, lynx, etc. (optional)",
+                    },
+                },
+            },
+        ),
+        Tool(
+            name="plot_forecast",
+            description=(
+                "Plot forecast predictions overlaid on historical data and return it as an inline image. "
+                "Pass the predictions dict from fit_predict or predict. "
+                "Optionally supply data_handle or dataset to show the historical series alongside the forecast."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "predictions": {
+                        "type": "object",
+                        "description": "Dict of {timestamp: value} returned by fit_predict or predict",
+                    },
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Handle from load_data_source for historical overlay (optional)",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Demo dataset name for historical overlay (optional)",
+                    },
+                },
+                "required": ["predictions"],
+            },
+        ),
     ]
 
 
 @server.call_tool()
-async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
+async def call_tool(name: str, arguments: dict[str, Any]) -> list[Union[TextContent, ImageContent]]:
     """Handle tool calls."""
     logger.info(f"=== Tool Call: {name} ===")
     logger.info(f"Arguments: {json.dumps(arguments, indent=2)}")
@@ -711,10 +760,34 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["path"],
                 arguments.get("mlflow_params"),
             )
+        elif name == "plot_data":
+            result = plot_data_tool(
+                data_handle=arguments.get("data_handle"),
+                dataset=arguments.get("dataset"),
+            )
+        elif name == "plot_forecast":
+            result = plot_forecast_tool(
+                predictions=arguments["predictions"],
+                data_handle=arguments.get("data_handle"),
+                dataset=arguments.get("dataset"),
+            )
         else:
             result = {"error": f"Unknown tool: {name}"}
 
         logger.info(f"=== Result for {name} ===")
+
+        # Plot tools return an inline image; all others return JSON text
+        if name in ("plot_data", "plot_forecast"):
+            if result.get("success") and result.get("image"):
+                return [
+                    ImageContent(
+                        type="image",
+                        data=result["image"],
+                        mimeType=result.get("mime_type", "image/png"),
+                    )
+                ]
+            # Fall through to text on error
+            return [TextContent(type="text", text=json.dumps({"error": result.get("error", "Plot failed")}))]
 
         # Sanitize result for JSON serialization
         sanitized_result = sanitize_for_json(result)
