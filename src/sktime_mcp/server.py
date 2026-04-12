@@ -8,7 +8,7 @@ that exposes sktime's registry and execution capabilities to LLMs.
 import asyncio
 import json
 import logging
-from typing import Any
+from typing import Any, Union
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -608,7 +608,7 @@ async def list_tools() -> list[Tool]:
 
 
 @server.call_tool()
-async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent | ImageContent]:
+async def call_tool(name: str, arguments: dict[str, Any]) -> list[Union[TextContent, ImageContent]]:
     """Handle tool calls."""
     logger.info(f"=== Tool Call: {name} ===")
     logger.info(f"Arguments: {json.dumps(arguments, indent=2)}")

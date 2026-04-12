@@ -9,7 +9,7 @@ time series charts directly in the chat interface.
 import base64
 import io
 import logging
-from typing import Any
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ def _fig_to_base64(fig) -> str:
     return data
 
 
-def _load_series(data_handle: str | None, dataset: str | None):
+def _load_series(data_handle: Optional[str], dataset: Optional[str]):
     """
     Return (y, label) from either a data handle or a demo dataset name.
 
@@ -53,8 +53,8 @@ def _load_series(data_handle: str | None, dataset: str | None):
 
 
 def plot_data_tool(
-    data_handle: str | None = None,
-    dataset: str | None = None,
+    data_handle: Optional[str] = None,
+    dataset: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Plot a time series as a line chart.
@@ -121,8 +121,8 @@ def plot_data_tool(
 
 def plot_forecast_tool(
     predictions: dict,
-    data_handle: str | None = None,
-    dataset: str | None = None,
+    data_handle: Optional[str] = None,
+    dataset: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Plot forecast predictions overlaid on historical time series.

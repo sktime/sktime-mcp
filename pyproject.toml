@@ -33,6 +33,7 @@ dependencies = [
     "scikit-learn>=1.0.0",
     "statsmodels>=0.13.0",
     "pmdarima>=2.0.0",
+    "matplotlib>=3.5.0",
 ]
 
 [project.optional-dependencies]
