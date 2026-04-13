@@ -471,13 +471,8 @@ class Executor:
             }
 
         except Exception as e:
-            import traceback
-
-            return {
-                "success": False,
-                "error": str(e),
-                "traceback": traceback.format_exc(),
-            }
+            logger.exception("Error during instantiate_pipeline")
+            return {"success": False, "error": str(e)}
 
     def list_datasets(self) -> list[str]:
         """List available demo datasets."""
