@@ -438,6 +438,199 @@ Automatically format time series data (infer frequency, remove duplicates, fill 
 - `fill_missing` (optional): Fill missing values (default: `true`)
 - `remove_duplicates` (optional): Remove duplicate timestamps (default: `true`)
 
+---
+
+#### 18. `auto_format_on_load`
+Enable or disable automatic time series formatting whenever data is loaded via `load_data_source`. Auto-formatting is **enabled by default** and handles frequency inference, duplicate removal, and missing value filling.
+
+**Arguments:**
+- `enabled` (required): `true` to enable auto-formatting, `false` to disable
+
+**Example:**
+```json
+{"enabled": false}
+```
+
+**Returns:** `{"success": true, "auto_format_enabled": false}`
+
+---
+
+### Handle Management
+
+#### 19. `list_handles`
+List all active estimator handles currently loaded in server memory.
+
+**Arguments:** None
+
+**Returns:**
+```json
+{"success": true, "handles": [{"handle": "est_abc123", "estimator": "ARIMA", "fitted": true}], "count": 1}
+```
+
+---
+
+#### 20. `release_handle`
+Release an estimator handle and free it from server memory. Call this after you are done with an estimator to avoid memory leaks in long-running sessions.
+
+**Arguments:**
+- `handle` (required): Handle ID to release
+
+**Example:**
+```json
+{"handle": "est_abc123"}
+```
+
+**Returns:** `{"success": true, "message": "Handle est_abc123 released."}`
+
+---
+
+#### 21. `release_data_handle`
+Release a loaded data handle and free its memory. The counterpart to `load_data_source`.
+
+**Arguments:**
+- `data_handle` (required): Data handle ID to release
+
+**Example:**
+```json
+{"data_handle": "data_abc123"}
+```
+
+**Returns:** `{"success": true, "message": "Data handle data_abc123 released."}`
+
+---
+
+### Evaluation
+
+#### 22. `evaluate_estimator`
+Evaluate an estimator using expanding-window cross-validation. Returns per-fold metrics (e.g., MAPE, RMSE).
+
+**Arguments:**
+- `estimator_handle` (required): Handle from `instantiate_estimator`
+- `dataset` (required): Dataset name (e.g., `"airline"`, `"sunspots"`, `"lynx"`)
+- `cv_folds` (optional): Number of cross-validation folds (default: 3)
+
+**Example:**
+```json
+{
+  "estimator_handle": "est_abc123",
+  "dataset": "airline",
+  "cv_folds": 5
+}
+```
+
+**Returns:** `{"success": true, "results": [{"test_MeanAbsolutePercentageError": 0.04, ...}, ...], "cv_folds_run": 5}`
+
+---
+
+### Additional Data Loading
+
+#### 23. `load_data_source_async`
+Non-blocking version of `load_data_source`. Schedules the data loading as a background job and returns a `job_id` immediately. The `data_handle` is available in the job result when the job reaches `completed` status.
+
+**Arguments:**
+- `config` (required): Same configuration object as `load_data_source`
+
+**Example:**
+```json
+{
+  "config": {
+    "type": "file",
+    "path": "/path/to/large_data.csv",
+    "time_column": "date",
+    "target_column": "sales"
+  }
+}
+```
+
+**Returns:** `{"success": true, "job_id": "abc-123", "message": "Data loading started..."}`
+
+> Use `check_job_status(job_id)` to poll for completion and retrieve the `data_handle`.
+
+---
+
+#### 24. `list_data_sources`
+List all registered data source adapter types and their descriptions. Call this to discover which `"type"` values are valid in `load_data_source` config.
+
+**Arguments:** None
+
+**Returns:**
+```json
+{
+  "success": true,
+  "sources": ["pandas", "file", "sql", "url"],
+  "descriptions": {
+    "pandas": {"class": "PandasAdapter", "description": "Load data from a pandas DataFrame"},
+    "file":   {"class": "FileAdapter",   "description": "Load data from CSV, Parquet, or Excel files"}
+  }
+}
+```
+
+---
+
+### Additional Background Jobs
+
+#### 25. `cancel_job`
+Cancel a running or pending background job (e.g., a long `fit_predict_async` or `load_data_source_async`).
+
+**Arguments:**
+- `job_id` (required): Job ID to cancel
+
+**Example:**
+```json
+{"job_id": "abc-123"}
+```
+
+**Returns:** `{"success": true, "message": "Job abc-123 cancelled."}`
+
+---
+
+#### 26. `delete_job`
+Permanently delete a job record from the job manager. The job will no longer appear in `list_jobs` results.
+
+**Arguments:**
+- `job_id` (required): Job ID to delete
+
+**Example:**
+```json
+{"job_id": "abc-123"}
+```
+
+**Returns:** `{"success": true}`
+
+---
+
+#### 27. `cleanup_old_jobs`
+Remove all completed, failed, or cancelled job records older than a given number of hours. Useful for keeping the job list clean in long-running sessions.
+
+**Arguments:**
+- `max_age_hours` (optional): Remove jobs older than this (default: 24)
+
+**Example:**
+```json
+{"max_age_hours": 12}
+```
+
+**Returns:** `{"success": true, "deleted_count": 5}`
+
+---
+
+### Additional Model Persistence
+
+#### 28. `load_model`
+Load a previously saved sktime model from disk and register it as an active estimator handle, ready for `predict` or `fit_predict`.
+
+**Arguments:**
+- `path` (required): Path to the saved model directory (created by `save_model`)
+
+**Example:**
+```json
+{"path": "/absolute/path/to/model_dir"}
+```
+
+**Returns:** `{"success": true, "handle": "est_abc123", "estimator": "ARIMA", "fitted": true}`
+
+---
+
 ## 🔄 Example LLM Flows
 
 ### Flow 1: Simple Forecasting
