@@ -1,0 +1,45 @@
+/* Custom CSS for sktime-mcp docs */
+
+:root {
+    --md-primary-fg-color: #4C3BCF;
+    /* Deep Indigo */
+    --md-primary-fg-color--light: #6E5ED9;
+    --md-primary-fg-color--dark: #3729A0;
+}
+
+/* Make tables look a bit more modern and spaced out */
+.md-typeset table:not([class]) {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.md-typeset table:not([class]) th {
+    background-color: var(--md-primary-fg-color);
+    color: white;
+    font-weight: 600;
+}
+
+/* Admonition refinements */
+.md-typeset .admonition,
+.md-typeset details {
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    border-left-width: 0.4rem;
+}
+
+/* Hero section styling for index page if used */
+.hero-text {
+    text-align: center;
+    padding: 4rem 0;
+}
+
+.hero-text h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin-bottom: 1rem;
+    background: linear-gradient(to right, var(--md-primary-fg-color), #FF0080);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
