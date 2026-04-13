@@ -269,6 +269,11 @@ async def list_tools() -> list[Tool]:
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
                     },
+                    "coverage": {
+                        "type": ["number", "array"],
+                        "items": {"type": "number"},
+                        "description": "Optional coverage level(s) for prediction intervals, e.g. 0.9 or [0.9, 0.95]",
+                    },
                 },
                 "required": ["estimator_handle"],
             },
@@ -294,6 +299,11 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
+                    },
+                    "coverage": {
+                        "type": ["number", "array"],
+                        "items": {"type": "number"},
+                        "description": "Optional coverage level(s) for prediction intervals, e.g. 0.9 or [0.9, 0.95]",
                     },
                 },
                 "required": ["estimator_handle", "dataset"],
@@ -630,6 +640,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("dataset", ""),
                 arguments.get("horizon", 12),
                 data_handle=arguments.get("data_handle"),
+                coverage=arguments.get("coverage"),
             )
             result = sanitize_for_json(result)
 
@@ -638,6 +649,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["estimator_handle"],
                 arguments["dataset"],
                 arguments.get("horizon", 12),
+                coverage=arguments.get("coverage"),
             )
 
         elif name == "fit_predict_with_data":
@@ -670,8 +682,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         elif name == "list_data_sources":
             # Deprecated — info is now in load_data_source description
-            logger.warning("list_data_sources is deprecated; info is in load_data_source description")
+            logger.warning(
+                "list_data_sources is deprecated; info is in load_data_source description"
+            )
             from sktime_mcp.tools.data_tools import list_data_sources_tool
+
             result = list_data_sources_tool()
 
         elif name == "release_data_handle":
@@ -691,6 +706,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 "auto_format_on_load is deprecated; use env var SKTIME_MCP_AUTO_FORMAT=true/false"
             )
             from sktime_mcp.tools.format_tools import auto_format_on_load_tool
+
             result = auto_format_on_load_tool(arguments.get("enabled", True))
 
         # -- Export / Persistence --------------------------------------------
@@ -737,6 +753,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             # Deprecated — now runs automatically on a periodic timer
             logger.warning("cleanup_old_jobs is deprecated; jobs are cleaned up automatically")
             from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
+
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
 
         else:

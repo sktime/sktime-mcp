@@ -34,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +64,9 @@ jobs:
           cache: pip
 
       - name: Install dev dependencies
-        run: pip install -e ".[dev]"
+        run: |
+          pip install -e ".[dev]"
+          pip install -r docs/requirements.txt
 
       - name: Build docs
-        run: mkdocs build
+        run: sphinx-build -M html docs/source docs/_build

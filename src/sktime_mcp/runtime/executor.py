@@ -148,8 +148,9 @@ class Executor:
         handle_id: str,
         fh: Optional[Union[int, list[int]]] = None,
         X: Optional[Any] = None,
+        coverage: Optional[Any] = None,
     ) -> dict[str, Any]:
-        """Generate predictions."""
+        """Generate predictions, optionally with prediction intervals."""
         try:
             instance = self._handle_manager.get_instance(handle_id)
         except KeyError:
@@ -176,11 +177,36 @@ class Executor:
             else:
                 result = predictions.tolist() if hasattr(predictions, "tolist") else predictions
 
-            return {
+            out: dict[str, Any] = {
                 "success": True,
                 "predictions": result,
                 "horizon": len(fh) if hasattr(fh, "__len__") else fh,
             }
+
+            # Add prediction intervals when coverage is requested
+            if coverage is not None:
+                try:
+                    coverage_list = coverage if isinstance(coverage, list) else [coverage]
+                    intervals = (
+                        instance.predict_interval(fh=fh, coverage=coverage_list, X=X)
+                        if X is not None
+                        else instance.predict_interval(fh=fh, coverage=coverage_list)
+                    )
+                    # Flatten MultiIndex columns to readable string keys
+                    intervals.index = intervals.index.astype(str)
+                    flat: dict[str, Any] = {}
+                    for col in intervals.columns:
+                        key = "__".join(str(c) for c in col)
+                        flat[key] = intervals[col].to_dict()
+                    out["prediction_intervals"] = flat
+                    out["coverage"] = coverage
+                except Exception as pi_err:
+                    out["prediction_intervals_warning"] = (
+                        f"Could not compute prediction intervals: {pi_err}. "
+                        "Ensure the estimator supports capability:pred_int."
+                    )
+
+            return out
         except Exception as e:
             return {"success": False, "error": str(e)}
 
@@ -190,6 +216,7 @@ class Executor:
         dataset: str,
         horizon: int = 12,
         data_handle: Optional[str] = None,
+        coverage: Optional[Any] = None,
     ) -> dict[str, Any]:
         """Convenience method: load data, fit, and predict."""
         if data_handle is not None:
@@ -217,7 +244,7 @@ class Executor:
         if not fit_result["success"]:
             return fit_result
 
-        return self.predict(handle_id, fh=fh, X=X)
+        return self.predict(handle_id, fh=fh, X=X, coverage=coverage)
 
     async def fit_predict_async(
         self,
@@ -225,6 +252,7 @@ class Executor:
         dataset: str,
         horizon: int = 12,
         job_id: Optional[str] = None,
+        coverage: Optional[Any] = None,
     ) -> dict[str, Any]:
         """
         Async version of fit_predict with job tracking.
@@ -313,7 +341,7 @@ class Executor:
 
             # Run predict in executor
             predict_result = await loop.run_in_executor(
-                None, lambda: self.predict(handle_id, fh=fh, X=X)
+                None, lambda: self.predict(handle_id, fh=fh, X=X, coverage=coverage)
             )
 
             if not predict_result["success"]:
