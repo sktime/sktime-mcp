@@ -301,7 +301,11 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="evaluate_estimator",
-            description="Evaluate an estimator using cross-validation on a dataset",
+            description=(
+                "Evaluate an estimator using cross-validation. "
+                "Accepts either a demo dataset name or a data_handle from load_data_source. "
+                "data_handle takes priority over dataset when both are provided."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -311,7 +315,14 @@ async def list_tools() -> list[Tool]:
                     },
                     "dataset": {
                         "type": "string",
-                        "description": "Dataset name: airline, sunspots, lynx, etc.",
+                        "description": "Demo dataset name: airline, sunspots, lynx, etc.",
+                    },
+                    "data_handle": {
+                        "type": "string",
+                        "description": (
+                            "Handle from load_data_source for custom data "
+                            "(use instead of dataset for user-loaded data)"
+                        ),
                     },
                     "cv_folds": {
                         "type": "integer",
@@ -319,7 +330,7 @@ async def list_tools() -> list[Tool]:
                         "default": 3,
                     },
                 },
-                "required": ["estimator_handle", "dataset"],
+                "required": ["estimator_handle"],
             },
         ),
         # -- Data ------------------------------------------------------------
@@ -653,8 +664,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         elif name == "evaluate_estimator":
             result = evaluate_estimator_tool(
                 arguments["estimator_handle"],
-                arguments["dataset"],
-                arguments.get("cv_folds", 3),
+                dataset=arguments.get("dataset", ""),
+                cv_folds=arguments.get("cv_folds", 3),
+                data_handle=arguments.get("data_handle"),
             )
             result = sanitize_for_json(result)
 
