@@ -64,7 +64,9 @@ jobs:
           cache: pip
 
       - name: Install dev dependencies
-        run: pip install -e ".[dev]"
+        run: |
+          pip install -e ".[dev]"
+          pip install -r docs/requirements.txt
 
       - name: Build docs
-        run: python -m mkdocs build
+        run: sphinx-build -M html docs/source docs/_build

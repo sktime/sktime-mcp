@@ -1,0 +1,959 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Complete Code Explanation: sktime-mcp &mdash; sktime-mcp 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/extra.css?v=e8756899" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.png"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Developer Guide" href="dev-guide.html" />
+    <link rel="prev" title="Architecture Diagram" href="architecture.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            sktime-mcp
+              <img src="_static/favicon.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="intro.html">sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="use-cases.html">🎯 Use Cases &amp; Personas</a></li>
+<li class="toctree-l1"><a class="reference internal" href="user-guide.html">📘 User Guide</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="usage-examples.html">Usage Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data-sources.html">Data Source Support</a></li>
+<li class="toctree-l1"><a class="reference internal" href="background-jobs.html">Background Job Management</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Development</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture Diagram</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Complete Code Explanation: sktime-mcp</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#table-of-contents">📋 Table of Contents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#project-overview">Project Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#what-problem-does-it-solve">What Problem Does It Solve?</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#architecture">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#file-by-file-breakdown">File-by-File Breakdown</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#root-level-files">📁 Root Level Files</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#readme-md"><code class="docutils literal notranslate"><span class="pre">README.md</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pyproject-toml"><code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#id1"><code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#src-sktime-mcp-core-source-code">📁 <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/</span></code> - Core Source Code</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#server-py-mcp-server-entry-point"><code class="docutils literal notranslate"><span class="pre">server.py</span></code> - MCP Server Entry Point</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#src-sktime-mcp-registry-estimator-discovery">📁 <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/registry/</span></code> - Estimator Discovery</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#interface-py-registry-interface"><code class="docutils literal notranslate"><span class="pre">interface.py</span></code> - Registry Interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tag-resolver-py-tag-resolution"><code class="docutils literal notranslate"><span class="pre">tag_resolver.py</span></code> - Tag Resolution</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#src-sktime-mcp-composition-pipeline-validation">📁 <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/composition/</span></code> - Pipeline Validation</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#validator-py-composition-validator"><code class="docutils literal notranslate"><span class="pre">validator.py</span></code> - Composition Validator</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#src-sktime-mcp-runtime-execution-engine">📁 <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/runtime/</span></code> - Execution Engine</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#handles-py-handle-manager"><code class="docutils literal notranslate"><span class="pre">handles.py</span></code> - Handle Manager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#executor-py-execution-runtime"><code class="docutils literal notranslate"><span class="pre">executor.py</span></code> - Execution Runtime</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#src-sktime-mcp-tools-mcp-tool-implementations">📁 <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/tools/</span></code> - MCP Tool Implementations</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#list-estimators-py"><code class="docutils literal notranslate"><span class="pre">list_estimators.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#describe-estimator-py"><code class="docutils literal notranslate"><span class="pre">describe_estimator.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#instantiate-py"><code class="docutils literal notranslate"><span class="pre">instantiate.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fit-predict-py"><code class="docutils literal notranslate"><span class="pre">fit_predict.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#examples-usage-examples">📁 <code class="docutils literal notranslate"><span class="pre">examples/</span></code> - Usage Examples</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#forecasting-workflow-py"><code class="docutils literal notranslate"><span class="pre">01_forecasting_workflow.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#llm-query-simulation-py"><code class="docutils literal notranslate"><span class="pre">02_llm_query_simulation.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pipeline-instantiation-py"><code class="docutils literal notranslate"><span class="pre">03_pipeline_instantiation.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#mcp-pipeline-demo-py"><code class="docutils literal notranslate"><span class="pre">04_mcp_pipeline_demo.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#docs-documentation">📁 <code class="docutils literal notranslate"><span class="pre">docs/</span></code> - Documentation</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#architecture-md"><code class="docutils literal notranslate"><span class="pre">architecture.md</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#data-sources-md"><code class="docutils literal notranslate"><span class="pre">data-sources.md</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#user-guide-md"><code class="docutils literal notranslate"><span class="pre">user-guide.md</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dev-guide-md"><code class="docutils literal notranslate"><span class="pre">dev-guide.md</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#tests-test-suite">📁 <code class="docutils literal notranslate"><span class="pre">tests/</span></code> - Test Suite</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#test-core-py"><code class="docutils literal notranslate"><span class="pre">test_core.py</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#how-it-all-works-together">How It All Works Together</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#example-llm-forecasting-workflow">Example: LLM Forecasting Workflow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#data-flow-diagram">Data Flow Diagram</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#key-concepts">Key Concepts</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#registry-first-design">1. <strong>Registry-First Design</strong></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#handle-based-references">2. <strong>Handle-Based References</strong></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#lazy-loading">3. <strong>Lazy Loading</strong></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#tag-based-discovery">4. <strong>Tag-Based Discovery</strong></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#composition-validation">5. <strong>Composition Validation</strong></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-steps-problem">6. <strong>The Steps Problem</strong></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#json-sanitization">7. <strong>JSON Sanitization</strong></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#singleton-pattern">8. <strong>Singleton Pattern</strong></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#summary">Summary</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="dev-guide.html">Developer Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">sktime-mcp</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Complete Code Explanation: sktime-mcp</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/implementation.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="complete-code-explanation-sktime-mcp">
+<h1>Complete Code Explanation: sktime-mcp<a class="headerlink" href="#complete-code-explanation-sktime-mcp" title="Link to this heading"></a></h1>
+<section id="table-of-contents">
+<h2>📋 Table of Contents<a class="headerlink" href="#table-of-contents" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p><a class="reference internal" href="#project-overview"><span class="xref myst">Project Overview</span></a></p></li>
+<li><p><a class="reference internal" href="architecture.html"><span class="doc std std-doc">Architecture</span></a></p></li>
+<li><p><a class="reference internal" href="#file-by-file-breakdown"><span class="xref myst">File-by-File Breakdown</span></a></p></li>
+<li><p><a class="reference internal" href="#how-it-all-works-together"><span class="xref myst">How It All Works Together</span></a></p></li>
+<li><p><a class="reference internal" href="#key-concepts"><span class="xref myst">Key Concepts</span></a></p></li>
+</ol>
+</section>
+<hr class="docutils" />
+<section id="project-overview">
+<h2>Project Overview<a class="headerlink" href="#project-overview" title="Link to this heading"></a></h2>
+<p><strong>sktime-mcp</strong> is a Model Context Protocol (MCP) server that exposes the <code class="docutils literal notranslate"><span class="pre">sktime</span></code> time series library to Large Language Models (LLMs). It allows LLMs to:</p>
+<ul class="simple">
+<li><p><strong>Discover</strong> time series estimators from sktime’s registry</p></li>
+<li><p><strong>Reason</strong> about their capabilities using tags</p></li>
+<li><p><strong>Compose</strong> estimators into pipelines</p></li>
+<li><p><strong>Execute</strong> real forecasting workflows on datasets</p></li>
+</ul>
+<section id="what-problem-does-it-solve">
+<h3>What Problem Does It Solve?<a class="headerlink" href="#what-problem-does-it-solve" title="Link to this heading"></a></h3>
+<p>LLMs can’t directly interact with Python libraries. This MCP server acts as a <strong>semantic bridge</strong>, translating between:</p>
+<ul class="simple">
+<li><p><strong>LLM world</strong>: JSON-RPC requests with simple arguments</p></li>
+<li><p><strong>Python world</strong>: Complex object instantiation, method calls, and data manipulation</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="architecture">
+<h2>Architecture<a class="headerlink" href="#architecture" title="Link to this heading"></a></h2>
+<p>The codebase is organized into <strong>5 main layers</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>┌─────────────────────────────────────────┐
+│         MCP Server (server.py)          │  ← Entry point, handles JSON-RPC
+├─────────────────────────────────────────┤
+│         Tools Layer (tools/)            │  ← MCP tool implementations
+├─────────────────────────────────────────┤
+│  Registry (registry/)  │  Composition   │  ← Discovery &amp; Validation
+│                        │  (composition/)│
+├─────────────────────────────────────────┤
+│         Runtime (runtime/)              │  ← Execution &amp; Handle Management
+├─────────────────────────────────────────┤
+│            sktime Library               │  ← Actual ML library
+└─────────────────────────────────────────┘
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="file-by-file-breakdown">
+<h2>File-by-File Breakdown<a class="headerlink" href="#file-by-file-breakdown" title="Link to this heading"></a></h2>
+<section id="root-level-files">
+<h3>📁 Root Level Files<a class="headerlink" href="#root-level-files" title="Link to this heading"></a></h3>
+<section id="readme-md">
+<h4><code class="docutils literal notranslate"><span class="pre">README.md</span></code><a class="headerlink" href="#readme-md" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><strong>Purpose</strong>: Project documentation and quick start guide</p></li>
+<li><p><strong>Key Sections</strong>:</p>
+<ul>
+<li><p>Installation instructions</p></li>
+<li><p>Available MCP tools overview</p></li>
+<li><p>Example LLM workflow</p></li>
+<li><p>Project structure</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="pyproject-toml">
+<h4><code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code><a class="headerlink" href="#pyproject-toml" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><strong>Purpose</strong>: Python project configuration (PEP 518)</p></li>
+<li><p><strong>Key Contents</strong>:</p>
+<ul>
+<li><p>Package metadata (name, version, description)</p></li>
+<li><p>Dependencies: <code class="docutils literal notranslate"><span class="pre">mcp</span></code>, <code class="docutils literal notranslate"><span class="pre">sktime</span></code>, <code class="docutils literal notranslate"><span class="pre">pandas</span></code>, <code class="docutils literal notranslate"><span class="pre">numpy</span></code>, <code class="docutils literal notranslate"><span class="pre">scikit-learn</span></code></p></li>
+<li><p>Optional dependencies for dev and extended features</p></li>
+<li><p>Entry point: <code class="docutils literal notranslate"><span class="pre">sktime-mcp</span></code> command → <code class="docutils literal notranslate"><span class="pre">sktime_mcp.server:main</span></code></p></li>
+<li><p>Tool configurations (black, ruff, pytest)</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="id1">
+<h4><code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code><a class="headerlink" href="#id1" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><strong>Purpose</strong>: Python project configuration (PEP 518)</p></li>
+<li><p><strong>Key Contents</strong>:</p>
+<ul>
+<li><p>Package metadata (name, version, description)</p></li>
+<li><p>Dependencies: <code class="docutils literal notranslate"><span class="pre">mcp</span></code>, <code class="docutils literal notranslate"><span class="pre">sktime</span></code>, <code class="docutils literal notranslate"><span class="pre">pandas</span></code>, <code class="docutils literal notranslate"><span class="pre">numpy</span></code>, <code class="docutils literal notranslate"><span class="pre">scikit-learn</span></code></p></li>
+<li><p>Optional dependencies for dev and extended features</p></li>
+<li><p>Entry point: <code class="docutils literal notranslate"><span class="pre">sktime-mcp</span></code> command → <code class="docutils literal notranslate"><span class="pre">sktime_mcp.server:main</span></code></p></li>
+<li><p>Tool configurations (black, ruff, pytest)</p></li>
+</ul>
+</li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="src-sktime-mcp-core-source-code">
+<h3>📁 <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/</span></code> - Core Source Code<a class="headerlink" href="#src-sktime-mcp-core-source-code" title="Link to this heading"></a></h3>
+<section id="server-py-mcp-server-entry-point">
+<h4><code class="docutils literal notranslate"><span class="pre">server.py</span></code> - MCP Server Entry Point<a class="headerlink" href="#server-py-mcp-server-entry-point" title="Link to this heading"></a></h4>
+<p><strong>Purpose</strong>: Main MCP server that handles all tool calls</p>
+<p><strong>Key Components</strong>:</p>
+<ol class="arabic simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">sanitize_for_json(obj)</span></code></strong>: Converts Python objects to JSON-serializable format</p>
+<ul class="simple">
+<li><p>Handles numpy arrays, pandas objects, special types</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">&#64;server.list_tools()</span></code></strong>: Registers all available MCP tools</p>
+<ul class="simple">
+<li><p>Returns tool schemas (name, description, input schema)</p></li>
+<li><p>Tools: <code class="docutils literal notranslate"><span class="pre">list_estimators</span></code>, <code class="docutils literal notranslate"><span class="pre">describe_estimator</span></code>, <code class="docutils literal notranslate"><span class="pre">instantiate_estimator</span></code>, <code class="docutils literal notranslate"><span class="pre">instantiate_pipeline</span></code>, <code class="docutils literal notranslate"><span class="pre">fit_predict</span></code>, <code class="docutils literal notranslate"><span class="pre">validate_pipeline</span></code>, <code class="docutils literal notranslate"><span class="pre">list_available_data</span></code>, <code class="docutils literal notranslate"><span class="pre">get_available_tags</span></code></p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">&#64;server.call_tool(name,</span> <span class="pre">arguments)</span></code></strong>: Routes tool calls to implementations</p>
+<ul class="simple">
+<li><p>Validates arguments</p></li>
+<li><p>Calls appropriate tool function</p></li>
+<li><p>Sanitizes and returns results</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">main()</span></code></strong>: Entry point that starts the MCP server</p>
+<ul class="simple">
+<li><p>Uses stdio transport (reads from stdin, writes to stdout)</p></li>
+<li><p>Compatible with Claude Desktop and other MCP clients</p></li>
+</ul>
+</li>
+</ol>
+<p><strong>Flow</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>LLM → JSON-RPC request → server.call_tool() → tool function → sanitize → JSON response → LLM
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="src-sktime-mcp-registry-estimator-discovery">
+<h3>📁 <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/registry/</span></code> - Estimator Discovery<a class="headerlink" href="#src-sktime-mcp-registry-estimator-discovery" title="Link to this heading"></a></h3>
+<section id="interface-py-registry-interface">
+<h4><code class="docutils literal notranslate"><span class="pre">interface.py</span></code> - Registry Interface<a class="headerlink" href="#interface-py-registry-interface" title="Link to this heading"></a></h4>
+<p><strong>Purpose</strong>: Wraps sktime’s <code class="docutils literal notranslate"><span class="pre">all_estimators()</span></code> function and provides structured access</p>
+<p><strong>Key Classes</strong>:</p>
+<ol class="arabic simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">EstimatorNode</span></code></strong> (dataclass)</p>
+<ul class="simple">
+<li><p>Represents a single estimator with all its metadata</p></li>
+<li><p><strong>Fields</strong>:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">name</span></code>: Class name (e.g., “ARIMA”)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">task</span></code>: Task type (e.g., “forecasting”)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">module</span></code>: Python module path</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">class_ref</span></code>: Actual Python class</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tags</span></code>: Capability tags (e.g., <code class="docutils literal notranslate"><span class="pre">{&quot;capability:pred_int&quot;:</span> <span class="pre">True}</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">hyperparameters</span></code>: Constructor parameters with defaults</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">docstring</span></code>: Class documentation</p></li>
+</ul>
+</li>
+<li><p><strong>Methods</strong>:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">to_dict()</span></code>: JSON serialization</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">to_summary()</span></code>: Minimal info for list operations</p></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">RegistryInterface</span></code></strong> (singleton)</p>
+<ul class="simple">
+<li><p><strong>Purpose</strong>: Lazy-loads and caches all sktime estimators</p></li>
+<li><p><strong>Key Methods</strong>:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">get_all_estimators(task,</span> <span class="pre">tags)</span></code>: Filter estimators by task and tags</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">get_estimator_by_name(name)</span></code>: Lookup specific estimator</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">search_estimators(query)</span></code>: Text search in names/docstrings</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">get_available_tasks()</span></code>: List all task types</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">get_available_tags()</span></code>: List all capability tags</p></li>
+</ul>
+</li>
+<li><p><strong>Internal Methods</strong>:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">_load_registry()</span></code>: Calls sktime’s <code class="docutils literal notranslate"><span class="pre">all_estimators()</span></code> for each task</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_create_node()</span></code>: Extracts metadata from estimator class</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_get_tags()</span></code>: Calls <code class="docutils literal notranslate"><span class="pre">cls.get_class_tags()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_get_hyperparameters()</span></code>: Inspects <code class="docutils literal notranslate"><span class="pre">__init__</span></code> signature</p></li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<p><strong>How It Works</strong>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># First call triggers lazy loading</span>
+<span class="n">registry</span> <span class="o">=</span> <span class="n">get_registry</span><span class="p">()</span>
+<span class="n">registry</span><span class="o">.</span><span class="n">_load_registry</span><span class="p">()</span>  <span class="c1"># Calls sktime.all_estimators(&quot;forecasting&quot;), etc.</span>
+
+<span class="c1"># Creates EstimatorNode for each estimator</span>
+<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="bp">cls</span> <span class="ow">in</span> <span class="n">estimators</span><span class="p">:</span>
+    <span class="n">node</span> <span class="o">=</span> <span class="n">EstimatorNode</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+        <span class="n">task</span><span class="o">=</span><span class="s2">&quot;forecasting&quot;</span><span class="p">,</span>
+        <span class="n">class_ref</span><span class="o">=</span><span class="bp">cls</span><span class="p">,</span>
+        <span class="n">tags</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="n">get_class_tags</span><span class="p">(),</span>
+        <span class="n">hyperparameters</span><span class="o">=</span><span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="fm">__init__</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="tag-resolver-py-tag-resolution">
+<h4><code class="docutils literal notranslate"><span class="pre">tag_resolver.py</span></code> - Tag Resolution<a class="headerlink" href="#tag-resolver-py-tag-resolution" title="Link to this heading"></a></h4>
+<p><strong>Purpose</strong>: Handles tag-based filtering and compatibility checking</p>
+<p><strong>Key Functions</strong>:</p>
+<ul class="simple">
+<li><p>Resolves tag queries (e.g., <code class="docutils literal notranslate"><span class="pre">{&quot;capability:pred_int&quot;:</span> <span class="pre">True}</span></code>)</p></li>
+<li><p>Checks if estimator tags match requirements</p></li>
+<li><p>Used by registry filtering and composition validation</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="src-sktime-mcp-composition-pipeline-validation">
+<h3>📁 <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/composition/</span></code> - Pipeline Validation<a class="headerlink" href="#src-sktime-mcp-composition-pipeline-validation" title="Link to this heading"></a></h3>
+<section id="validator-py-composition-validator">
+<h4><code class="docutils literal notranslate"><span class="pre">validator.py</span></code> - Composition Validator<a class="headerlink" href="#validator-py-composition-validator" title="Link to this heading"></a></h4>
+<p><strong>Purpose</strong>: Validates that estimator compositions are valid before instantiation</p>
+<p><strong>Key Classes</strong>:</p>
+<ol class="arabic simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">CompositionType</span></code></strong> (Enum)</p>
+<ul class="simple">
+<li><p>Types of compositions: PIPELINE, TRANSFORMER_PIPELINE, FORECASTING_PIPELINE, MULTIPLEXER, ENSEMBLE, REDUCTION</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">CompositionRule</span></code></strong> (dataclass)</p>
+<ul class="simple">
+<li><p>Defines valid composition patterns</p></li>
+<li><p>Example: Transformers can precede forecasters</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">ValidationResult</span></code></strong> (dataclass)</p>
+<ul class="simple">
+<li><p><strong>Fields</strong>: <code class="docutils literal notranslate"><span class="pre">valid</span></code>, <code class="docutils literal notranslate"><span class="pre">errors</span></code>, <code class="docutils literal notranslate"><span class="pre">warnings</span></code>, <code class="docutils literal notranslate"><span class="pre">suggestions</span></code></p></li>
+<li><p><strong>Method</strong>: <code class="docutils literal notranslate"><span class="pre">to_dict()</span></code> for JSON serialization</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">CompositionValidator</span></code></strong> (singleton)</p>
+<ul class="simple">
+<li><p><strong>Key Methods</strong>:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">validate_pipeline(components)</span></code>: Check if pipeline is valid</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_check_pair_compatibility(first,</span> <span class="pre">second)</span></code>: Validate two estimators can be composed</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_check_tag_compatibility(first,</span> <span class="pre">second)</span></code>: Check tag requirements</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">get_valid_compositions(estimator_name)</span></code>: What can precede/follow this estimator</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">suggest_pipeline(task,</span> <span class="pre">requirements)</span></code>: Suggest a valid pipeline</p></li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<p><strong>Validation Rules</strong>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Valid: Transformer → Forecaster</span>
+<span class="p">[</span><span class="s2">&quot;Detrender&quot;</span><span class="p">,</span> <span class="s2">&quot;ARIMA&quot;</span><span class="p">]</span>  <span class="err">✅</span>
+
+<span class="c1"># Invalid: Forecaster → Forecaster</span>
+<span class="p">[</span><span class="s2">&quot;ARIMA&quot;</span><span class="p">,</span> <span class="s2">&quot;NaiveForecaster&quot;</span><span class="p">]</span>  <span class="err">❌</span>
+
+<span class="c1"># Valid: Multiple Transformers → Forecaster</span>
+<span class="p">[</span><span class="s2">&quot;ConditionalDeseasonalizer&quot;</span><span class="p">,</span> <span class="s2">&quot;Detrender&quot;</span><span class="p">,</span> <span class="s2">&quot;ARIMA&quot;</span><span class="p">]</span>  <span class="err">✅</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="src-sktime-mcp-runtime-execution-engine">
+<h3>📁 <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/runtime/</span></code> - Execution Engine<a class="headerlink" href="#src-sktime-mcp-runtime-execution-engine" title="Link to this heading"></a></h3>
+<section id="handles-py-handle-manager">
+<h4><code class="docutils literal notranslate"><span class="pre">handles.py</span></code> - Handle Manager<a class="headerlink" href="#handles-py-handle-manager" title="Link to this heading"></a></h4>
+<p><strong>Purpose</strong>: Manages references to instantiated estimator objects</p>
+<p><strong>Why Needed?</strong>:</p>
+<ul class="simple">
+<li><p>LLMs can’t hold Python object references</p></li>
+<li><p>Solution: Create string handles (e.g., <code class="docutils literal notranslate"><span class="pre">&quot;est_abc123&quot;</span></code>) that map to objects</p></li>
+</ul>
+<p><strong>Key Classes</strong>:</p>
+<ol class="arabic simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">HandleInfo</span></code></strong> (dataclass)</p>
+<ul class="simple">
+<li><p>Stores metadata about a handle</p></li>
+<li><p><strong>Fields</strong>: <code class="docutils literal notranslate"><span class="pre">handle_id</span></code>, <code class="docutils literal notranslate"><span class="pre">estimator_name</span></code>, <code class="docutils literal notranslate"><span class="pre">instance</span></code>, <code class="docutils literal notranslate"><span class="pre">params</span></code>, <code class="docutils literal notranslate"><span class="pre">created_at</span></code>, <code class="docutils literal notranslate"><span class="pre">fitted</span></code>, <code class="docutils literal notranslate"><span class="pre">metadata</span></code></p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">HandleManager</span></code></strong> (singleton)</p>
+<ul class="simple">
+<li><p><strong>Key Methods</strong>:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">create_handle(estimator_name,</span> <span class="pre">instance,</span> <span class="pre">params)</span></code>: Create new handle → returns <code class="docutils literal notranslate"><span class="pre">&quot;est_xyz&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">get_instance(handle_id)</span></code>: Retrieve actual Python object</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">get_info(handle_id)</span></code>: Get handle metadata</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mark_fitted(handle_id)</span></code>: Mark estimator as fitted</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">is_fitted(handle_id)</span></code>: Check if fitted</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">release_handle(handle_id)</span></code>: Free memory</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">list_handles()</span></code>: List all active handles</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_cleanup_oldest()</span></code>: Auto-cleanup when max_handles reached</p></li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<p><strong>Flow</strong>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Instantiation</span>
+<span class="n">instance</span> <span class="o">=</span> <span class="n">ARIMA</span><span class="p">(</span><span class="n">order</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">])</span>
+<span class="n">handle</span> <span class="o">=</span> <span class="n">manager</span><span class="o">.</span><span class="n">create_handle</span><span class="p">(</span><span class="s2">&quot;ARIMA&quot;</span><span class="p">,</span> <span class="n">instance</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;order&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">]})</span>
+<span class="c1"># Returns: &quot;est_a1b2c3d4e5f6&quot;</span>
+
+<span class="c1"># Later retrieval</span>
+<span class="n">instance</span> <span class="o">=</span> <span class="n">manager</span><span class="o">.</span><span class="n">get_instance</span><span class="p">(</span><span class="s2">&quot;est_a1b2c3d4e5f6&quot;</span><span class="p">)</span>
+<span class="n">instance</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="executor-py-execution-runtime">
+<h4><code class="docutils literal notranslate"><span class="pre">executor.py</span></code> - Execution Runtime<a class="headerlink" href="#executor-py-execution-runtime" title="Link to this heading"></a></h4>
+<p><strong>Purpose</strong>: Orchestrates estimator instantiation, data loading, fitting, and prediction</p>
+<p><strong>Key Class</strong>: <code class="docutils literal notranslate"><span class="pre">Executor</span></code> (singleton)</p>
+<p><strong>Key Methods</strong>:</p>
+<ol class="arabic simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">instantiate(estimator_name,</span> <span class="pre">params)</span></code></strong></p>
+<ul class="simple">
+<li><p>Looks up estimator in registry</p></li>
+<li><p>Instantiates with parameters</p></li>
+<li><p>Creates handle</p></li>
+<li><p>Returns: <code class="docutils literal notranslate"><span class="pre">{&quot;success&quot;:</span> <span class="pre">True,</span> <span class="pre">&quot;handle&quot;:</span> <span class="pre">&quot;est_xyz&quot;,</span> <span class="pre">...}</span></code></p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">load_dataset(name)</span></code></strong></p>
+<ul class="simple">
+<li><p>Loads demo datasets (airline, sunspots, etc.)</p></li>
+<li><p>Uses sktime’s dataset loaders</p></li>
+<li><p>Returns: pandas Series/DataFrame</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">fit(handle_id,</span> <span class="pre">y,</span> <span class="pre">X,</span> <span class="pre">fh)</span></code></strong></p>
+<ul class="simple">
+<li><p>Retrieves instance from handle</p></li>
+<li><p>Calls <code class="docutils literal notranslate"><span class="pre">instance.fit(y,</span> <span class="pre">X=X,</span> <span class="pre">fh=fh)</span></code></p></li>
+<li><p>Marks handle as fitted</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">predict(handle_id,</span> <span class="pre">fh,</span> <span class="pre">X)</span></code></strong></p>
+<ul class="simple">
+<li><p>Retrieves fitted instance</p></li>
+<li><p>Calls <code class="docutils literal notranslate"><span class="pre">instance.predict(fh=fh,</span> <span class="pre">X=X)</span></code></p></li>
+<li><p>Returns predictions</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">fit_predict(handle_id,</span> <span class="pre">dataset,</span> <span class="pre">horizon)</span></code></strong></p>
+<ul class="simple">
+<li><p>Convenience method: load → fit → predict</p></li>
+<li><p>Returns: <code class="docutils literal notranslate"><span class="pre">{&quot;success&quot;:</span> <span class="pre">True,</span> <span class="pre">&quot;predictions&quot;:</span> <span class="pre">{...},</span> <span class="pre">&quot;horizon&quot;:</span> <span class="pre">12}</span></code></p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">instantiate_pipeline(components,</span> <span class="pre">params_list)</span></code></strong> ⭐ <strong>Most Complex</strong></p>
+<ul class="simple">
+<li><p><strong>Purpose</strong>: Create complete pipelines from component names</p></li>
+<li><p><strong>Steps</strong>:</p>
+<ol class="arabic simple">
+<li><p>Validate pipeline composition</p></li>
+<li><p>Instantiate each component</p></li>
+<li><p>Build <code class="docutils literal notranslate"><span class="pre">steps</span></code> argument: <code class="docutils literal notranslate"><span class="pre">[(&quot;name1&quot;,</span> <span class="pre">instance1),</span> <span class="pre">(&quot;name2&quot;,</span> <span class="pre">instance2)]</span></code></p></li>
+<li><p>Determine pipeline type (TransformedTargetForecaster, Pipeline, etc.)</p></li>
+<li><p>Instantiate pipeline with steps</p></li>
+<li><p>Create handle</p></li>
+</ol>
+</li>
+<li><p><strong>Why Complex</strong>: Handles the “steps problem” - LLMs can’t pass Python objects, so we build them server-side</p></li>
+</ul>
+</li>
+</ol>
+<p><strong>Example Flow</strong>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># LLM sends:</span>
+<span class="p">{</span><span class="s2">&quot;components&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;Detrender&quot;</span><span class="p">,</span> <span class="s2">&quot;ARIMA&quot;</span><span class="p">],</span> <span class="s2">&quot;params_list&quot;</span><span class="p">:</span> <span class="p">[{},</span> <span class="p">{</span><span class="s2">&quot;order&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">]}]}</span>
+
+<span class="c1"># Executor does:</span>
+<span class="n">detrender</span> <span class="o">=</span> <span class="n">Detrender</span><span class="p">()</span>
+<span class="n">arima</span> <span class="o">=</span> <span class="n">ARIMA</span><span class="p">(</span><span class="n">order</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">])</span>
+<span class="n">steps</span> <span class="o">=</span> <span class="p">[(</span><span class="s2">&quot;transformer&quot;</span><span class="p">,</span> <span class="n">detrender</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;forecaster&quot;</span><span class="p">,</span> <span class="n">arima</span><span class="p">)]</span>
+<span class="n">pipeline</span> <span class="o">=</span> <span class="n">TransformedTargetForecaster</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="n">steps</span><span class="p">)</span>
+<span class="n">handle</span> <span class="o">=</span> <span class="n">handle_manager</span><span class="o">.</span><span class="n">create_handle</span><span class="p">(</span><span class="s2">&quot;Pipeline&quot;</span><span class="p">,</span> <span class="n">pipeline</span><span class="p">)</span>
+
+<span class="c1"># Returns to LLM:</span>
+<span class="p">{</span><span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">&quot;handle&quot;</span><span class="p">:</span> <span class="s2">&quot;est_xyz&quot;</span><span class="p">,</span> <span class="s2">&quot;pipeline&quot;</span><span class="p">:</span> <span class="s2">&quot;Detrender → ARIMA&quot;</span><span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="src-sktime-mcp-tools-mcp-tool-implementations">
+<h3>📁 <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/tools/</span></code> - MCP Tool Implementations<a class="headerlink" href="#src-sktime-mcp-tools-mcp-tool-implementations" title="Link to this heading"></a></h3>
+<p>Each file implements one or more MCP tools that LLMs can call.</p>
+<section id="list-estimators-py">
+<h4><code class="docutils literal notranslate"><span class="pre">list_estimators.py</span></code><a class="headerlink" href="#list-estimators-py" title="Link to this heading"></a></h4>
+<p><strong>Tools</strong>:</p>
+<ol class="arabic simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">list_estimators_tool(task,</span> <span class="pre">tags,</span> <span class="pre">limit)</span></code></strong></p>
+<ul class="simple">
+<li><p>Calls <code class="docutils literal notranslate"><span class="pre">registry.get_all_estimators(task,</span> <span class="pre">tags)</span></code></p></li>
+<li><p>Returns: <code class="docutils literal notranslate"><span class="pre">{&quot;success&quot;:</span> <span class="pre">True,</span> <span class="pre">&quot;estimators&quot;:</span> <span class="pre">[...],</span> <span class="pre">&quot;total&quot;:</span> <span class="pre">50}</span></code></p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">search_estimators_tool(query,</span> <span class="pre">limit)</span></code></strong></p>
+<ul class="simple">
+<li><p>Calls <code class="docutils literal notranslate"><span class="pre">registry.search_estimators(query)</span></code></p></li>
+<li><p>Text search in estimator names/docstrings</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">get_available_tags()</span></code></strong></p>
+<ul class="simple">
+<li><p>Returns all capability tags</p></li>
+<li><p>Example: <code class="docutils literal notranslate"><span class="pre">[&quot;capability:pred_int&quot;,</span> <span class="pre">&quot;handles-missing-data&quot;,</span> <span class="pre">...]</span></code></p></li>
+</ul>
+</li>
+</ol>
+</section>
+<section id="describe-estimator-py">
+<h4><code class="docutils literal notranslate"><span class="pre">describe_estimator.py</span></code><a class="headerlink" href="#describe-estimator-py" title="Link to this heading"></a></h4>
+<p><strong>Tool</strong>: <code class="docutils literal notranslate"><span class="pre">describe_estimator_tool(estimator)</span></code></p>
+<ul class="simple">
+<li><p>Looks up estimator in registry</p></li>
+<li><p>Returns full EstimatorNode details</p></li>
+<li><p>Includes: name, task, module, tags, hyperparameters, docstring</p></li>
+</ul>
+</section>
+<section id="instantiate-py">
+<h4><code class="docutils literal notranslate"><span class="pre">instantiate.py</span></code><a class="headerlink" href="#instantiate-py" title="Link to this heading"></a></h4>
+<p><strong>Tools</strong>:</p>
+<ol class="arabic simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">instantiate_estimator_tool(estimator,</span> <span class="pre">params)</span></code></strong></p>
+<ul class="simple">
+<li><p>Calls <code class="docutils literal notranslate"><span class="pre">executor.instantiate(estimator,</span> <span class="pre">params)</span></code></p></li>
+<li><p>Returns handle</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">instantiate_pipeline_tool(components,</span> <span class="pre">params_list)</span></code></strong> ⭐</p>
+<ul class="simple">
+<li><p>Calls <code class="docutils literal notranslate"><span class="pre">executor.instantiate_pipeline(components,</span> <span class="pre">params_list)</span></code></p></li>
+<li><p>Solves the “steps problem”</p></li>
+<li><p>Returns single handle for entire pipeline</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">release_handle_tool(handle)</span></code></strong></p>
+<ul class="simple">
+<li><p>Frees memory for a handle</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">list_handles_tool()</span></code></strong></p>
+<ul class="simple">
+<li><p>Lists all active handles</p></li>
+</ul>
+</li>
+</ol>
+</section>
+<section id="fit-predict-py">
+<h4><code class="docutils literal notranslate"><span class="pre">fit_predict.py</span></code><a class="headerlink" href="#fit-predict-py" title="Link to this heading"></a></h4>
+<p><strong>Tools</strong>:</p>
+<ol class="arabic simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">fit_predict_tool(estimator_handle,</span> <span class="pre">dataset,</span> <span class="pre">horizon)</span></code></strong></p>
+<ul class="simple">
+<li><p>Calls <code class="docutils literal notranslate"><span class="pre">executor.fit_predict(handle,</span> <span class="pre">dataset,</span> <span class="pre">horizon)</span></code></p></li>
+<li><p>Complete workflow in one call</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">list_available_data_tool(is_demo)</span></code></strong></p>
+<ul class="simple">
+<li><p>Returns available demo datasets and/or active user data handles</p></li>
+</ul>
+</li>
+</ol>
+</section>
+</section>
+<hr class="docutils" />
+<section id="examples-usage-examples">
+<h3>📁 <code class="docutils literal notranslate"><span class="pre">examples/</span></code> - Usage Examples<a class="headerlink" href="#examples-usage-examples" title="Link to this heading"></a></h3>
+<section id="forecasting-workflow-py">
+<h4><code class="docutils literal notranslate"><span class="pre">01_forecasting_workflow.py</span></code><a class="headerlink" href="#forecasting-workflow-py" title="Link to this heading"></a></h4>
+<p><strong>Purpose</strong>: Demonstrates all MCP capabilities end-to-end</p>
+<p><strong>Steps</strong>:</p>
+<ol class="arabic simple">
+<li><p>List datasets</p></li>
+<li><p>Discover forecasting estimators</p></li>
+<li><p>Filter by tags (probabilistic forecasters)</p></li>
+<li><p>Describe an estimator</p></li>
+<li><p>Validate pipeline compositions</p></li>
+<li><p>Instantiate estimator</p></li>
+<li><p>Fit and predict</p></li>
+<li><p>List active handles</p></li>
+<li><p>Show available tags</p></li>
+</ol>
+<p><strong>Run</strong>: <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">examples/01_forecasting_workflow.py</span></code></p>
+</section>
+<section id="llm-query-simulation-py">
+<h4><code class="docutils literal notranslate"><span class="pre">02_llm_query_simulation.py</span></code><a class="headerlink" href="#llm-query-simulation-py" title="Link to this heading"></a></h4>
+<p><strong>Purpose</strong>: Simulates how an LLM would interact with the MCP</p>
+<p><strong>Scenario</strong>: User asks “Forecast airline passengers with a probabilistic model”</p>
+<p><strong>LLM Steps</strong>:</p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">list_estimators(task=&quot;forecasting&quot;,</span> <span class="pre">tags={&quot;capability:pred_int&quot;:</span> <span class="pre">True})</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">describe_estimator(&quot;ARIMA&quot;)</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">instantiate_estimator(&quot;ARIMA&quot;,</span> <span class="pre">{&quot;order&quot;:</span> <span class="pre">[1,1,1]})</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fit_predict(handle,</span> <span class="pre">&quot;airline&quot;,</span> <span class="pre">12)</span></code></p></li>
+</ol>
+</section>
+<section id="pipeline-instantiation-py">
+<h4><code class="docutils literal notranslate"><span class="pre">03_pipeline_instantiation.py</span></code><a class="headerlink" href="#pipeline-instantiation-py" title="Link to this heading"></a></h4>
+<p><strong>Purpose</strong>: Demonstrates pipeline creation</p>
+<p><strong>Examples</strong>:</p>
+<ol class="arabic simple">
+<li><p>Simple 2-component pipeline</p></li>
+<li><p>Complex 3-component pipeline (deseasonalize → detrend → forecast)</p></li>
+<li><p>Pipeline with custom parameters</p></li>
+<li><p>Invalid pipeline (shows validation errors)</p></li>
+</ol>
+</section>
+<section id="mcp-pipeline-demo-py">
+<h4><code class="docutils literal notranslate"><span class="pre">04_mcp_pipeline_demo.py</span></code><a class="headerlink" href="#mcp-pipeline-demo-py" title="Link to this heading"></a></h4>
+<p><strong>Purpose</strong>: End-to-end pipeline workflow</p>
+<p><strong>Steps</strong>:</p>
+<ol class="arabic simple">
+<li><p>Validate pipeline</p></li>
+<li><p>Instantiate pipeline → get handle</p></li>
+<li><p>Fit and predict → get forecasts</p></li>
+</ol>
+</section>
+</section>
+<hr class="docutils" />
+<section id="docs-documentation">
+<h3>📁 <code class="docutils literal notranslate"><span class="pre">docs/</span></code> - Documentation<a class="headerlink" href="#docs-documentation" title="Link to this heading"></a></h3>
+<section id="architecture-md">
+<h4><code class="docutils literal notranslate"><span class="pre">architecture.md</span></code><a class="headerlink" href="#architecture-md" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><strong>Purpose</strong>: High-level block diagrams explaining the data flow and adapter registry.</p></li>
+</ul>
+</section>
+<section id="data-sources-md">
+<h4><code class="docutils literal notranslate"><span class="pre">data-sources.md</span></code><a class="headerlink" href="#data-sources-md" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><strong>Purpose</strong>: Detailed guide on loading data from Pandas, SQL, and various file formats.</p></li>
+</ul>
+</section>
+<section id="user-guide-md">
+<h4><code class="docutils literal notranslate"><span class="pre">user-guide.md</span></code><a class="headerlink" href="#user-guide-md" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><strong>Purpose</strong>: Information for end-users on how to use the MCP tools.</p></li>
+</ul>
+</section>
+<section id="dev-guide-md">
+<h4><code class="docutils literal notranslate"><span class="pre">dev-guide.md</span></code><a class="headerlink" href="#dev-guide-md" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><strong>Purpose</strong>: Guidelines for contributors on extending the server or adding new adapters.</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="tests-test-suite">
+<h3>📁 <code class="docutils literal notranslate"><span class="pre">tests/</span></code> - Test Suite<a class="headerlink" href="#tests-test-suite" title="Link to this heading"></a></h3>
+<section id="test-core-py">
+<h4><code class="docutils literal notranslate"><span class="pre">test_core.py</span></code><a class="headerlink" href="#test-core-py" title="Link to this heading"></a></h4>
+<p><strong>Purpose</strong>: Unit tests for core functionality</p>
+<p><strong>Test Classes</strong>:</p>
+<ol class="arabic simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">TestRegistryInterface</span></code></strong></p>
+<ul class="simple">
+<li><p>Tests registry loading, filtering, lookup</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">TestHandleManager</span></code></strong></p>
+<ul class="simple">
+<li><p>Tests handle creation, retrieval, fitting, release</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">TestCompositionValidator</span></code></strong></p>
+<ul class="simple">
+<li><p>Tests pipeline validation logic</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">TestTools</span></code></strong></p>
+<ul class="simple">
+<li><p>Tests MCP tool functions</p></li>
+</ul>
+</li>
+</ol>
+<p><strong>Run</strong>: <code class="docutils literal notranslate"><span class="pre">pytest</span> <span class="pre">tests/</span></code></p>
+</section>
+</section>
+</section>
+<hr class="docutils" />
+<section id="how-it-all-works-together">
+<h2>How It All Works Together<a class="headerlink" href="#how-it-all-works-together" title="Link to this heading"></a></h2>
+<section id="example-llm-forecasting-workflow">
+<h3>Example: LLM Forecasting Workflow<a class="headerlink" href="#example-llm-forecasting-workflow" title="Link to this heading"></a></h3>
+<p><strong>User Prompt</strong>: “Forecast airline passengers using ARIMA”</p>
+<p><strong>Step 1: Discovery</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>LLM → list_estimators(task=&quot;forecasting&quot;)
+     → server.call_tool(&quot;list_estimators&quot;, {&quot;task&quot;: &quot;forecasting&quot;})
+     → list_estimators_tool(task=&quot;forecasting&quot;)
+     → registry.get_all_estimators(task=&quot;forecasting&quot;)
+     → Returns: [{&quot;name&quot;: &quot;ARIMA&quot;, ...}, {&quot;name&quot;: &quot;NaiveForecaster&quot;, ...}, ...]
+</pre></div>
+</div>
+<p><strong>Step 2: Description</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>LLM → describe_estimator(&quot;ARIMA&quot;)
+     → describe_estimator_tool(&quot;ARIMA&quot;)
+     → registry.get_estimator_by_name(&quot;ARIMA&quot;)
+     → Returns: {&quot;name&quot;: &quot;ARIMA&quot;, &quot;hyperparameters&quot;: {&quot;order&quot;: ...}, ...}
+</pre></div>
+</div>
+<p><strong>Step 3: Instantiation</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>LLM → instantiate_estimator(&quot;ARIMA&quot;, {&quot;order&quot;: [1,1,1]})
+     → instantiate_estimator_tool(&quot;ARIMA&quot;, {&quot;order&quot;: [1,1,1]})
+     → executor.instantiate(&quot;ARIMA&quot;, {&quot;order&quot;: [1,1,1]})
+     → ARIMA_class = registry.get_estimator_by_name(&quot;ARIMA&quot;).class_ref
+     → instance = ARIMA_class(order=[1,1,1])
+     → handle = handle_manager.create_handle(&quot;ARIMA&quot;, instance)
+     → Returns: {&quot;success&quot;: True, &quot;handle&quot;: &quot;est_abc123&quot;}
+</pre></div>
+</div>
+<p><strong>Step 4: Execution</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>LLM → fit_predict(&quot;est_abc123&quot;, &quot;airline&quot;, 12)
+     → fit_predict_tool(&quot;est_abc123&quot;, &quot;airline&quot;, 12)
+     → executor.fit_predict(&quot;est_abc123&quot;, &quot;airline&quot;, 12)
+     → y = executor.load_dataset(&quot;airline&quot;)
+     → instance = handle_manager.get_instance(&quot;est_abc123&quot;)
+     → instance.fit(y)
+     → predictions = instance.predict(fh=[1,2,...,12])
+     → Returns: {&quot;success&quot;: True, &quot;predictions&quot;: {...}, &quot;horizon&quot;: 12}
+</pre></div>
+</div>
+</section>
+<section id="data-flow-diagram">
+<h3>Data Flow Diagram<a class="headerlink" href="#data-flow-diagram" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>┌─────────┐
+│   LLM   │
+└────┬────┘
+     │ JSON-RPC request
+     ▼
+┌─────────────────┐
+│  MCP Server     │ ← server.py
+│  (stdio)        │
+└────┬────────────┘
+     │ Route to tool
+     ▼
+┌─────────────────┐
+│  Tool Function  │ ← tools/*.py
+└────┬────────────┘
+     │ Call business logic
+     ▼
+┌──────────────────────────────────┐
+│  Registry / Executor / Validator │ ← registry/, runtime/, composition/
+└────┬─────────────────────────────┘
+     │ Interact with sktime
+     ▼
+┌─────────────────┐
+│  sktime Library │
+└─────────────────┘
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="key-concepts">
+<h2>Key Concepts<a class="headerlink" href="#key-concepts" title="Link to this heading"></a></h2>
+<section id="registry-first-design">
+<h3>1. <strong>Registry-First Design</strong><a class="headerlink" href="#registry-first-design" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Don’t parse code or docs</p></li>
+<li><p>Use sktime’s <code class="docutils literal notranslate"><span class="pre">all_estimators()</span></code> as source of truth</p></li>
+<li><p>Extract metadata from classes directly</p></li>
+</ul>
+</section>
+<section id="handle-based-references">
+<h3>2. <strong>Handle-Based References</strong><a class="headerlink" href="#handle-based-references" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>LLMs can’t hold Python objects</p></li>
+<li><p>Solution: String handles (<code class="docutils literal notranslate"><span class="pre">&quot;est_abc123&quot;</span></code>) map to objects</p></li>
+<li><p>Handle manager maintains the mapping</p></li>
+</ul>
+</section>
+<section id="lazy-loading">
+<h3>3. <strong>Lazy Loading</strong><a class="headerlink" href="#lazy-loading" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Registry loads on first access</p></li>
+<li><p>Singleton pattern ensures one instance</p></li>
+<li><p>Caches all estimators for fast lookups</p></li>
+</ul>
+</section>
+<section id="tag-based-discovery">
+<h3>4. <strong>Tag-Based Discovery</strong><a class="headerlink" href="#tag-based-discovery" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Estimators have capability tags</p></li>
+<li><p>LLMs can filter by requirements</p></li>
+<li><p>Example: <code class="docutils literal notranslate"><span class="pre">{&quot;capability:pred_int&quot;:</span> <span class="pre">True}</span></code> finds probabilistic forecasters</p></li>
+</ul>
+</section>
+<section id="composition-validation">
+<h3>5. <strong>Composition Validation</strong><a class="headerlink" href="#composition-validation" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Check pipeline validity before instantiation</p></li>
+<li><p>Prevents runtime errors</p></li>
+<li><p>Provides helpful error messages</p></li>
+</ul>
+</section>
+<section id="the-steps-problem">
+<h3>6. <strong>The Steps Problem</strong><a class="headerlink" href="#the-steps-problem" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Problem</strong>: Pipelines need <code class="docutils literal notranslate"><span class="pre">steps=[(&quot;name&quot;,</span> <span class="pre">instance),</span> <span class="pre">...]</span></code></p></li>
+<li><p><strong>Solution</strong>: LLM sends component names, server builds instances</p></li>
+<li><p><strong>Benefit</strong>: LLM uses simple JSON, server handles complexity</p></li>
+</ul>
+</section>
+<section id="json-sanitization">
+<h3>7. <strong>JSON Sanitization</strong><a class="headerlink" href="#json-sanitization" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Convert numpy/pandas to JSON-serializable types</p></li>
+<li><p>Handle special values (NaN, Infinity)</p></li>
+<li><p>Ensure all responses are valid JSON</p></li>
+</ul>
+</section>
+<section id="singleton-pattern">
+<h3>8. <strong>Singleton Pattern</strong><a class="headerlink" href="#singleton-pattern" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Registry, Executor, HandleManager, Validator are singletons</p></li>
+<li><p>Ensures shared state across tool calls</p></li>
+<li><p>Efficient memory usage</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="summary">
+<h2>Summary<a class="headerlink" href="#summary" title="Link to this heading"></a></h2>
+<p><strong>sktime-mcp</strong> is a well-architected MCP server that:</p>
+<ol class="arabic simple">
+<li><p><strong>Exposes</strong> sktime’s 200+ estimators to LLMs</p></li>
+<li><p><strong>Validates</strong> compositions before execution</p></li>
+<li><p><strong>Manages</strong> object lifecycles via handles</p></li>
+<li><p><strong>Executes</strong> real ML workflows on real data</p></li>
+<li><p><strong>Translates</strong> between JSON (LLM) and Python (sktime)</p></li>
+</ol>
+<p><strong>Key Innovation</strong>: The <code class="docutils literal notranslate"><span class="pre">instantiate_pipeline</span></code> tool solves the “steps problem”, enabling LLMs to create complex pipelines with a single JSON-RPC call.</p>
+<p><strong>Architecture Highlights</strong>:</p>
+<ul class="simple">
+<li><p>Clean separation of concerns (registry, composition, runtime, tools)</p></li>
+<li><p>Singleton pattern for shared state</p></li>
+<li><p>Handle-based object management</p></li>
+<li><p>Comprehensive validation before execution</p></li>
+<li><p>JSON-first API design</p></li>
+</ul>
+<p>This enables LLMs to perform sophisticated time series forecasting workflows without writing any Python code! 🚀</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="architecture.html" class="btn btn-neutral float-left" title="Architecture Diagram" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="dev-guide.html" class="btn btn-neutral float-right" title="Developer Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, sktime-mcp contributors.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

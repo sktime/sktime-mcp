@@ -23,10 +23,7 @@ from sktime_mcp.tools.data_tools import (
     load_data_source_tool,
     release_data_handle_tool,
 )
-from sktime_mcp.tools.describe_estimator import (
-    describe_estimator_tool,
-    search_estimators_tool,
-)
+from sktime_mcp.tools.describe_estimator import describe_estimator_tool
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,

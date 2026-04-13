@@ -1,0 +1,1703 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>sktime-mcp: Comprehensive System Architecture &amp; Review &mdash; sktime-mcp 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/extra.css?v=e8756899" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.png"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            sktime-mcp
+              <img src="_static/favicon.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="intro.html">sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="use-cases.html">🎯 Use Cases &amp; Personas</a></li>
+<li class="toctree-l1"><a class="reference internal" href="user-guide.html">📘 User Guide</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="usage-examples.html">Usage Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data-sources.html">Data Source Support</a></li>
+<li class="toctree-l1"><a class="reference internal" href="background-jobs.html">Background Job Management</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Development</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture Diagram</a></li>
+<li class="toctree-l1"><a class="reference internal" href="implementation.html">Complete Code Explanation: sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dev-guide.html">Developer Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">sktime-mcp</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">sktime-mcp: Comprehensive System Architecture &amp; Review</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/SYSTEM_ARCHITECTURE.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="sktime-mcp-comprehensive-system-architecture-review">
+<h1>sktime-mcp: Comprehensive System Architecture &amp; Review<a class="headerlink" href="#sktime-mcp-comprehensive-system-architecture-review" title="Link to this heading"></a></h1>
+<blockquote>
+<div><p><strong>Revision date:</strong> April 2026
+<strong>Scope:</strong> Full codebase review covering architecture, tool inventory, testing strategy, documentation quality, performance, and improvement roadmap.</p>
+</div></blockquote>
+<hr class="docutils" />
+<section id="table-of-contents">
+<h2>Table of Contents<a class="headerlink" href="#table-of-contents" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p><a class="reference internal" href="#1-high-level-architecture"><span class="xref myst">High-Level Architecture</span></a></p></li>
+<li><p><a class="reference internal" href="#2-repository-layout"><span class="xref myst">Repository Layout</span></a></p></li>
+<li><p><a class="reference internal" href="#3-layer-by-layer-deep-dive"><span class="xref myst">Layer-by-Layer Deep Dive</span></a></p>
+<ul class="simple">
+<li><p>3.1 <a class="reference internal" href="#31-mcp-server-entry-point"><span class="xref myst">MCP Server (Entry Point)</span></a></p></li>
+<li><p>3.2 <a class="reference internal" href="#32-tool-layer"><span class="xref myst">Tool Layer</span></a></p></li>
+<li><p>3.3 <a class="reference internal" href="#33-registry-layer"><span class="xref myst">Registry Layer</span></a></p></li>
+<li><p>3.4 <a class="reference internal" href="#34-runtime-layer"><span class="xref myst">Runtime Layer</span></a></p></li>
+<li><p>3.5 <a class="reference internal" href="#35-data-layer"><span class="xref myst">Data Layer</span></a></p></li>
+<li><p>3.6 <a class="reference internal" href="#36-composition-layer"><span class="xref myst">Composition Layer</span></a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#4-complete-tool-inventory"><span class="xref myst">Complete Tool Inventory</span></a></p></li>
+<li><p><a class="reference internal" href="#5-data-flow-diagrams"><span class="xref myst">Data Flow Diagrams</span></a></p></li>
+<li><p><a class="reference internal" href="#6-tool-combination-strategies"><span class="xref myst">Tool Combination Strategies</span></a></p></li>
+<li><p><a class="reference internal" href="#7-current-test-coverage--testing-strategy"><span class="xref myst">Current Test Coverage &amp; Testing Strategy</span></a></p></li>
+<li><p><a class="reference internal" href="#8-documentation-review"><span class="xref myst">Documentation Review</span></a></p></li>
+<li><p><a class="reference internal" href="#9-bugs--issues-found"><span class="xref myst">Bugs &amp; Issues Found</span></a></p></li>
+<li><p><a class="reference internal" href="#10-performance-analysis--improvements"><span class="xref myst">Performance Analysis &amp; Improvements</span></a></p></li>
+<li><p><a class="reference internal" href="#11-improvement-roadmap"><span class="xref myst">Improvement Roadmap</span></a></p></li>
+<li><p><a class="reference internal" href="#appendix-file-by-file-reference"><span class="xref myst">Appendix: File-by-File Reference</span></a></p></li>
+</ol>
+</section>
+<hr class="docutils" />
+<section id="high-level-architecture">
+<h2>1. High-Level Architecture<a class="headerlink" href="#high-level-architecture" title="Link to this heading"></a></h2>
+<p>sktime-mcp is a <strong>Model Context Protocol (MCP) server</strong> that wraps the <a class="reference external" href="https://www.sktime.net/">sktime</a> time-series machine learning library, exposing its estimator registry and execution capabilities to LLM agents (e.g., Claude, ChatGPT) via a structured JSON tool interface.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>┌───────────────────────────────────────────────────────────────────┐
+│                        LLM / MCP Client                          │
+│              (Claude Desktop, Cursor, custom agent)               │
+└───────────────────────┬───────────────────────────────────────────┘
+                        │  stdio (JSON-RPC over stdin/stdout)
+                        ▼
+┌───────────────────────────────────────────────────────────────────┐
+│                      MCP Server (server.py)                       │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────────────┐   │
+│  │ list_tools() │  │ call_tool()  │  │ sanitize_for_json()    │   │
+│  │ (28 tools)   │  │ (dispatcher) │  │ (serialization helper) │   │
+│  └─────────────┘  └──────┬───────┘  └────────────────────────┘   │
+└──────────────────────────┼────────────────────────────────────────┘
+                           │
+          ┌────────────────┼────────────────────┐
+          ▼                ▼                     ▼
+┌──────────────┐  ┌───────────────┐   ┌──────────────────┐
+│  Tool Layer  │  │ Registry Layer│   │  Composition     │
+│  (tools/*.py)│  │ (registry/)   │   │  Layer           │
+│              │  │               │   │  (composition/)  │
+│ 12 modules   │  │ interface.py  │   │  validator.py    │
+│ 28+ functions│  │ tag_resolver  │   │                  │
+└──────┬───────┘  └───────┬───────┘   └──────────────────┘
+       │                  │
+       ▼                  ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                       Runtime Layer                               │
+│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────┐  │
+│  │  Executor     │  │ HandleManager│  │   JobManager           │  │
+│  │  (executor.py)│  │ (handles.py) │  │   (jobs.py)            │  │
+│  │              │  │              │  │                        │  │
+│  │ fit/predict   │  │ est_* handles│  │ background jobs        │  │
+│  │ data loading  │  │ max 100      │  │ progress tracking      │  │
+│  │ pipelines     │  │ LRU eviction │  │ thread-safe            │  │
+│  └──────┬───────┘  └──────────────┘  └────────────────────────┘  │
+└─────────┼────────────────────────────────────────────────────────┘
+          │
+          ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                         Data Layer                                │
+│  ┌────────────┐  ┌────────────────────────────────────────────┐  │
+│  │  Registry   │  │              Adapters                      │  │
+│  │  (registry) │  │  ┌─────────┐ ┌──────┐ ┌─────┐ ┌───────┐  │  │
+│  │             │  │  │ Pandas  │ │ File │ │ SQL │ │  URL  │  │  │
+│  └────────────┘  │  └─────────┘ └──────┘ └─────┘ └───────┘  │  │
+│                  └────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
+          │
+          ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                     sktime Library                                │
+│  all_estimators() · all_tags() · datasets · forecasting · etc.   │
+└──────────────────────────────────────────────────────────────────┘
+</pre></div>
+</div>
+<section id="design-principles">
+<h3>Design Principles<a class="headerlink" href="#design-principles" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Principle</p></th>
+<th class="head"><p>Implementation</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>sktime as single source of truth</strong></p></td>
+<td><p>Registry loads all estimators from <code class="docutils literal notranslate"><span class="pre">sktime.registry.all_estimators()</span></code> at runtime; no hardcoded estimator lists.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Registry-first discovery</strong></p></td>
+<td><p>LLMs discover estimators via <code class="docutils literal notranslate"><span class="pre">list_estimators</span></code> / <code class="docutils literal notranslate"><span class="pre">search_estimators</span></code> / <code class="docutils literal notranslate"><span class="pre">describe_estimator</span></code> before using them.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Handle-based state</strong></p></td>
+<td><p>Estimators and data are referenced by opaque <code class="docutils literal notranslate"><span class="pre">est_*</span></code> / <code class="docutils literal notranslate"><span class="pre">data_*</span></code> handle strings, not serialized objects.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Lazy loading</strong></p></td>
+<td><p>Registry, tag resolver, and executor are singletons initialized on first access.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Fail-safe responses</strong></p></td>
+<td><p>Every tool returns <code class="docutils literal notranslate"><span class="pre">{&quot;success&quot;:</span> <span class="pre">bool,</span> <span class="pre">...}</span></code> — never bare exceptions over the wire.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<hr class="docutils" />
+<section id="repository-layout">
+<h2>2. Repository Layout<a class="headerlink" href="#repository-layout" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>sktime-mcp/
+├── pyproject.toml              # Build config, deps, extras, lint/test settings
+├── Makefile                    # Developer shortcuts (check, lint, format, test)
+├── mkdocs.yml                  # Documentation site configuration
+├── README.md                   # Primary documentation
+├── LICENSE                     # BSD 3-Clause
+├── .gitignore
+│
+├── .github/
+│   └── workflows/
+│       ├── ci.yml              # CI: lint + test (3.9-3.12) + docs build
+│       └── PULL_REQUEST_TEMPLATE.md  # (misplaced — see §9)
+│
+├── src/sktime_mcp/             # Installable Python package
+│   ├── __init__.py
+│   ├── server.py               # MCP server entry point (tool registration + dispatch)
+│   ├── tools/                  # Tool implementations (12 modules)
+│   ├── registry/               # sktime registry bridge (interface + tags)
+│   ├── runtime/                # Executor, handles, jobs
+│   ├── composition/            # Pipeline validator
+│   └── data/                   # Data adapters (pandas, file, SQL, URL)
+│
+├── tests/                      # pytest suite (7 test modules)
+├── examples/                   # 11 runnable example scripts
+├── docs/                       # MkDocs source pages (9 markdown files)
+└── site/                       # Built static site (should be in .gitignore)
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="layer-by-layer-deep-dive">
+<h2>3. Layer-by-Layer Deep Dive<a class="headerlink" href="#layer-by-layer-deep-dive" title="Link to this heading"></a></h2>
+<section id="mcp-server-entry-point">
+<h3>3.1 MCP Server (Entry Point)<a class="headerlink" href="#mcp-server-entry-point" title="Link to this heading"></a></h3>
+<p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/server.py</span></code> (742 lines)</p>
+<p>The server is the single entry point. It uses the official <code class="docutils literal notranslate"><span class="pre">mcp</span></code> Python SDK and communicates over stdio (JSON-RPC).</p>
+<p><strong>Key Components:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">server</span> <span class="pre">=</span> <span class="pre">Server(&quot;sktime-mcp&quot;)</span></code> — MCP server instance</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&#64;server.list_tools()</span></code> — Returns a list of 28 <code class="docutils literal notranslate"><span class="pre">Tool</span></code> objects with hand-written JSON schemas</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&#64;server.call_tool()</span></code> — A large <code class="docutils literal notranslate"><span class="pre">if/elif</span></code> chain dispatching tool names to Python functions</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sanitize_for_json()</span></code> — Recursive serializer for non-JSON-safe objects (Period, numpy types, etc.)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">main()</span></code> → <code class="docutils literal notranslate"><span class="pre">asyncio.run(run_server())</span></code> — CLI entry point</p></li>
+</ul>
+<p><strong>Architecture Concern:</strong> The server file combines schema definition, dispatch logic, and serialization in one 742-line file. As the tool count grows, this becomes a maintenance bottleneck.</p>
+</section>
+<section id="tool-layer">
+<h3>3.2 Tool Layer<a class="headerlink" href="#tool-layer" title="Link to this heading"></a></h3>
+<p><strong>Location:</strong> <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/tools/</span></code> (12 modules)</p>
+<p>Each module contains one or more tool functions. Tools are thin wrappers that validate input, delegate to the runtime layer, and format output.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Module</p></th>
+<th class="head"><p>Tools Defined</p></th>
+<th class="head"><p>MCP-Registered</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">list_estimators.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list_estimators_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">get_available_tags</span></code>, <code class="docutils literal notranslate"><span class="pre">get_available_tasks</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list_estimators</span></code>, <code class="docutils literal notranslate"><span class="pre">get_available_tags</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">describe_estimator.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">describe_estimator_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">search_estimators_tool</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">describe_estimator</span></code>, <code class="docutils literal notranslate"><span class="pre">search_estimators</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">instantiate.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">instantiate_estimator_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">instantiate_pipeline_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">list_handles_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">release_handle_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">load_model_tool</span></code></p></td>
+<td><p>All 5</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fit_predict.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fit_predict_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">fit_predict_async_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">fit_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">predict_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">list_datasets_tool</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fit_predict</span></code>, <code class="docutils literal notranslate"><span class="pre">fit_predict_async</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">evaluate.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">evaluate_estimator_tool</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">evaluate_estimator</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">data_tools.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">load_data_source_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">list_data_sources_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">fit_predict_with_data_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">release_data_handle_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">load_data_source_async_tool</span></code></p></td>
+<td><p>All 5</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">format_tools.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">format_time_series_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">auto_format_on_load_tool</span></code></p></td>
+<td><p>Both</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">codegen.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">export_code_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">_generate_single_estimator_code</span></code>, <code class="docutils literal notranslate"><span class="pre">_generate_pipeline_code</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">export_code</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">job_tools.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">check_job_status_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">list_jobs_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">cancel_job_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">delete_job_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">cleanup_old_jobs_tool</span></code></p></td>
+<td><p>All 5</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">save_model.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">save_model_tool</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">save_model</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">list_available_data.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list_available_data_tool</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list_available_data</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Not MCP-registered:</strong> <code class="docutils literal notranslate"><span class="pre">fit_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">predict_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">list_datasets_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">get_available_tasks</span></code> — these are library-only helpers.</p>
+</section>
+<section id="registry-layer">
+<h3>3.3 Registry Layer<a class="headerlink" href="#registry-layer" title="Link to this heading"></a></h3>
+<p><strong>Location:</strong> <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/registry/</span></code></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>File</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">interface.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">RegistryInterface</span></code> — wraps <code class="docutils literal notranslate"><span class="pre">sktime.registry.all_estimators()</span></code>. Lazy-loads all estimator types, creates <code class="docutils literal notranslate"><span class="pre">EstimatorNode</span></code> dataclasses with name, task, class reference, tags, hyperparameters, and docstring. Supports filtering by task, tags, and substring search.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">tag_resolver.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">TagResolver</span></code> — loads <code class="docutils literal notranslate"><span class="pre">sktime.registry.all_tags()</span></code>, provides human-readable tag explanations, category grouping, capability filtering, similarity scoring.</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Singleton pattern:</strong> <code class="docutils literal notranslate"><span class="pre">get_registry()</span></code> / <code class="docutils literal notranslate"><span class="pre">get_tag_resolver()</span></code> — process-wide.</p>
+<p><strong><code class="docutils literal notranslate"><span class="pre">EstimatorNode</span></code> dataclass fields:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">name</span></code> (str) — class name, e.g., “ARIMA”</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">task</span></code> (str) — mapped from scitype: “forecasting”, “transformation”, “classification”, “regression”, “clustering”, “parameter_estimation”, “splitting”, “network”</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">class_ref</span></code> (type) — actual Python class</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">module</span></code> (str) — full dotted path</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tags</span></code> (dict) — capability tags from <code class="docutils literal notranslate"><span class="pre">get_class_tags()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">hyperparameters</span></code> (dict) — extracted from <code class="docutils literal notranslate"><span class="pre">__init__</span></code> signature</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">docstring</span></code> (str) — truncated to 500 chars</p></li>
+</ul>
+</section>
+<section id="runtime-layer">
+<h3>3.4 Runtime Layer<a class="headerlink" href="#runtime-layer" title="Link to this heading"></a></h3>
+<p><strong>Location:</strong> <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/runtime/</span></code></p>
+<section id="executor-executor-py">
+<h4>Executor (<code class="docutils literal notranslate"><span class="pre">executor.py</span></code>)<a class="headerlink" href="#executor-executor-py" title="Link to this heading"></a></h4>
+<p>The central runtime component that orchestrates all execution:</p>
+<ul class="simple">
+<li><p><strong>Estimator instantiation</strong> — <code class="docutils literal notranslate"><span class="pre">instantiate()</span></code>, <code class="docutils literal notranslate"><span class="pre">instantiate_pipeline()</span></code></p></li>
+<li><p><strong>Demo dataset loading</strong> — Dynamic discovery via <code class="docutils literal notranslate"><span class="pre">inspect.getmembers(sktime.datasets)</span></code> → <code class="docutils literal notranslate"><span class="pre">DEMO_DATASETS</span></code> dict</p></li>
+<li><p><strong>Fit/predict</strong> — <code class="docutils literal notranslate"><span class="pre">fit()</span></code>, <code class="docutils literal notranslate"><span class="pre">predict()</span></code>, <code class="docutils literal notranslate"><span class="pre">fit_predict()</span></code>, <code class="docutils literal notranslate"><span class="pre">fit_predict_with_data()</span></code></p></li>
+<li><p><strong>Async execution</strong> — <code class="docutils literal notranslate"><span class="pre">fit_predict_async()</span></code>, <code class="docutils literal notranslate"><span class="pre">load_data_source_async()</span></code> using <code class="docutils literal notranslate"><span class="pre">asyncio.run_in_executor()</span></code></p></li>
+<li><p><strong>Data source management</strong> — <code class="docutils literal notranslate"><span class="pre">load_data_source()</span></code>, <code class="docutils literal notranslate"><span class="pre">format_data_handle()</span></code>, <code class="docutils literal notranslate"><span class="pre">list_data_handles()</span></code>, <code class="docutils literal notranslate"><span class="pre">release_data_handle()</span></code></p></li>
+</ul>
+<p>Singleton: <code class="docutils literal notranslate"><span class="pre">get_executor()</span></code></p>
+</section>
+<section id="handle-manager-handles-py">
+<h4>Handle Manager (<code class="docutils literal notranslate"><span class="pre">handles.py</span></code>)<a class="headerlink" href="#handle-manager-handles-py" title="Link to this heading"></a></h4>
+<p>In-memory store for estimator instances:</p>
+<ul class="simple">
+<li><p><strong>Handle format:</strong> <code class="docutils literal notranslate"><span class="pre">est_{12-char-hex}</span></code></p></li>
+<li><p><strong>Max capacity:</strong> 100 handles; LRU eviction (drops oldest 10 when full)</p></li>
+<li><p><strong>Tracks:</strong> instance reference, creation time, fitted status, metadata</p></li>
+<li><p><strong>No persistence</strong> — handles are lost on server restart</p></li>
+</ul>
+</section>
+<section id="job-manager-jobs-py">
+<h4>Job Manager (<code class="docutils literal notranslate"><span class="pre">jobs.py</span></code>)<a class="headerlink" href="#job-manager-jobs-py" title="Link to this heading"></a></h4>
+<p>Thread-safe background job tracker:</p>
+<ul class="simple">
+<li><p><strong>Job states:</strong> PENDING → RUNNING → COMPLETED / FAILED / CANCELLED</p></li>
+<li><p><strong>Progress tracking:</strong> step count, percentage, ETA estimation</p></li>
+<li><p><strong>Thread safety:</strong> all operations protected by <code class="docutils literal notranslate"><span class="pre">threading.Lock</span></code></p></li>
+<li><p><strong>Limitation:</strong> <code class="docutils literal notranslate"><span class="pre">cancel_job</span></code> only flips status flag; does not interrupt running asyncio tasks</p></li>
+</ul>
+</section>
+</section>
+<section id="data-layer">
+<h3>3.5 Data Layer<a class="headerlink" href="#data-layer" title="Link to this heading"></a></h3>
+<p><strong>Location:</strong> <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/data/</span></code></p>
+<p><strong>Abstract base:</strong> <code class="docutils literal notranslate"><span class="pre">DataSourceAdapter</span></code> (in <code class="docutils literal notranslate"><span class="pre">base.py</span></code>) defines the interface:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">load()</span></code> → <code class="docutils literal notranslate"><span class="pre">pd.DataFrame</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">validate()</span></code> → <code class="docutils literal notranslate"><span class="pre">(bool,</span> <span class="pre">dict)</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">to_sktime_format()</span></code> → <code class="docutils literal notranslate"><span class="pre">(pd.Series,</span> <span class="pre">Optional[pd.DataFrame])</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">get_metadata()</span></code> → <code class="docutils literal notranslate"><span class="pre">dict</span></code></p></li>
+</ul>
+<p><strong>Adapters:</strong></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Adapter</p></th>
+<th class="head"><p>Source</p></th>
+<th class="head"><p>Key Features</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">PandasAdapter</span></code></p></td>
+<td><p>In-memory dict/DataFrame</p></td>
+<td><p>Auto datetime parsing, frequency inference</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">FileAdapter</span></code></p></td>
+<td><p>CSV, Excel, Parquet files</p></td>
+<td><p>Format auto-detection from extension, parse_dates, csv_options</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">SQLAdapter</span></code></p></td>
+<td><p>SQL databases via SQLAlchemy</p></td>
+<td><p>Query execution, identifier sanitization, connection string sanitization in metadata</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">UrlAdapter</span></code></p></td>
+<td><p>HTTP/HTTPS URLs</p></td>
+<td><p>Downloads to temp dir, delegates to FileAdapter, auto-cleanup</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Data handle format:</strong> <code class="docutils literal notranslate"><span class="pre">data_{8-char-hex}</span></code></p>
+<p><strong>No cap on data handles</strong> (unlike estimator handles which cap at 100).</p>
+</section>
+<section id="composition-layer">
+<h3>3.6 Composition Layer<a class="headerlink" href="#composition-layer" title="Link to this heading"></a></h3>
+<p><strong>Location:</strong> <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/composition/</span></code></p>
+<p><strong><code class="docutils literal notranslate"><span class="pre">CompositionValidator</span></code></strong> validates pipeline compositions at planning time:</p>
+<ul class="simple">
+<li><p><strong>Composition rules:</strong> Pairwise task compatibility (transformer→forecaster, transformer→transformer, classifier ensembles, etc.)</p></li>
+<li><p><strong>Tag compatibility:</strong> Checks univariate vs. multivariate mismatches</p></li>
+<li><p><strong>Pipeline types supported:</strong></p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">TransformedTargetForecaster</span></code> (transformers → forecaster)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Pipeline</span></code> (transformers → classifier/regressor)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">TransformerPipeline</span></code> (all transformers)</p></li>
+</ul>
+</li>
+<li><p><strong>Suggestions:</strong> Provides actionable fix suggestions for invalid compositions</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="complete-tool-inventory">
+<h2>4. Complete Tool Inventory<a class="headerlink" href="#complete-tool-inventory" title="Link to this heading"></a></h2>
+<p>All 28 MCP-registered tools, categorized:</p>
+<section id="discovery-tools-4">
+<h3>Discovery Tools (4)<a class="headerlink" href="#discovery-tools-4" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Tool</p></th>
+<th class="head"><p>Description</p></th>
+<th class="head"><p>Parameters</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">list_estimators</span></code></p></td>
+<td><p>List estimators by task/tags</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">task?</span></code>, <code class="docutils literal notranslate"><span class="pre">tags?</span></code>, <code class="docutils literal notranslate"><span class="pre">limit?</span></code> (default 50)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">describe_estimator</span></code></p></td>
+<td><p>Full metadata for one estimator</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">estimator</span></code> (required)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">search_estimators</span></code></p></td>
+<td><p>Substring search on name/docstring</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">query</span></code> (required), <code class="docutils literal notranslate"><span class="pre">limit?</span></code> (default 20)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">get_available_tags</span></code></p></td>
+<td><p>Tag catalog with descriptions</p></td>
+<td><p>(none)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="instantiation-tools-5">
+<h3>Instantiation Tools (5)<a class="headerlink" href="#instantiation-tools-5" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Tool</p></th>
+<th class="head"><p>Description</p></th>
+<th class="head"><p>Parameters</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">instantiate_estimator</span></code></p></td>
+<td><p>Create estimator instance → handle</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">estimator</span></code> (required), <code class="docutils literal notranslate"><span class="pre">params?</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">instantiate_pipeline</span></code></p></td>
+<td><p>Create pipeline instance → handle</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">components</span></code> (required), <code class="docutils literal notranslate"><span class="pre">params_list?</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">list_handles</span></code></p></td>
+<td><p>List active estimator handles</p></td>
+<td><p>(none)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">release_handle</span></code></p></td>
+<td><p>Delete estimator handle</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">handle</span></code> (required)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">load_model</span></code></p></td>
+<td><p>Load saved model → handle</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">path</span></code> (required)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="execution-tools-4">
+<h3>Execution Tools (4)<a class="headerlink" href="#execution-tools-4" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Tool</p></th>
+<th class="head"><p>Description</p></th>
+<th class="head"><p>Parameters</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fit_predict</span></code></p></td>
+<td><p>Fit + predict on demo or custom data</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">estimator_handle</span></code> (required), <code class="docutils literal notranslate"><span class="pre">dataset?</span></code>, <code class="docutils literal notranslate"><span class="pre">data_handle?</span></code>, <code class="docutils literal notranslate"><span class="pre">horizon?</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fit_predict_async</span></code></p></td>
+<td><p>Background fit + predict</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">estimator_handle</span></code> (required), <code class="docutils literal notranslate"><span class="pre">dataset</span></code> (required), <code class="docutils literal notranslate"><span class="pre">horizon?</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fit_predict_with_data</span></code></p></td>
+<td><p>Fit + predict on custom data handle</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">estimator_handle</span></code> (required), <code class="docutils literal notranslate"><span class="pre">data_handle</span></code> (required), <code class="docutils literal notranslate"><span class="pre">horizon?</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">evaluate_estimator</span></code></p></td>
+<td><p>Cross-validation evaluation</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">estimator_handle</span></code> (required), <code class="docutils literal notranslate"><span class="pre">dataset</span></code> (required), <code class="docutils literal notranslate"><span class="pre">cv_folds?</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="data-tools-7">
+<h3>Data Tools (7)<a class="headerlink" href="#data-tools-7" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Tool</p></th>
+<th class="head"><p>Description</p></th>
+<th class="head"><p>Parameters</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">list_available_data</span></code></p></td>
+<td><p>List demos + active data handles</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">is_demo?</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">load_data_source</span></code></p></td>
+<td><p>Load data from any adapter</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">config</span></code> (required)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">load_data_source_async</span></code></p></td>
+<td><p>Background data loading</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">config</span></code> (required)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">list_data_sources</span></code></p></td>
+<td><p>List adapter types</p></td>
+<td><p>(none)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">release_data_handle</span></code></p></td>
+<td><p>Delete data handle</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">data_handle</span></code> (required)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">format_time_series</span></code></p></td>
+<td><p>Auto-format time series data</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">data_handle</span></code> (required), <code class="docutils literal notranslate"><span class="pre">auto_infer_freq?</span></code>, <code class="docutils literal notranslate"><span class="pre">fill_missing?</span></code>, <code class="docutils literal notranslate"><span class="pre">remove_duplicates?</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">auto_format_on_load</span></code></p></td>
+<td><p>Toggle auto-formatting</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">enabled?</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="export-tools-1">
+<h3>Export Tools (1)<a class="headerlink" href="#export-tools-1" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Tool</p></th>
+<th class="head"><p>Description</p></th>
+<th class="head"><p>Parameters</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">export_code</span></code></p></td>
+<td><p>Generate Python code for handle</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">handle</span></code> (required), <code class="docutils literal notranslate"><span class="pre">var_name?</span></code>, <code class="docutils literal notranslate"><span class="pre">include_fit_example?</span></code>, <code class="docutils literal notranslate"><span class="pre">dataset?</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="persistence-tools-2">
+<h3>Persistence Tools (2)<a class="headerlink" href="#persistence-tools-2" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Tool</p></th>
+<th class="head"><p>Description</p></th>
+<th class="head"><p>Parameters</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">save_model</span></code></p></td>
+<td><p>Save model via MLflow</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">estimator_handle</span></code> (required), <code class="docutils literal notranslate"><span class="pre">path</span></code> (required), <code class="docutils literal notranslate"><span class="pre">mlflow_params?</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">load_model</span></code></p></td>
+<td><p>Load saved model</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">path</span></code> (required)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="validation-tools-1">
+<h3>Validation Tools (1)<a class="headerlink" href="#validation-tools-1" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Tool</p></th>
+<th class="head"><p>Description</p></th>
+<th class="head"><p>Parameters</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">validate_pipeline</span></code></p></td>
+<td><p>Check pipeline validity</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">components</span></code> (required)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="job-management-tools-4">
+<h3>Job Management Tools (4)<a class="headerlink" href="#job-management-tools-4" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Tool</p></th>
+<th class="head"><p>Description</p></th>
+<th class="head"><p>Parameters</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">check_job_status</span></code></p></td>
+<td><p>Get job progress/result</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">job_id</span></code> (required)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">list_jobs</span></code></p></td>
+<td><p>List jobs with optional filter</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">status?</span></code>, <code class="docutils literal notranslate"><span class="pre">limit?</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cancel_job</span></code></p></td>
+<td><p>Cancel pending/running job</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">job_id</span></code> (required)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">delete_job</span></code></p></td>
+<td><p>Remove job record</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">job_id</span></code> (required)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cleanup_old_jobs</span></code></p></td>
+<td><p>Remove old jobs</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">max_age_hours?</span></code> (default 24)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<hr class="docutils" />
+<section id="data-flow-diagrams">
+<h2>5. Data Flow Diagrams<a class="headerlink" href="#data-flow-diagrams" title="Link to this heading"></a></h2>
+<section id="workflow-1-discovery-instantiation-prediction">
+<h3>Workflow 1: Discovery → Instantiation → Prediction<a class="headerlink" href="#workflow-1-discovery-instantiation-prediction" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>LLM                        MCP Server                      sktime
+ │                              │                              │
+ │ list_estimators(task=&quot;forecasting&quot;)                         │
+ │─────────────────────────────&gt;│                              │
+ │                              │ RegistryInterface            │
+ │                              │ .get_all_estimators()        │
+ │                              │ ────────────────────────────&gt;│
+ │                              │&lt;─────(EstimatorNode list)────│
+ │&lt;───── {estimators: [...]} ───│                              │
+ │                              │                              │
+ │ describe_estimator(&quot;ARIMA&quot;)  │                              │
+ │─────────────────────────────&gt;│                              │
+ │&lt;── {hyperparameters, tags} ──│                              │
+ │                              │                              │
+ │ instantiate_estimator(       │                              │
+ │   &quot;ARIMA&quot;, {&quot;order&quot;:[1,1,1]})│                             │
+ │─────────────────────────────&gt;│                              │
+ │                              │ Executor.instantiate()       │
+ │                              │  → ARIMA(order=[1,1,1])      │
+ │                              │  → HandleManager.create()    │
+ │&lt;──── {handle: &quot;est_abc123&quot;} ─│                              │
+ │                              │                              │
+ │ fit_predict(                 │                              │
+ │   handle, &quot;airline&quot;, 12)     │                              │
+ │─────────────────────────────&gt;│                              │
+ │                              │ load_dataset(&quot;airline&quot;)      │
+ │                              │ fit(y, fh=[1..12])           │
+ │                              │ predict(fh=[1..12])          │
+ │&lt;── {predictions: {...}} ─────│                              │
+</pre></div>
+</div>
+</section>
+<section id="workflow-2-custom-data-format-predict">
+<h3>Workflow 2: Custom Data → Format → Predict<a class="headerlink" href="#workflow-2-custom-data-format-predict" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>LLM                              MCP Server
+ │                                     │
+ │ load_data_source({                  │
+ │   type: &quot;file&quot;,                     │
+ │   path: &quot;/data/sales.csv&quot;,          │
+ │   time_column: &quot;date&quot;,              │
+ │   target_column: &quot;revenue&quot;          │
+ │ }) ────────────────────────────────&gt;│
+ │                                     │ FileAdapter.load()
+ │                                     │ FileAdapter.validate()
+ │                                     │ to_sktime_format() → (y, X)
+ │                                     │ auto-format if enabled
+ │&lt;── {data_handle: &quot;data_abc&quot;} ───────│
+ │                                     │
+ │ fit_predict_with_data(              │
+ │   est_handle, &quot;data_abc&quot;, 6)        │
+ │────────────────────────────────────&gt;│
+ │                                     │ Executor.fit_predict_with_data()
+ │&lt;── {predictions: {...}} ────────────│
+</pre></div>
+</div>
+</section>
+<section id="workflow-3-background-job">
+<h3>Workflow 3: Background Job<a class="headerlink" href="#workflow-3-background-job" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>LLM                              MCP Server                  Thread Pool
+ │                                     │                          │
+ │ fit_predict_async(                  │                          │
+ │   handle, &quot;airline&quot;, 12)            │                          │
+ │────────────────────────────────────&gt;│                          │
+ │                                     │ JobManager.create_job()  │
+ │                                     │ schedule coroutine ────&gt; │
+ │&lt;── {job_id: &quot;uuid-xxx&quot;} ───────────│                          │
+ │                                     │                          │
+ │ check_job_status(&quot;uuid-xxx&quot;)        │                 (fitting)│
+ │────────────────────────────────────&gt;│                          │
+ │&lt;── {progress: 66%, step: &quot;Fit...&quot;} ─│                          │
+ │                                     │                          │
+ │ check_job_status(&quot;uuid-xxx&quot;)        │              (completed) │
+ │────────────────────────────────────&gt;│                          │
+ │&lt;── {status: &quot;completed&quot;,            │                          │
+ │     result: {predictions: ...}}─────│                          │
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="tool-combination-strategies">
+<h2>6. Tool Combination Strategies<a class="headerlink" href="#tool-combination-strategies" title="Link to this heading"></a></h2>
+<section id="recommended-multi-tool-workflows">
+<h3>Recommended Multi-Tool Workflows<a class="headerlink" href="#recommended-multi-tool-workflows" title="Link to this heading"></a></h3>
+<section id="smart-forecasting-pipeline">
+<h4>1. Smart Forecasting Pipeline<a class="headerlink" href="#smart-forecasting-pipeline" title="Link to this heading"></a></h4>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>get_available_tags        → Understand what capabilities exist
+list_estimators           → Find estimators with specific capabilities
+describe_estimator (x2)   → Deep-dive on transformer + forecaster
+validate_pipeline         → Check composition before committing
+instantiate_pipeline      → Create the pipeline
+fit_predict              → Train and predict
+export_code              → Get reproducible Python code
+</pre></div>
+</div>
+</section>
+<section id="data-driven-custom-forecasting">
+<h4>2. Data-Driven Custom Forecasting<a class="headerlink" href="#data-driven-custom-forecasting" title="Link to this heading"></a></h4>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>list_data_sources         → See supported adapters
+load_data_source          → Load user data (auto-formats)
+list_available_data       → Verify data loaded correctly
+format_time_series        → Additional formatting if needed
+instantiate_estimator     → Create forecaster
+fit_predict_with_data     → Predict on user data
+save_model               → Persist the trained model
+export_code              → Generate reproducible code
+release_data_handle       → Free memory
+release_handle            → Free memory
+</pre></div>
+</div>
+</section>
+<section id="model-comparison-benchmarking">
+<h4>3. Model Comparison / Benchmarking<a class="headerlink" href="#model-comparison-benchmarking" title="Link to this heading"></a></h4>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>instantiate_estimator (×N)  → Create multiple estimators
+evaluate_estimator (×N)     → Cross-validate each on same dataset
+list_handles               → Review all active handles
+export_code (×N)           → Export best performer
+cleanup: release_handle (×N)
+</pre></div>
+</div>
+</section>
+<section id="long-running-training-with-monitoring">
+<h4>4. Long-Running Training with Monitoring<a class="headerlink" href="#long-running-training-with-monitoring" title="Link to this heading"></a></h4>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>instantiate_estimator       → Create model
+fit_predict_async           → Start background training
+check_job_status (poll)     → Monitor progress
+list_jobs                  → Overview of all jobs
+cancel_job                 → Cancel if needed
+cleanup_old_jobs           → Housekeeping
+</pre></div>
+</div>
+</section>
+<section id="model-persistence-reuse">
+<h4>5. Model Persistence &amp; Reuse<a class="headerlink" href="#model-persistence-reuse" title="Link to this heading"></a></h4>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>load_model                  → Load previously saved model
+list_handles               → Verify it&#39;s loaded and fitted
+fit_predict_with_data       → Use on new data
+save_model                 → Save updated model
+</pre></div>
+</div>
+</section>
+</section>
+<section id="tool-synergy-improvements-not-yet-implemented">
+<h3>Tool Synergy Improvements (Not Yet Implemented)<a class="headerlink" href="#tool-synergy-improvements-not-yet-implemented" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Combination</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">auto_benchmark</span></code></p></td>
+<td><p>Combine <code class="docutils literal notranslate"><span class="pre">list_estimators</span></code> + <code class="docutils literal notranslate"><span class="pre">instantiate</span></code> + <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> in a single tool to benchmark top-N estimators automatically</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">suggest_pipeline</span></code></p></td>
+<td><p>Use <code class="docutils literal notranslate"><span class="pre">CompositionValidator.suggest_pipeline()</span></code> (exists but not MCP-exposed) to auto-suggest pipelines for a task</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">compare_models</span></code></p></td>
+<td><p>New tool that takes multiple handles and a dataset, runs evaluation on all, and returns a ranked comparison table</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">data_profile</span></code></p></td>
+<td><p>New tool that analyzes a data handle and returns: seasonality detection, stationarity test, missing value report, recommended preprocessing steps</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">auto_forecast</span></code></p></td>
+<td><p>End-to-end tool: load data → auto-detect characteristics → select estimator → fit → predict → export code</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<hr class="docutils" />
+<section id="current-test-coverage-testing-strategy">
+<h2>7. Current Test Coverage &amp; Testing Strategy<a class="headerlink" href="#current-test-coverage-testing-strategy" title="Link to this heading"></a></h2>
+<section id="current-state">
+<h3>Current State<a class="headerlink" href="#current-state" title="Link to this heading"></a></h3>
+<p><strong>Test files:</strong> 7 modules, 71 tests, <strong>70 passing, 1 failing</strong></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Test File</p></th>
+<th class="head"><p>Tests</p></th>
+<th class="head"><p>Status</p></th>
+<th class="head"><p>Coverage Area</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">test_core.py</span></code></p></td>
+<td><p>12</p></td>
+<td><p>All pass</p></td>
+<td><p>Registry, HandleManager, CompositionValidator, basic tools</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">test_codegen.py</span></code></p></td>
+<td><p>17</p></td>
+<td><p>All pass</p></td>
+<td><p>Value formatting, single estimator codegen, pipeline codegen, export_code</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">test_param_validation.py</span></code></p></td>
+<td><p>12</p></td>
+<td><p>All pass</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">_validate_params</span></code>, <code class="docutils literal notranslate"><span class="pre">_is_safe_value</span></code>, pipeline params validation</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">test_background_jobs.py</span></code></p></td>
+<td><p>6</p></td>
+<td><p>All pass</p></td>
+<td><p>Job creation, updates, listing, async fit_predict, cancel, cleanup</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">test_async_data_loading.py</span></code></p></td>
+<td><p>5</p></td>
+<td><p>All pass</p></td>
+<td><p>Async data loading tool &amp; executor</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">test_evaluate.py</span></code></p></td>
+<td><p>1</p></td>
+<td><p><strong>FAILS</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">evaluate_estimator_tool</span></code> — assertion mismatch (see §9)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">test_data_sources.py</span></code></p></td>
+<td><p>18*</p></td>
+<td><p>All pass</p></td>
+<td><p>Data adapter imports, PandasAdapter, Executor integration</p></td>
+</tr>
+</tbody>
+</table>
+<p>*<code class="docutils literal notranslate"><span class="pre">test_data_sources.py</span></code> uses <code class="docutils literal notranslate"><span class="pre">print</span></code>-based assertions rather than <code class="docutils literal notranslate"><span class="pre">pytest.assert</span></code>, so failures would be silent.</p>
+</section>
+<section id="coverage-gaps">
+<h3>Coverage Gaps<a class="headerlink" href="#coverage-gaps" title="Link to this heading"></a></h3>
+<p>The following are <strong>not tested</strong>:</p>
+<ol class="arabic simple">
+<li><p><strong>server.py dispatch</strong> — No integration test calls <code class="docutils literal notranslate"><span class="pre">call_tool()</span></code> directly</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">sanitize_for_json()</span></code></strong> — No unit tests for Period, numpy, or nested object serialization</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">format_time_series_tool</span></code></strong> — No tests for frequency inference, gap filling, duplicate removal</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">save_model_tool</span></code> with real MLflow</strong> — Only tested with monkeypatched mock</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">load_model_tool</span></code></strong> — No tests</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">export_code</span></code> with <code class="docutils literal notranslate"><span class="pre">include_fit_example=True</span></code> and custom dataset</strong> — Partial coverage</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">UrlAdapter</span></code></strong> — No tests (would need network mocking)</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">SQLAdapter</span></code></strong> — No tests (would need database fixtures)</p></li>
+<li><p><strong>Edge cases:</strong> Empty datasets, very large datasets, non-datetime indices, multivariate time series</p></li>
+<li><p><strong>Error paths:</strong> Most error branches in tools are untested</p></li>
+<li><p><strong>Concurrent access</strong> — JobManager thread safety not stress-tested</p></li>
+<li><p><strong>Handle eviction</strong> — HandleManager’s <code class="docutils literal notranslate"><span class="pre">_cleanup_oldest()</span></code> not tested</p></li>
+</ol>
+</section>
+<section id="recommended-testing-strategy">
+<h3>Recommended Testing Strategy<a class="headerlink" href="#recommended-testing-strategy" title="Link to this heading"></a></h3>
+<section id="unit-tests-to-add">
+<h4>Unit Tests to Add<a class="headerlink" href="#unit-tests-to-add" title="Link to this heading"></a></h4>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># tests/test_server_dispatch.py — Integration tests for server.py</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestCallTool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test the call_tool dispatcher.&quot;&quot;&quot;</span>
+    
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">test_unknown_tool_returns_error</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">call_tool</span><span class="p">(</span><span class="s2">&quot;nonexistent_tool&quot;</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="k">assert</span> <span class="s2">&quot;error&quot;</span> <span class="ow">in</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+    
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">test_list_estimators_dispatches_correctly</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">call_tool</span><span class="p">(</span><span class="s2">&quot;list_estimators&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="mi">5</span><span class="p">})</span>
+        <span class="n">parsed</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">parsed</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span>
+
+<span class="c1"># tests/test_sanitize.py — Serialization edge cases</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestSanitizeForJson</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_period_index</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="o">...</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_numpy_types</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="o">...</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_nested_objects</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="o">...</span>
+
+<span class="c1"># tests/test_format_tools.py — Formatting logic</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestFormatTimeSeries</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_duplicate_removal</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="o">...</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_frequency_inference_daily</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="o">...</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_gap_filling</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="o">...</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_missing_value_fill</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="o">...</span>
+
+<span class="c1"># tests/test_handle_manager.py — Edge cases</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestHandleEviction</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_evicts_oldest_when_full</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="o">...</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_max_handles_boundary</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="o">...</span>
+
+<span class="c1"># tests/test_url_adapter.py — With mocked network</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestUrlAdapter</span><span class="p">:</span>
+    <span class="nd">@patch</span><span class="p">(</span><span class="s1">&#39;urllib.request.urlretrieve&#39;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_downloads_and_loads_csv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mock_retrieve</span><span class="p">):</span>
+        <span class="o">...</span>
+</pre></div>
+</div>
+</section>
+<section id="integration-tests">
+<h4>Integration Tests<a class="headerlink" href="#integration-tests" title="Link to this heading"></a></h4>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># tests/test_workflows.py — End-to-end MCP workflows</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestForecastingWorkflow</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test the complete discovery → instantiate → fit → predict flow.&quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_simple_forecast</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">list_estimators_tool</span><span class="p">(</span><span class="n">task</span><span class="o">=</span><span class="s2">&quot;forecasting&quot;</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;estimators&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+        <span class="n">inst</span> <span class="o">=</span> <span class="n">instantiate_estimator_tool</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="n">pred</span> <span class="o">=</span> <span class="n">fit_predict_tool</span><span class="p">(</span><span class="n">inst</span><span class="p">[</span><span class="s2">&quot;handle&quot;</span><span class="p">],</span> <span class="s2">&quot;airline&quot;</span><span class="p">,</span> <span class="mi">12</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">pred</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span>
+        <span class="n">code</span> <span class="o">=</span> <span class="n">export_code_tool</span><span class="p">(</span><span class="n">inst</span><span class="p">[</span><span class="s2">&quot;handle&quot;</span><span class="p">])</span>
+        <span class="k">assert</span> <span class="n">code</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span>
+
+<span class="c1"># tests/test_data_pipeline.py — Data loading workflows</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestDataPipeline</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_csv_load_format_predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">):</span>
+        <span class="c1"># Create CSV → load → format → predict → release</span>
+        <span class="o">...</span>
+</pre></div>
+</div>
+</section>
+<section id="how-to-run-tests">
+<h4>How to Run Tests<a class="headerlink" href="#how-to-run-tests" title="Link to this heading"></a></h4>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Run all tests</span>
+pytest<span class="w"> </span>tests/<span class="w"> </span>-v
+
+<span class="c1"># Run with coverage</span>
+pytest<span class="w"> </span>tests/<span class="w"> </span>--cov<span class="o">=</span>sktime_mcp<span class="w"> </span>--cov-report<span class="o">=</span>html
+
+<span class="c1"># Run specific module</span>
+pytest<span class="w"> </span>tests/test_core.py<span class="w"> </span>-v
+
+<span class="c1"># Run async tests only</span>
+pytest<span class="w"> </span>tests/<span class="w"> </span>-v<span class="w"> </span>-k<span class="w"> </span><span class="s2">&quot;async&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="recommended-pyproject-toml-additions">
+<h4>Recommended <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> additions:<a class="headerlink" href="#recommended-pyproject-toml-additions" title="Link to this heading"></a></h4>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[tool.pytest.ini_options]</span>
+<span class="n">asyncio_mode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;auto&quot;</span>
+<span class="n">testpaths</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;tests&quot;</span><span class="p">]</span>
+<span class="n">addopts</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;--tb=short -q&quot;</span>
+<span class="n">markers</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="s2">&quot;slow: marks tests as slow (deselect with &#39;-m </span><span class="se">\&quot;</span><span class="s2">not slow</span><span class="se">\&quot;</span><span class="s2">&#39;)&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;integration: marks integration tests&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;network: marks tests requiring network access&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="k">[tool.coverage.run]</span>
+<span class="n">source</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;src/sktime_mcp&quot;</span><span class="p">]</span>
+<span class="n">omit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;tests/*&quot;</span><span class="p">]</span>
+
+<span class="k">[tool.coverage.report]</span>
+<span class="n">fail_under</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">70</span>
+<span class="n">show_missing</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+<hr class="docutils" />
+<section id="documentation-review">
+<h2>8. Documentation Review<a class="headerlink" href="#documentation-review" title="Link to this heading"></a></h2>
+<section id="current-documentation-files">
+<h3>Current Documentation Files<a class="headerlink" href="#current-documentation-files" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>File</p></th>
+<th class="head"><p>Lines</p></th>
+<th class="head"><p>Quality</p></th>
+<th class="head"><p>Issues</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">README.md</span></code></p></td>
+<td><p>~530</p></td>
+<td><p>Good</p></td>
+<td><p>Lists 17/28 tools; Python version contradiction (3.9+ vs 3.10+)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">docs/index.md</span></code></p></td>
+<td><p>~105</p></td>
+<td><p>Good</p></td>
+<td><p>Doc map table omits <code class="docutils literal notranslate"><span class="pre">background-jobs.md</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">docs/user-guide.md</span></code></p></td>
+<td><p>~257</p></td>
+<td><p>Good</p></td>
+<td><p>Tool table incomplete; some placeholder text</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">docs/use-cases.md</span></code></p></td>
+<td><p>~71</p></td>
+<td><p>Fair</p></td>
+<td><p>URL loading marked “planned” but is implemented</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">docs/usage-examples.md</span></code></p></td>
+<td><p>~188</p></td>
+<td><p>Good</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">serialization_format</span></code> inconsistency (pickle vs cloudpickle)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">docs/data-sources.md</span></code></p></td>
+<td><p>~355</p></td>
+<td><p>Excellent</p></td>
+<td><p>Most thorough doc; covers all data workflows</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">docs/background-jobs.md</span></code></p></td>
+<td><p>~408</p></td>
+<td><p>Excellent</p></td>
+<td><p>Comprehensive job management documentation</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">docs/architecture.md</span></code></p></td>
+<td><p>~147</p></td>
+<td><p>Good</p></td>
+<td><p>References images in <code class="docutils literal notranslate"><span class="pre">docs/assets/</span></code> that may not exist</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">docs/implementation.md</span></code></p></td>
+<td><p>~591</p></td>
+<td><p>Fair</p></td>
+<td><p>Duplicated <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> section; incomplete server tool list; outdated examples list</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">docs/dev-guide.md</span></code></p></td>
+<td><p>~122</p></td>
+<td><p>Good</p></td>
+<td><p>Missing <code class="docutils literal notranslate"><span class="pre">mkdocs-material</span></code> from dev dependencies</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="key-documentation-issues">
+<h3>Key Documentation Issues<a class="headerlink" href="#key-documentation-issues" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Tool surface drift:</strong> README and implementation.md only document ~17 of 28 registered tools. Missing: <code class="docutils literal notranslate"><span class="pre">evaluate_estimator</span></code>, <code class="docutils literal notranslate"><span class="pre">load_model</span></code>, <code class="docutils literal notranslate"><span class="pre">list_handles</span></code>, <code class="docutils literal notranslate"><span class="pre">release_data_handle</span></code>, <code class="docutils literal notranslate"><span class="pre">load_data_source_async</span></code>, <code class="docutils literal notranslate"><span class="pre">list_data_sources</span></code>, <code class="docutils literal notranslate"><span class="pre">cancel_job</span></code>, <code class="docutils literal notranslate"><span class="pre">delete_job</span></code>, <code class="docutils literal notranslate"><span class="pre">cleanup_old_jobs</span></code>, <code class="docutils literal notranslate"><span class="pre">auto_format_on_load</span></code>.</p></li>
+<li><p><strong>Python version contradiction:</strong> README says both “3.10+” and “3.9+”. <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> says <code class="docutils literal notranslate"><span class="pre">&gt;=3.9</span></code> but <code class="docutils literal notranslate"><span class="pre">mcp</span></code> SDK requires 3.10+. Should standardize on <strong>3.10+</strong>.</p></li>
+<li><p><strong>Formatter mismatch:</strong> Makefile uses Black; CI uses <code class="docutils literal notranslate"><span class="pre">ruff</span> <span class="pre">format</span></code>. They can disagree on formatting.</p></li>
+<li><p><strong>use-cases.md:</strong> States URL loading is “planned” — it’s already implemented as <code class="docutils literal notranslate"><span class="pre">UrlAdapter</span></code>.</p></li>
+<li><p><strong>PR template:</strong> Copied from sktime core repo; links point to wrong repository. Also misplaced under <code class="docutils literal notranslate"><span class="pre">.github/workflows/</span></code> instead of <code class="docutils literal notranslate"><span class="pre">.github/</span></code>.</p></li>
+<li><p><strong>mkdocs-material:</strong> Required by <code class="docutils literal notranslate"><span class="pre">mkdocs.yml</span></code> but not in dev dependencies. <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">-e</span> <span class="pre">&quot;.[dev]&quot;</span></code> won’t install it.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">site/</span></code> directory:</strong> Built docs are committed to the repo. Should be in <code class="docutils literal notranslate"><span class="pre">.gitignore</span></code>.</p></li>
+</ol>
+</section>
+<section id="recommended-documentation-improvements">
+<h3>Recommended Documentation Improvements<a class="headerlink" href="#recommended-documentation-improvements" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Create a single tool reference page listing all 28 tools with parameters and examples</p></li>
+<li><p>Standardize Python version to 3.10+ everywhere</p></li>
+<li><p>Update use-cases.md to reflect URL loading as implemented</p></li>
+<li><p>Fix PR template content and location</p></li>
+<li><p>Add <code class="docutils literal notranslate"><span class="pre">mkdocs-material</span></code> to dev dependencies</p></li>
+<li><p>Add <code class="docutils literal notranslate"><span class="pre">site/</span></code> to <code class="docutils literal notranslate"><span class="pre">.gitignore</span></code></p></li>
+<li><p>Add CHANGELOG.md for release tracking</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="bugs-issues-found">
+<h2>9. Bugs &amp; Issues Found<a class="headerlink" href="#bugs-issues-found" title="Link to this heading"></a></h2>
+<section id="critical">
+<h3>Critical<a class="headerlink" href="#critical" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>#</p></th>
+<th class="head"><p>Issue</p></th>
+<th class="head"><p>Location</p></th>
+<th class="head"><p>Impact</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>1</p></td>
+<td><p><strong><code class="docutils literal notranslate"><span class="pre">auto_format_on_load</span></code> with omitted <code class="docutils literal notranslate"><span class="pre">enabled</span></code></strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">server.py:686</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">arguments[&quot;enabled&quot;]</span></code> raises <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> when client omits the param (it’s not <code class="docutils literal notranslate"><span class="pre">required</span></code> in schema). Should use <code class="docutils literal notranslate"><span class="pre">arguments.get(&quot;enabled&quot;,</span> <span class="pre">True)</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p>2</p></td>
+<td><p><strong>Evaluate test assertion mismatch</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">test_evaluate.py:28</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cv_folds_run</span> <span class="pre">==</span> <span class="pre">2</span></code> fails because <code class="docutils literal notranslate"><span class="pre">ExpandingWindowSplitter</span></code> with the calculated <code class="docutils literal notranslate"><span class="pre">initial_window</span></code> produces 4 splits, not 2. <code class="docutils literal notranslate"><span class="pre">cv_folds</span></code> doesn’t directly control fold count.</p></td>
+</tr>
+<tr class="row-even"><td><p>3</p></td>
+<td><p><strong><code class="docutils literal notranslate"><span class="pre">list_estimators</span></code> offset not wired</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">server.py:604-608</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list_estimators_tool</span></code> accepts <code class="docutils literal notranslate"><span class="pre">offset</span></code> but <code class="docutils literal notranslate"><span class="pre">call_tool</span></code> never passes it; MCP schema omits it.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="moderate">
+<h3>Moderate<a class="headerlink" href="#moderate" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>#</p></th>
+<th class="head"><p>Issue</p></th>
+<th class="head"><p>Location</p></th>
+<th class="head"><p>Impact</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>4</p></td>
+<td><p><strong><code class="docutils literal notranslate"><span class="pre">asyncio.get_event_loop()</span></code> deprecation</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">data_tools.py:189</span></code>, <code class="docutils literal notranslate"><span class="pre">executor.py:289</span></code></p></td>
+<td><p>Deprecated in Python 3.10+. Should use <code class="docutils literal notranslate"><span class="pre">asyncio.get_running_loop()</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p>5</p></td>
+<td><p><strong><code class="docutils literal notranslate"><span class="pre">cancel_job</span></code> doesn’t stop work</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">jobs.py:271-293</span></code></p></td>
+<td><p>Flips status to CANCELLED but the running coroutine/thread continues. Can lead to race conditions where work completes after cancellation.</p></td>
+</tr>
+<tr class="row-even"><td><p>6</p></td>
+<td><p><strong>Data handles have no cap</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">executor.py:532</span></code></p></td>
+<td><p>Unlike estimator handles (max 100), data handles grow unbounded. Memory leak risk in long sessions.</p></td>
+</tr>
+<tr class="row-odd"><td><p>7</p></td>
+<td><p><strong><code class="docutils literal notranslate"><span class="pre">ExpandingWindowSplitter</span></code> deprecated import</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">evaluate.py:11</span></code></p></td>
+<td><p>Import from <code class="docutils literal notranslate"><span class="pre">sktime.forecasting.model_selection</span></code> is deprecated; should use <code class="docutils literal notranslate"><span class="pre">sktime.split</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p>8</p></td>
+<td><p><strong>Singleton state leakage between tests</strong></p></td>
+<td><p>Multiple singletons</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">get_executor()</span></code>, <code class="docutils literal notranslate"><span class="pre">get_handle_manager()</span></code>, <code class="docutils literal notranslate"><span class="pre">get_job_manager()</span></code> persist across test functions, causing hidden state dependencies.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="minor">
+<h3>Minor<a class="headerlink" href="#minor" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>#</p></th>
+<th class="head"><p>Issue</p></th>
+<th class="head"><p>Location</p></th>
+<th class="head"><p>Impact</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>9</p></td>
+<td><p><strong>PR template misplaced</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">.github/workflows/</span></code></p></td>
+<td><p>GitHub won’t auto-detect it. Should be at <code class="docutils literal notranslate"><span class="pre">.github/PULL_REQUEST_TEMPLATE.md</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p>10</p></td>
+<td><p><strong>Double sanitization</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">server.py:634,641,674,720</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fit_predict</span></code> and <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> results are sanitized twice (once explicitly, once in the final pass).</p></td>
+</tr>
+<tr class="row-even"><td><p>11</p></td>
+<td><p><strong><code class="docutils literal notranslate"><span class="pre">cv_folds</span></code> misleading name</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">evaluate.py</span></code></p></td>
+<td><p>Parameter is passed to <code class="docutils literal notranslate"><span class="pre">ExpandingWindowSplitter</span></code> but doesn’t directly equal fold count. Should be renamed or documented.</p></td>
+</tr>
+<tr class="row-odd"><td><p>12</p></td>
+<td><p><strong><code class="docutils literal notranslate"><span class="pre">test_data_sources.py</span></code> uses print assertions</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">tests/test_data_sources.py</span></code></p></td>
+<td><p>Failures are silent; should use <code class="docutils literal notranslate"><span class="pre">assert</span></code> statements.</p></td>
+</tr>
+<tr class="row-even"><td><p>13</p></td>
+<td><p><strong><code class="docutils literal notranslate"><span class="pre">site/</span></code> committed to repo</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">.gitignore</span></code></p></td>
+<td><p>Built docs shouldn’t be in version control.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<hr class="docutils" />
+<section id="performance-analysis-improvements">
+<h2>10. Performance Analysis &amp; Improvements<a class="headerlink" href="#performance-analysis-improvements" title="Link to this heading"></a></h2>
+<section id="current-performance-characteristics">
+<h3>Current Performance Characteristics<a class="headerlink" href="#current-performance-characteristics" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Component</p></th>
+<th class="head"><p>Bottleneck</p></th>
+<th class="head"><p>Current Behavior</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Registry loading</strong></p></td>
+<td><p>First tool call</p></td>
+<td><p>Loads ALL estimator types sequentially; can take 2-5 seconds depending on sktime installation</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Estimator instantiation</strong></p></td>
+<td><p>Per-call</p></td>
+<td><p>Instantiates fresh; no caching of commonly used estimators</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Dataset loading</strong></p></td>
+<td><p>Per-call</p></td>
+<td><p>Demo datasets are re-loaded on every <code class="docutils literal notranslate"><span class="pre">fit_predict</span></code> call</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Serialization</strong></p></td>
+<td><p>Per-response</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">sanitize_for_json</span></code> walks entire result recursively; then <code class="docutils literal notranslate"><span class="pre">json.dumps</span></code> with <code class="docutils literal notranslate"><span class="pre">default=str</span></code> double-walks</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Tag resolution</strong></p></td>
+<td><p>First tag query</p></td>
+<td><p>Loads all tags from sktime registry; cached thereafter</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Background jobs</strong></p></td>
+<td><p>Thread pool</p></td>
+<td><p>Uses default asyncio thread pool executor (usually small)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="recommended-performance-improvements">
+<h3>Recommended Performance Improvements<a class="headerlink" href="#recommended-performance-improvements" title="Link to this heading"></a></h3>
+<section id="registry-pre-warming">
+<h4>1. Registry Pre-warming<a class="headerlink" href="#registry-pre-warming" title="Link to this heading"></a></h4>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Warm the registry at startup rather than on first tool call</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">run_server</span><span class="p">():</span>
+    <span class="c1"># Pre-warm in background</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+    <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span>
+    <span class="k">await</span> <span class="n">loop</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">get_registry</span><span class="p">)</span>
+    
+    <span class="k">async</span> <span class="k">with</span> <span class="n">stdio_server</span><span class="p">()</span> <span class="k">as</span> <span class="p">(</span><span class="n">read_stream</span><span class="p">,</span> <span class="n">write_stream</span><span class="p">):</span>
+        <span class="k">await</span> <span class="n">server</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">read_stream</span><span class="p">,</span> <span class="n">write_stream</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="dataset-caching">
+<h4>2. Dataset Caching<a class="headerlink" href="#dataset-caching" title="Link to this heading"></a></h4>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Executor</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dataset_cache</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_dataset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset_cache</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset_cache</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_dataset_impl</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dataset_cache</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span>
+        <span class="k">return</span> <span class="n">result</span>
+</pre></div>
+</div>
+</section>
+<section id="lazy-serialization">
+<h4>3. Lazy Serialization<a class="headerlink" href="#lazy-serialization" title="Link to this heading"></a></h4>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Avoid double-sanitization</span>
+<span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;fit_predict&quot;</span><span class="p">,</span> <span class="s2">&quot;evaluate_estimator&quot;</span><span class="p">,</span> <span class="s2">&quot;fit_predict_with_data&quot;</span><span class="p">):</span>
+    <span class="n">sanitized_result</span> <span class="o">=</span> <span class="n">sanitize_for_json</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">sanitized_result</span> <span class="o">=</span> <span class="n">result</span>  <span class="c1"># Let json.dumps(default=str) handle simple cases</span>
+</pre></div>
+</div>
+</section>
+<section id="dedicated-thread-pool-for-background-jobs">
+<h4>4. Dedicated Thread Pool for Background Jobs<a class="headerlink" href="#dedicated-thread-pool-for-background-jobs" title="Link to this heading"></a></h4>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">concurrent.futures</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Executor</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_thread_pool</span> <span class="o">=</span> <span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span>
+            <span class="n">max_workers</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">thread_name_prefix</span><span class="o">=</span><span class="s2">&quot;sktime-mcp-worker&quot;</span>
+        <span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="response-size-limits">
+<h4>5. Response Size Limits<a class="headerlink" href="#response-size-limits" title="Link to this heading"></a></h4>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">truncate_predictions</span><span class="p">(</span><span class="n">predictions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">max_items</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Truncate large prediction results for LLM consumption.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">predictions</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">max_items</span><span class="p">:</span>
+        <span class="n">keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">predictions</span><span class="o">.</span><span class="n">keys</span><span class="p">())[:</span><span class="n">max_items</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">predictions</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">}</span>
+    <span class="k">return</span> <span class="n">predictions</span>
+</pre></div>
+</div>
+</section>
+<section id="tool-schema-generation">
+<h4>6. Tool Schema Generation<a class="headerlink" href="#tool-schema-generation" title="Link to this heading"></a></h4>
+<p>Replace hand-written JSON schemas with auto-generation from function signatures:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">inspect</span><span class="w"> </span><span class="kn">import</span> <span class="n">signature</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">generate_schema</span><span class="p">(</span><span class="n">func</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="n">sig</span> <span class="o">=</span> <span class="n">signature</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+    <span class="n">properties</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">required</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">sig</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">annotation</span> <span class="o">!=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">Parameter</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+            <span class="n">properties</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">annotation_to_json_schema</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">annotation</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="n">inspect</span><span class="o">.</span><span class="n">Parameter</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+            <span class="n">required</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span> <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="n">properties</span><span class="p">,</span> <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="n">required</span><span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="connection-pooling-for-sql-adapter">
+<h4>7. Connection Pooling for SQL Adapter<a class="headerlink" href="#connection-pooling-for-sql-adapter" title="Link to this heading"></a></h4>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_engine</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy.pool</span><span class="w"> </span><span class="kn">import</span> <span class="n">QueuePool</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">SQLAdapter</span><span class="p">(</span><span class="n">DataSourceAdapter</span><span class="p">):</span>
+    <span class="n">_engine_cache</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Engine</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_engine</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">connection_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Engine</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">connection_string</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_engine_cache</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_engine_cache</span><span class="p">[</span><span class="n">connection_string</span><span class="p">]</span> <span class="o">=</span> <span class="n">create_engine</span><span class="p">(</span>
+                <span class="n">connection_string</span><span class="p">,</span> <span class="n">poolclass</span><span class="o">=</span><span class="n">QueuePool</span><span class="p">,</span> <span class="n">pool_size</span><span class="o">=</span><span class="mi">5</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_engine_cache</span><span class="p">[</span><span class="n">connection_string</span><span class="p">]</span>
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+<hr class="docutils" />
+<section id="improvement-roadmap">
+<h2>11. Improvement Roadmap<a class="headerlink" href="#improvement-roadmap" title="Link to this heading"></a></h2>
+<section id="phase-1-bug-fixes-stability-immediate">
+<h3>Phase 1: Bug Fixes &amp; Stability (Immediate)<a class="headerlink" href="#phase-1-bug-fixes-stability-immediate" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>[ ] Fix <code class="docutils literal notranslate"><span class="pre">auto_format_on_load</span></code> KeyError (use <code class="docutils literal notranslate"><span class="pre">arguments.get()</span></code>)</p></li>
+<li><p>[ ] Fix <code class="docutils literal notranslate"><span class="pre">test_evaluate.py</span></code> assertion to match actual behavior</p></li>
+<li><p>[ ] Update deprecated <code class="docutils literal notranslate"><span class="pre">ExpandingWindowSplitter</span></code> import</p></li>
+<li><p>[ ] Update deprecated <code class="docutils literal notranslate"><span class="pre">asyncio.get_event_loop()</span></code> calls</p></li>
+<li><p>[ ] Add cap on data handles (like estimator handles)</p></li>
+<li><p>[ ] Move PR template to <code class="docutils literal notranslate"><span class="pre">.github/PULL_REQUEST_TEMPLATE.md</span></code></p></li>
+<li><p>[ ] Add <code class="docutils literal notranslate"><span class="pre">site/</span></code> to <code class="docutils literal notranslate"><span class="pre">.gitignore</span></code></p></li>
+<li><p>[ ] Standardize Python version to 3.10+ in all docs</p></li>
+</ul>
+</section>
+<section id="phase-2-testing-quality-short-term">
+<h3>Phase 2: Testing &amp; Quality (Short-term)<a class="headerlink" href="#phase-2-testing-quality-short-term" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>[ ] Add <code class="docutils literal notranslate"><span class="pre">pytest-cov</span></code> and achieve &gt;70% coverage</p></li>
+<li><p>[ ] Convert <code class="docutils literal notranslate"><span class="pre">test_data_sources.py</span></code> to proper pytest assertions</p></li>
+<li><p>[ ] Add integration tests for <code class="docutils literal notranslate"><span class="pre">call_tool()</span></code> dispatcher</p></li>
+<li><p>[ ] Add unit tests for <code class="docutils literal notranslate"><span class="pre">sanitize_for_json()</span></code></p></li>
+<li><p>[ ] Add unit tests for <code class="docutils literal notranslate"><span class="pre">format_time_series_tool</span></code></p></li>
+<li><p>[ ] Add tests for handle eviction</p></li>
+<li><p>[ ] Fix singleton state leakage in tests (use fixtures with fresh instances)</p></li>
+<li><p>[ ] Add <code class="docutils literal notranslate"><span class="pre">conftest.py</span></code> with shared fixtures</p></li>
+</ul>
+</section>
+<section id="phase-3-performance-architecture-medium-term">
+<h3>Phase 3: Performance &amp; Architecture (Medium-term)<a class="headerlink" href="#phase-3-performance-architecture-medium-term" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>[ ] Pre-warm registry at server startup</p></li>
+<li><p>[ ] Cache demo datasets</p></li>
+<li><p>[ ] Eliminate double serialization</p></li>
+<li><p>[ ] Dedicated thread pool for background jobs</p></li>
+<li><p>[ ] Auto-generate tool schemas from function signatures</p></li>
+<li><p>[ ] Refactor <code class="docutils literal notranslate"><span class="pre">server.py</span></code> dispatch from if/elif to a registry pattern</p></li>
+<li><p>[ ] Add <code class="docutils literal notranslate"><span class="pre">mkdocs-material</span></code> to dev dependencies</p></li>
+</ul>
+</section>
+<section id="phase-4-features-tool-synergies-long-term">
+<h3>Phase 4: Features &amp; Tool Synergies (Long-term)<a class="headerlink" href="#phase-4-features-tool-synergies-long-term" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>[ ] New tool: <code class="docutils literal notranslate"><span class="pre">auto_benchmark</span></code> — auto-compare top-N estimators on a dataset</p></li>
+<li><p>[ ] New tool: <code class="docutils literal notranslate"><span class="pre">suggest_pipeline</span></code> — expose <code class="docutils literal notranslate"><span class="pre">CompositionValidator.suggest_pipeline()</span></code> as MCP tool</p></li>
+<li><p>[ ] New tool: <code class="docutils literal notranslate"><span class="pre">data_profile</span></code> — analyze data handle (seasonality, stationarity, missing values)</p></li>
+<li><p>[ ] New tool: <code class="docutils literal notranslate"><span class="pre">compare_models</span></code> — side-by-side comparison of multiple handles</p></li>
+<li><p>[ ] Expose <code class="docutils literal notranslate"><span class="pre">get_available_tasks</span></code> as MCP tool</p></li>
+<li><p>[ ] Expose <code class="docutils literal notranslate"><span class="pre">fit_tool</span></code> / <code class="docutils literal notranslate"><span class="pre">predict_tool</span></code> separately for fine-grained control</p></li>
+<li><p>[ ] Add <code class="docutils literal notranslate"><span class="pre">data_handle</span></code> support to <code class="docutils literal notranslate"><span class="pre">fit_predict_async</span></code></p></li>
+<li><p>[ ] Implement true job cancellation (cancel underlying asyncio task)</p></li>
+<li><p>[ ] Add streaming progress updates via MCP notifications</p></li>
+<li><p>[ ] Add model versioning / history tracking</p></li>
+<li><p>[ ] Add support for classification/regression workflows end-to-end (not just forecasting)</p></li>
+</ul>
+</section>
+<section id="phase-5-deployment-production-long-term">
+<h3>Phase 5: Deployment &amp; Production (Long-term)<a class="headerlink" href="#phase-5-deployment-production-long-term" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>[ ] Add Dockerfile for containerized deployment</p></li>
+<li><p>[ ] Add SSE/WebSocket transport option (beyond stdio)</p></li>
+<li><p>[ ] Add authentication/authorization layer</p></li>
+<li><p>[ ] Add rate limiting</p></li>
+<li><p>[ ] Add URL allowlist for <code class="docutils literal notranslate"><span class="pre">UrlAdapter</span></code> (SSRF prevention)</p></li>
+<li><p>[ ] Add configurable logging (file output, log levels)</p></li>
+<li><p>[ ] Add metrics/telemetry endpoint</p></li>
+<li><p>[ ] Publish to PyPI with CI/CD pipeline</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="appendix-file-by-file-reference">
+<h2>Appendix: File-by-File Reference<a class="headerlink" href="#appendix-file-by-file-reference" title="Link to this heading"></a></h2>
+<section id="source-files-src-sktime-mcp">
+<h3>Source Files (<code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/</span></code>)<a class="headerlink" href="#source-files-src-sktime-mcp" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>File</p></th>
+<th class="head"><p>Lines</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">__init__.py</span></code></p></td>
+<td><p>~5</p></td>
+<td><p>Package marker</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">server.py</span></code></p></td>
+<td><p>742</p></td>
+<td><p>MCP server: tool registration, dispatch, serialization</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tools/__init__.py</span></code></p></td>
+<td><p>~20</p></td>
+<td><p>Re-exports subset of tools</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">tools/list_estimators.py</span></code></p></td>
+<td><p>~80</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list_estimators_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">get_available_tags</span></code>, <code class="docutils literal notranslate"><span class="pre">get_available_tasks</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tools/describe_estimator.py</span></code></p></td>
+<td><p>~120</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">describe_estimator_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">search_estimators_tool</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">tools/instantiate.py</span></code></p></td>
+<td><p>~300</p></td>
+<td><p>Estimator/pipeline instantiation, handle management, model loading</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tools/fit_predict.py</span></code></p></td>
+<td><p>~120</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fit_predict_tool</span></code>, <code class="docutils literal notranslate"><span class="pre">fit_predict_async_tool</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">tools/evaluate.py</span></code></p></td>
+<td><p>~74</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">evaluate_estimator_tool</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tools/data_tools.py</span></code></p></td>
+<td><p>~206</p></td>
+<td><p>Data loading, listing, async loading</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">tools/format_tools.py</span></code></p></td>
+<td><p>~95</p></td>
+<td><p>Time series formatting, auto-format toggle</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tools/codegen.py</span></code></p></td>
+<td><p>~279</p></td>
+<td><p>Python code generation for estimators/pipelines</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">tools/job_tools.py</span></code></p></td>
+<td><p>~100</p></td>
+<td><p>Job management tool wrappers</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tools/save_model.py</span></code></p></td>
+<td><p>~61</p></td>
+<td><p>Model persistence via MLflow</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">tools/list_available_data.py</span></code></p></td>
+<td><p>~50</p></td>
+<td><p>Unified data listing</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">registry/__init__.py</span></code></p></td>
+<td><p>~5</p></td>
+<td><p>Package marker</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">registry/interface.py</span></code></p></td>
+<td><p>344</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">RegistryInterface</span></code>, <code class="docutils literal notranslate"><span class="pre">EstimatorNode</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">registry/tag_resolver.py</span></code></p></td>
+<td><p>297</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">TagResolver</span></code>, <code class="docutils literal notranslate"><span class="pre">TagInfo</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">runtime/__init__.py</span></code></p></td>
+<td><p>~5</p></td>
+<td><p>Package marker</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">runtime/executor.py</span></code></p></td>
+<td><p>912</p></td>
+<td><p>Core execution engine</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">runtime/handles.py</span></code></p></td>
+<td><p>121</p></td>
+<td><p>Handle manager with LRU eviction</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">runtime/jobs.py</span></code></p></td>
+<td><p>342</p></td>
+<td><p>Thread-safe job manager</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">composition/__init__.py</span></code></p></td>
+<td><p>~5</p></td>
+<td><p>Package marker</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">composition/validator.py</span></code></p></td>
+<td><p>411</p></td>
+<td><p>Pipeline composition validator</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">data/__init__.py</span></code></p></td>
+<td><p>~30</p></td>
+<td><p>Data registry + adapter exports</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data/base.py</span></code></p></td>
+<td><p>122</p></td>
+<td><p>Abstract adapter base class</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">data/registry.py</span></code></p></td>
+<td><p>~60</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">DataSourceRegistry</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data/adapters/__init__.py</span></code></p></td>
+<td><p>~10</p></td>
+<td><p>Adapter exports</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">data/adapters/pandas_adapter.py</span></code></p></td>
+<td><p>~180</p></td>
+<td><p>Pandas/dict data adapter</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data/adapters/file_adapter.py</span></code></p></td>
+<td><p>220</p></td>
+<td><p>CSV/Excel/Parquet file adapter</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">data/adapters/sql_adapter.py</span></code></p></td>
+<td><p>~200</p></td>
+<td><p>SQL database adapter</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data/adapters/url_adapter.py</span></code></p></td>
+<td><p>97</p></td>
+<td><p>URL download adapter</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="test-files-tests">
+<h3>Test Files (<code class="docutils literal notranslate"><span class="pre">tests/</span></code>)<a class="headerlink" href="#test-files-tests" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>File</p></th>
+<th class="head"><p>Tests</p></th>
+<th class="head"><p>Coverage</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">test_core.py</span></code></p></td>
+<td><p>12</p></td>
+<td><p>Registry, handles, composition, basic tools</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">test_codegen.py</span></code></p></td>
+<td><p>17</p></td>
+<td><p>Code generation</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">test_param_validation.py</span></code></p></td>
+<td><p>12</p></td>
+<td><p>Parameter validation</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">test_background_jobs.py</span></code></p></td>
+<td><p>6</p></td>
+<td><p>Job management</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">test_async_data_loading.py</span></code></p></td>
+<td><p>5</p></td>
+<td><p>Async data loading</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">test_evaluate.py</span></code></p></td>
+<td><p>1</p></td>
+<td><p>Evaluation (failing)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">test_data_sources.py</span></code></p></td>
+<td><p>~18</p></td>
+<td><p>Data sources (print-based)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="example-files-examples">
+<h3>Example Files (<code class="docutils literal notranslate"><span class="pre">examples/</span></code>)<a class="headerlink" href="#example-files-examples" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>File</p></th>
+<th class="head"><p>Demonstrates</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">01_forecasting_workflow.py</span></code></p></td>
+<td><p>Basic forecasting pipeline</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">02_llm_query_simulation.py</span></code></p></td>
+<td><p>LLM-style query simulation</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">03_pipeline_instantiation.py</span></code></p></td>
+<td><p>Pipeline creation</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">04_mcp_pipeline_demo.py</span></code></p></td>
+<td><p>MCP pipeline workflow</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">05_simple_deseasonalize_detrend_forecaster.py</span></code></p></td>
+<td><p>Deseasonalize + detrend</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">06_simple_naive_forecaster.py</span></code></p></td>
+<td><p>NaiveForecaster example</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">background_training_example.py</span></code></p></td>
+<td><p>Background job demo</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">csv_example.py</span></code></p></td>
+<td><p>CSV data loading</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">job_management_demo.py</span></code></p></td>
+<td><p>Job management</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pandas_example.py</span></code></p></td>
+<td><p>Pandas data loading</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">sql_example.py</span></code></p></td>
+<td><p>SQL data loading</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, sktime-mcp contributors.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
