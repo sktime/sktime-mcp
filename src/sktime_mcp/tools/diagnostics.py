@@ -262,10 +262,13 @@ def check_structural_break_tool(
         else:
             next_action = "proceed_with_full_series"
 
+        location_fraction = round(break_idx / n, 4) if break_detected else None
+
         return {
             "success": True,
             "break_detected": break_detected,
             "location": break_idx if break_detected else None,
+            "location_fraction": location_fraction,
             "confidence": round(confidence, 4),
             "test_stat": round(test_stat, 4),
             "next_action_hint": next_action,
