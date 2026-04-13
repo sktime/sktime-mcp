@@ -18,6 +18,7 @@ def fit_predict_tool(
     dataset: str,
     horizon: int = 12,
     data_handle: Optional[str] = None,
+    coverage: Optional[Any] = None,
 ) -> dict[str, Any]:
     """
     Execute a complete fit-predict workflow.
@@ -27,12 +28,14 @@ def fit_predict_tool(
         dataset: Name of demo dataset (e.g., "airline", "sunspots")
         horizon: Forecast horizon (default: 12)
         data_handle: Optional handle from load_data_source for custom data
+        coverage: Optional coverage level(s) for prediction intervals, e.g. 0.9
 
     Returns:
         Dictionary with:
         - success: bool
         - predictions: Forecast values
         - horizon: Number of steps predicted
+        - prediction_intervals: Included when coverage is specified
 
     Example:
         >>> fit_predict_tool("est_abc123", "airline", horizon=12)
@@ -43,7 +46,9 @@ def fit_predict_tool(
         }
     """
     executor = get_executor()
-    return executor.fit_predict(estimator_handle, dataset, horizon, data_handle=data_handle)
+    return executor.fit_predict(
+        estimator_handle, dataset, horizon, data_handle=data_handle, coverage=coverage
+    )
 
 
 def fit_tool(
@@ -109,6 +114,7 @@ def fit_predict_async_tool(
     estimator_handle: str,
     dataset: str,
     horizon: int = 12,
+    coverage: Optional[Any] = None,
 ) -> dict[str, Any]:
     """
     Execute a fit-predict workflow in the background (non-blocking).
@@ -120,6 +126,7 @@ def fit_predict_async_tool(
         estimator_handle: Handle from instantiate_estimator
         dataset: Name of demo dataset (e.g., "airline", "sunspots")
         horizon: Forecast horizon (default: 12)
+        coverage: Optional coverage level(s) for prediction intervals, e.g. 0.9
 
     Returns:
         Dictionary with:
@@ -168,7 +175,9 @@ def fit_predict_async_tool(
         asyncio.set_event_loop(loop)
 
     # Schedule the coroutine (non-blocking!)
-    coro = executor.fit_predict_async(estimator_handle, dataset, horizon, job_id)
+    coro = executor.fit_predict_async(
+        estimator_handle, dataset, horizon, job_id, coverage=coverage
+    )
     asyncio.run_coroutine_threadsafe(coro, loop)
 
     return {
@@ -178,4 +187,5 @@ def fit_predict_async_tool(
         "estimator": estimator_name,
         "dataset": dataset,
         "horizon": horizon,
+        "coverage": coverage,
     }
