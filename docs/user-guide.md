@@ -52,7 +52,7 @@ The `sktime-mcp` server exposes a suite of tools designed for Large Language Mod
 |----------|-------|-------------|
 | **Discovery** | `list_estimators`, `search_estimators`, `describe_estimator` | Find the right model for your task (Forecasting, Classification, etc.). |
 | **Instantiation** | `instantiate_estimator`, `instantiate_pipeline` | Create model instances or complex pipelines. |
-| **Execution** | `fit_predict`, `fit`, `predict` | Train models and generate forecasts. |
+| **Execution** | `fit_predict`, `fit_predict_async` | Train models and generate forecasts. |
 | **Data** | `load_data_source`, `list_available_data` | Load data from Pandas, CSV/Parquet, or SQL, and inspect demo datasets plus active handles. |
 | **Export** | `export_code`, `save_model` | Generate Python code or persist fitted estimators to a local path. |
 
