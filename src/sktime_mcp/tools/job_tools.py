@@ -73,63 +73,44 @@ def list_jobs_tool(
     }
 
 
-def cancel_job_tool(job_id: str) -> dict[str, Any]:
+def cancel_job_tool(job_id: str, delete: bool = False) -> dict[str, Any]:
     """
-    Cancel a running or pending job.
+    Cancel a running/pending job, and optionally remove its record.
 
     Args:
         job_id: Job ID to cancel
+        delete: Also remove the job record after cancelling (default: False).
+                For jobs that are already completed/failed, set delete=True
+                to remove them.
 
     Returns:
-        Dictionary with success status
+        Dictionary with success status and message
     """
     job_manager = get_job_manager()
 
-    success = job_manager.cancel_job(job_id)
+    job = job_manager.get_job(job_id)
+    if job is None:
+        return {"success": False, "error": f"Job '{job_id}' not found"}
 
-    if success:
-        return {
-            "success": True,
-            "message": f"Job '{job_id}' cancelled",
-        }
-    else:
-        job = job_manager.get_job(job_id)
-        if job is None:
-            return {
-                "success": False,
-                "error": f"Job '{job_id}' not found",
-            }
-        else:
-            return {
-                "success": False,
-                "error": f"Cannot cancel job in status '{job.status.value}'",
-            }
+    if job.status in (JobStatus.PENDING, JobStatus.RUNNING):
+        job_manager.cancel_job(job_id)
+        msg = f"Job '{job_id}' cancelled"
+        if delete:
+            job_manager.delete_job(job_id)
+            msg += " and removed"
+        return {"success": True, "message": msg}
 
+    if delete:
+        job_manager.delete_job(job_id)
+        return {"success": True, "message": f"Job '{job_id}' removed"}
 
-def delete_job_tool(job_id: str) -> dict[str, Any]:
-    """
-    Delete a job from the job manager.
-
-    Args:
-        job_id: Job ID to delete
-
-    Returns:
-        Dictionary with success status
-    """
-    job_manager = get_job_manager()
-
-    success = job_manager.delete_job(job_id)
-
-    if success:
-        return {
-            "success": True,
-            "message": f"Job '{job_id}' deleted",
-        }
-    else:
-        return {
-            "success": False,
-            "error": f"Job '{job_id}' not found",
-        }
+    return {
+        "success": False,
+        "error": (
+            f"Job is already '{job.status.value}'. "
+            "Use delete=true to remove the record."
+        ),
+    }
 
 
 def cleanup_old_jobs_tool(max_age_hours: int = 24) -> dict[str, Any]:
