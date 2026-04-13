@@ -15,6 +15,7 @@ from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
     instantiate_pipeline_tool,
 )
+from sktime_mcp.tools.fit_predict import predict_tool
 
 
 class TestValidateParams:
@@ -130,6 +131,26 @@ class TestPipelineParamsValidation:
         assert result["success"] is False
         assert "Unsupported type" in result["error"]
 
+class TestFitPredictValidation:
+    """Tests for parameter validation in fit_predict tools."""
+
+    def test_predict_tool_horizon_string(self):
+        """String passed as horizon should be rejected."""
+        result = predict_tool("fake_handle", horizon="five")
+        assert result["success"] is False
+        assert "must be an integer" in result["error"]
+
+    def test_predict_tool_horizon_zero(self):
+        """Zero horizon should be rejected."""
+        result = predict_tool("fake_handle", horizon=0)
+        assert result["success"] is False
+        assert "greater than 0" in result["error"]
+
+    def test_predict_tool_horizon_negative(self):
+        """Negative horizon should be rejected."""
+        result = predict_tool("fake_handle", horizon=-3)
+        assert result["success"] is False
+        assert "greater than 0" in result["error"]
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
