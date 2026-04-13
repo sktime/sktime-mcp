@@ -123,7 +123,29 @@ class TestCheckStructuralBreak:
         assert result["location"] is not None
         # Break should be near index 100 (±20)
         assert abs(result["location"] - 100) < 20
+        assert result["location_fraction"] is not None
+        assert 0.0 < result["location_fraction"] < 1.0
         assert result["next_action_hint"] == "get_dataset_history"
+
+    def test_no_break_location_fraction_is_none(self):
+        """No break detected means location_fraction should be None."""
+        np.random.seed(42)
+        data = np.random.randn(200).tolist()
+        result = check_structural_break_tool(data)
+        assert result["location_fraction"] is None
+
+    def test_linear_trend_break_at_midpoint(self):
+        """A pure linear trend triggers CUSUM break near 0.5 fraction.
+
+        This is a known CUSUM limitation — the location_fraction field
+        lets the LLM detect this pattern and treat it as a trend rather
+        than a genuine structural break.
+        """
+        data = list(range(200))  # pure linear trend
+        result = check_structural_break_tool(data)
+        if result["break_detected"]:
+            # If detected, location_fraction should be near 0.5
+            assert abs(result["location_fraction"] - 0.5) < 0.15
 
     def test_no_break_stationary(self):
         """A stationary series should have no structural break."""
@@ -173,6 +195,7 @@ class TestCheckStructuralBreak:
         assert "success" in result
         assert "break_detected" in result
         assert "location" in result
+        assert "location_fraction" in result
         assert "confidence" in result
         assert "test_stat" in result
         assert "next_action_hint" in result
