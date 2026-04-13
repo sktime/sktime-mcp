@@ -1,0 +1,1068 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API Reference &mdash; sktime-mcp 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/extra.css?v=e8756899" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.png"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Developer Guide" href="dev-guide.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            sktime-mcp
+              <img src="_static/favicon.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="intro.html">sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="use-cases.html">🎯 Use Cases &amp; Personas</a></li>
+<li class="toctree-l1"><a class="reference internal" href="user-guide.html">📘 User Guide</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="usage-examples.html">Usage Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data-sources.html">Data Source Support</a></li>
+<li class="toctree-l1"><a class="reference internal" href="background-jobs.html">Background Job Management</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Development</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture Diagram</a></li>
+<li class="toctree-l1"><a class="reference internal" href="implementation.html">Complete Code Explanation: sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dev-guide.html">Developer Guide</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#sktime_mcp.EstimatorNode"><code class="docutils literal notranslate"><span class="pre">EstimatorNode</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.EstimatorNode.name"><code class="docutils literal notranslate"><span class="pre">EstimatorNode.name</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.EstimatorNode.task"><code class="docutils literal notranslate"><span class="pre">EstimatorNode.task</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.EstimatorNode.class_ref"><code class="docutils literal notranslate"><span class="pre">EstimatorNode.class_ref</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.EstimatorNode.module"><code class="docutils literal notranslate"><span class="pre">EstimatorNode.module</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.EstimatorNode.tags"><code class="docutils literal notranslate"><span class="pre">EstimatorNode.tags</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.EstimatorNode.hyperparameters"><code class="docutils literal notranslate"><span class="pre">EstimatorNode.hyperparameters</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.EstimatorNode.docstring"><code class="docutils literal notranslate"><span class="pre">EstimatorNode.docstring</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id0"><code class="docutils literal notranslate"><span class="pre">EstimatorNode.name</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id1"><code class="docutils literal notranslate"><span class="pre">EstimatorNode.task</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id2"><code class="docutils literal notranslate"><span class="pre">EstimatorNode.class_ref</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id3"><code class="docutils literal notranslate"><span class="pre">EstimatorNode.module</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id4"><code class="docutils literal notranslate"><span class="pre">EstimatorNode.tags</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id5"><code class="docutils literal notranslate"><span class="pre">EstimatorNode.hyperparameters</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id6"><code class="docutils literal notranslate"><span class="pre">EstimatorNode.docstring</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.EstimatorNode.to_dict"><code class="docutils literal notranslate"><span class="pre">EstimatorNode.to_dict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.EstimatorNode.to_summary"><code class="docutils literal notranslate"><span class="pre">EstimatorNode.to_summary()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.EstimatorNode.__init__"><code class="docutils literal notranslate"><span class="pre">EstimatorNode.__init__()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#sktime_mcp.RegistryInterface"><code class="docutils literal notranslate"><span class="pre">RegistryInterface</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.RegistryInterface.TASK_MAP"><code class="docutils literal notranslate"><span class="pre">RegistryInterface.TASK_MAP</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.RegistryInterface.__init__"><code class="docutils literal notranslate"><span class="pre">RegistryInterface.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.RegistryInterface.get_all_estimators"><code class="docutils literal notranslate"><span class="pre">RegistryInterface.get_all_estimators()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.RegistryInterface.get_estimator_by_name"><code class="docutils literal notranslate"><span class="pre">RegistryInterface.get_estimator_by_name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.RegistryInterface.get_available_tasks"><code class="docutils literal notranslate"><span class="pre">RegistryInterface.get_available_tasks()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.RegistryInterface.get_available_tags"><code class="docutils literal notranslate"><span class="pre">RegistryInterface.get_available_tags()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.RegistryInterface.search_estimators"><code class="docutils literal notranslate"><span class="pre">RegistryInterface.search_estimators()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#sktime_mcp.TagResolver"><code class="docutils literal notranslate"><span class="pre">TagResolver</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.TagResolver.__init__"><code class="docutils literal notranslate"><span class="pre">TagResolver.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.TagResolver.tag_definitions"><code class="docutils literal notranslate"><span class="pre">TagResolver.tag_definitions</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.TagResolver.get_tag_info"><code class="docutils literal notranslate"><span class="pre">TagResolver.get_tag_info()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.TagResolver.get_tag_description"><code class="docutils literal notranslate"><span class="pre">TagResolver.get_tag_description()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.TagResolver.get_tags_by_category"><code class="docutils literal notranslate"><span class="pre">TagResolver.get_tags_by_category()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.TagResolver.get_all_categories"><code class="docutils literal notranslate"><span class="pre">TagResolver.get_all_categories()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.TagResolver.explain_tags"><code class="docutils literal notranslate"><span class="pre">TagResolver.explain_tags()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.TagResolver.filter_estimators_by_capability"><code class="docutils literal notranslate"><span class="pre">TagResolver.filter_estimators_by_capability()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.TagResolver.check_compatibility"><code class="docutils literal notranslate"><span class="pre">TagResolver.check_compatibility()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.TagResolver.suggest_similar_estimators"><code class="docutils literal notranslate"><span class="pre">TagResolver.suggest_similar_estimators()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#sktime_mcp.CompositionValidator"><code class="docutils literal notranslate"><span class="pre">CompositionValidator</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.CompositionValidator.COMPOSITION_RULES"><code class="docutils literal notranslate"><span class="pre">CompositionValidator.COMPOSITION_RULES</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.CompositionValidator.TRANSFORMER_CATEGORIES"><code class="docutils literal notranslate"><span class="pre">CompositionValidator.TRANSFORMER_CATEGORIES</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.CompositionValidator.__init__"><code class="docutils literal notranslate"><span class="pre">CompositionValidator.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.CompositionValidator.validate_pipeline"><code class="docutils literal notranslate"><span class="pre">CompositionValidator.validate_pipeline()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.CompositionValidator.get_valid_compositions"><code class="docutils literal notranslate"><span class="pre">CompositionValidator.get_valid_compositions()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.CompositionValidator.suggest_pipeline"><code class="docutils literal notranslate"><span class="pre">CompositionValidator.suggest_pipeline()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#sktime_mcp.Executor"><code class="docutils literal notranslate"><span class="pre">Executor</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.Executor.__init__"><code class="docutils literal notranslate"><span class="pre">Executor.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.Executor.instantiate"><code class="docutils literal notranslate"><span class="pre">Executor.instantiate()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.Executor.load_dataset"><code class="docutils literal notranslate"><span class="pre">Executor.load_dataset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.Executor.fit"><code class="docutils literal notranslate"><span class="pre">Executor.fit()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.Executor.predict"><code class="docutils literal notranslate"><span class="pre">Executor.predict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.Executor.fit_predict"><code class="docutils literal notranslate"><span class="pre">Executor.fit_predict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.Executor.fit_predict_async"><code class="docutils literal notranslate"><span class="pre">Executor.fit_predict_async()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.Executor.instantiate_pipeline"><code class="docutils literal notranslate"><span class="pre">Executor.instantiate_pipeline()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.Executor.list_datasets"><code class="docutils literal notranslate"><span class="pre">Executor.list_datasets()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.Executor.load_data_source"><code class="docutils literal notranslate"><span class="pre">Executor.load_data_source()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.Executor.load_data_source_async"><code class="docutils literal notranslate"><span class="pre">Executor.load_data_source_async()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.Executor.format_data_handle"><code class="docutils literal notranslate"><span class="pre">Executor.format_data_handle()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.Executor.fit_predict_with_data"><code class="docutils literal notranslate"><span class="pre">Executor.fit_predict_with_data()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.Executor.list_data_handles"><code class="docutils literal notranslate"><span class="pre">Executor.list_data_handles()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.Executor.release_data_handle"><code class="docutils literal notranslate"><span class="pre">Executor.release_data_handle()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#sktime_mcp.HandleManager"><code class="docutils literal notranslate"><span class="pre">HandleManager</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.HandleManager.__init__"><code class="docutils literal notranslate"><span class="pre">HandleManager.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.HandleManager.create_handle"><code class="docutils literal notranslate"><span class="pre">HandleManager.create_handle()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.HandleManager.get_instance"><code class="docutils literal notranslate"><span class="pre">HandleManager.get_instance()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.HandleManager.get_info"><code class="docutils literal notranslate"><span class="pre">HandleManager.get_info()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.HandleManager.exists"><code class="docutils literal notranslate"><span class="pre">HandleManager.exists()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.HandleManager.mark_fitted"><code class="docutils literal notranslate"><span class="pre">HandleManager.mark_fitted()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.HandleManager.is_fitted"><code class="docutils literal notranslate"><span class="pre">HandleManager.is_fitted()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.HandleManager.release_handle"><code class="docutils literal notranslate"><span class="pre">HandleManager.release_handle()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.HandleManager.list_handles"><code class="docutils literal notranslate"><span class="pre">HandleManager.list_handles()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.HandleManager.clear_all"><code class="docutils literal notranslate"><span class="pre">HandleManager.clear_all()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#module-sktime_mcp.server">Server</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.server.sanitize_for_json"><code class="docutils literal notranslate"><span class="pre">sanitize_for_json()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.server.list_tools"><code class="docutils literal notranslate"><span class="pre">list_tools()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.server.call_tool"><code class="docutils literal notranslate"><span class="pre">call_tool()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.server.run_server"><code class="docutils literal notranslate"><span class="pre">run_server()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sktime_mcp.server.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">sktime-mcp</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">API Reference</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/api.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-sktime_mcp">
+<span id="api-reference"></span><h1>API Reference<a class="headerlink" href="#module-sktime_mcp" title="Link to this heading"></a></h1>
+<p>sktime-mcp: MCP (Model Context Protocol) layer for sktime.</p>
+<p>A semantic engine that exposes sktime’s native registry and semantics to LLMs,
+enabling discovery, reasoning, composition, and execution of time series workflows.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="sktime_mcp.EstimatorNode">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sktime_mcp.</span></span><span class="sig-name descname"><span class="pre">EstimatorNode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">task</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">class_ref</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tags</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hyperparameters</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">docstring</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/interface.html#EstimatorNode"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.EstimatorNode" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Represents a single estimator in the sktime registry.</p>
+<p>This is the semantic representation of an estimator that gets
+exposed to the LLM through the MCP.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="sktime_mcp.EstimatorNode.name">
+<span class="sig-name descname"><span class="pre">name</span></span><a class="headerlink" href="#sktime_mcp.EstimatorNode.name" title="Link to this definition"></a></dt>
+<dd><p>The class name of the estimator (e.g., “ARIMA”)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="sktime_mcp.EstimatorNode.task">
+<span class="sig-name descname"><span class="pre">task</span></span><a class="headerlink" href="#sktime_mcp.EstimatorNode.task" title="Link to this definition"></a></dt>
+<dd><p>The task type (e.g., “forecaster”, “transformer”, “classifier”)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="sktime_mcp.EstimatorNode.class_ref">
+<span class="sig-name descname"><span class="pre">class_ref</span></span><a class="headerlink" href="#sktime_mcp.EstimatorNode.class_ref" title="Link to this definition"></a></dt>
+<dd><p>Reference to the actual Python class</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="sktime_mcp.EstimatorNode.module">
+<span class="sig-name descname"><span class="pre">module</span></span><a class="headerlink" href="#sktime_mcp.EstimatorNode.module" title="Link to this definition"></a></dt>
+<dd><p>Full module path to the estimator</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="sktime_mcp.EstimatorNode.tags">
+<span class="sig-name descname"><span class="pre">tags</span></span><a class="headerlink" href="#sktime_mcp.EstimatorNode.tags" title="Link to this definition"></a></dt>
+<dd><p>Dictionary of capability tags</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="sktime_mcp.EstimatorNode.hyperparameters">
+<span class="sig-name descname"><span class="pre">hyperparameters</span></span><a class="headerlink" href="#sktime_mcp.EstimatorNode.hyperparameters" title="Link to this definition"></a></dt>
+<dd><p>List of hyperparameter names with their defaults</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="sktime_mcp.EstimatorNode.docstring">
+<span class="sig-name descname"><span class="pre">docstring</span></span><a class="headerlink" href="#sktime_mcp.EstimatorNode.docstring" title="Link to this definition"></a></dt>
+<dd><p>The estimator’s docstring for understanding usage</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id0">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#id0" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id1">
+<span class="sig-name descname"><span class="pre">task</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#id1" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id2">
+<span class="sig-name descname"><span class="pre">class_ref</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">type</span></span><a class="headerlink" href="#id2" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id3">
+<span class="sig-name descname"><span class="pre">module</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#id3" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id4">
+<span class="sig-name descname"><span class="pre">tags</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#id4" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id5">
+<span class="sig-name descname"><span class="pre">hyperparameters</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#id5" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id6">
+<span class="sig-name descname"><span class="pre">docstring</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#id6" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.EstimatorNode.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/interface.html#EstimatorNode.to_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.EstimatorNode.to_dict" title="Link to this definition"></a></dt>
+<dd><p>Convert to dictionary for JSON serialization.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.EstimatorNode.to_summary">
+<span class="sig-name descname"><span class="pre">to_summary</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/interface.html#EstimatorNode.to_summary"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.EstimatorNode.to_summary" title="Link to this definition"></a></dt>
+<dd><p>Return a minimal summary for list operations.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.EstimatorNode.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">task</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">class_ref</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tags</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hyperparameters</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">docstring</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sktime_mcp.EstimatorNode.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="sktime_mcp.RegistryInterface">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sktime_mcp.</span></span><span class="sig-name descname"><span class="pre">RegistryInterface</span></span><a class="reference internal" href="_modules/sktime_mcp/registry/interface.html#RegistryInterface"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.RegistryInterface" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Interface to sktime’s estimator registry.</p>
+<p>This class wraps sktime’s <cite>all_estimators</cite> function and provides
+structured access to estimator metadata, tags, and documentation.</p>
+<p>The registry is the single source of truth for all estimator information.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="sktime_mcp.RegistryInterface.TASK_MAP">
+<span class="sig-name descname"><span class="pre">TASK_MAP</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'classifier':</span> <span class="pre">'classification',</span> <span class="pre">'clusterer':</span> <span class="pre">'clustering',</span> <span class="pre">'forecaster':</span> <span class="pre">'forecasting',</span> <span class="pre">'network':</span> <span class="pre">'network',</span> <span class="pre">'param_est':</span> <span class="pre">'parameter_estimation',</span> <span class="pre">'regressor':</span> <span class="pre">'regression',</span> <span class="pre">'splitter':</span> <span class="pre">'splitting',</span> <span class="pre">'transformer':</span> <span class="pre">'transformation'}</span></span><a class="headerlink" href="#sktime_mcp.RegistryInterface.TASK_MAP" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.RegistryInterface.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/interface.html#RegistryInterface.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.RegistryInterface.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the registry interface.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.RegistryInterface.get_all_estimators">
+<span class="sig-name descname"><span class="pre">get_all_estimators</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tags</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/interface.html#RegistryInterface.get_all_estimators"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.RegistryInterface.get_all_estimators" title="Link to this definition"></a></dt>
+<dd><p>Get all estimators, optionally filtered by task and tags.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>task</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>]</span>) – Filter by task type (e.g., “forecasting”, “classification”)</p></li>
+<li><p><strong>tags</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]]</span>) – Filter by capability tags (e.g., {“capability:pred_int”: True})</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code>[<a class="reference internal" href="#sktime_mcp.EstimatorNode" title="sktime_mcp.registry.interface.EstimatorNode"><code class="xref py py-class docutils literal notranslate"><span class="pre">EstimatorNode</span></code></a>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List of matching EstimatorNode objects</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.RegistryInterface.get_estimator_by_name">
+<span class="sig-name descname"><span class="pre">get_estimator_by_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/interface.html#RegistryInterface.get_estimator_by_name"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.RegistryInterface.get_estimator_by_name" title="Link to this definition"></a></dt>
+<dd><p>Get a specific estimator by its class name.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>name</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></span>) – The class name of the estimator (e.g., “ARIMA”)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<a class="reference internal" href="#sktime_mcp.EstimatorNode" title="sktime_mcp.registry.interface.EstimatorNode"><code class="xref py py-class docutils literal notranslate"><span class="pre">EstimatorNode</span></code></a>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>EstimatorNode if found, None otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.RegistryInterface.get_available_tasks">
+<span class="sig-name descname"><span class="pre">get_available_tasks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/interface.html#RegistryInterface.get_available_tasks"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.RegistryInterface.get_available_tasks" title="Link to this definition"></a></dt>
+<dd><p>Get list of available task types.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>]</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.RegistryInterface.get_available_tags">
+<span class="sig-name descname"><span class="pre">get_available_tags</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/interface.html#RegistryInterface.get_available_tags"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.RegistryInterface.get_available_tags" title="Link to this definition"></a></dt>
+<dd><p>Get rich metadata for all available tags using sktime’s registry.</p>
+<p>Returns a list of dicts, each containing:
+- tag: the tag name (e.g., “scitype:y”)
+- description: human-readable explanation of what the tag means
+- value_type: the expected value type (e.g., “bool”, “str”)
+- applies_to: list of estimator types this tag applies to</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]]</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.RegistryInterface.search_estimators">
+<span class="sig-name descname"><span class="pre">search_estimators</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">query</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/interface.html#RegistryInterface.search_estimators"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.RegistryInterface.search_estimators" title="Link to this definition"></a></dt>
+<dd><p>Search estimators by name or docstring.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>query</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></span>) – Search string (case-insensitive)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code>[<a class="reference internal" href="#sktime_mcp.EstimatorNode" title="sktime_mcp.registry.interface.EstimatorNode"><code class="xref py py-class docutils literal notranslate"><span class="pre">EstimatorNode</span></code></a>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List of matching EstimatorNode objects</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="sktime_mcp.TagResolver">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sktime_mcp.</span></span><span class="sig-name descname"><span class="pre">TagResolver</span></span><a class="reference internal" href="_modules/sktime_mcp/registry/tag_resolver.html#TagResolver"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.TagResolver" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Resolver for sktime estimator tags.</p>
+<p>Tags encode important semantic information about estimators:
+- Supported data types
+- Probabilistic vs deterministic predictions
+- Composability rules
+- Missing value handling
+- And many more…</p>
+<p>This class provides utilities for understanding and querying tags.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.TagResolver.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/tag_resolver.html#TagResolver.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.TagResolver.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the tag resolver.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="sktime_mcp.TagResolver.tag_definitions">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">tag_definitions</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">TagInfo</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#sktime_mcp.TagResolver.tag_definitions" title="Link to this definition"></a></dt>
+<dd><p>Get tag definitions, loading them if necessary.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.TagResolver.get_tag_info">
+<span class="sig-name descname"><span class="pre">get_tag_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tag_name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/tag_resolver.html#TagResolver.get_tag_info"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.TagResolver.get_tag_info" title="Link to this definition"></a></dt>
+<dd><p>Get information about a specific tag.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tag_name</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></span>) – The tag name to look up</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">TagInfo</span></code>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>TagInfo if known, None otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.TagResolver.get_tag_description">
+<span class="sig-name descname"><span class="pre">get_tag_description</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tag_name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/tag_resolver.html#TagResolver.get_tag_description"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.TagResolver.get_tag_description" title="Link to this definition"></a></dt>
+<dd><p>Get human-readable description of a tag.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tag_name</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></span>) – The tag name</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Description string, or generic message if unknown</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.TagResolver.get_tags_by_category">
+<span class="sig-name descname"><span class="pre">get_tags_by_category</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">category</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/tag_resolver.html#TagResolver.get_tags_by_category"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.TagResolver.get_tags_by_category" title="Link to this definition"></a></dt>
+<dd><p>Get all known tags in a specific category.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>category</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></span>) – Category name (e.g., “capability”, “data”, “behavior”)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">TagInfo</span></code>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List of TagInfo objects in that category</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.TagResolver.get_all_categories">
+<span class="sig-name descname"><span class="pre">get_all_categories</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/tag_resolver.html#TagResolver.get_all_categories"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.TagResolver.get_all_categories" title="Link to this definition"></a></dt>
+<dd><p>Get list of all tag categories.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>]</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.TagResolver.explain_tags">
+<span class="sig-name descname"><span class="pre">explain_tags</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tags</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/tag_resolver.html#TagResolver.explain_tags"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.TagResolver.explain_tags" title="Link to this definition"></a></dt>
+<dd><p>Get human-readable explanations for a set of tags.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tags</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span>) – Dictionary of tag names to values</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dictionary of tag names to explanation strings</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.TagResolver.filter_estimators_by_capability">
+<span class="sig-name descname"><span class="pre">filter_estimators_by_capability</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">probabilistic</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">handles_missing</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">multivariate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/tag_resolver.html#TagResolver.filter_estimators_by_capability"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.TagResolver.filter_estimators_by_capability" title="Link to this definition"></a></dt>
+<dd><p>Filter estimators by common capability requirements.</p>
+<p>This is a convenience method that translates human-friendly
+requirements into the appropriate tag queries.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>task</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>]</span>) – Task type filter</p></li>
+<li><p><strong>probabilistic</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code>]</span>) – Require probabilistic predictions</p></li>
+<li><p><strong>handles_missing</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code>]</span>) – Require missing data handling</p></li>
+<li><p><strong>multivariate</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code>]</span>) – Require multivariate support</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code>[<a class="reference internal" href="#sktime_mcp.EstimatorNode" title="sktime_mcp.registry.interface.EstimatorNode"><code class="xref py py-class docutils literal notranslate"><span class="pre">EstimatorNode</span></code></a>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List of matching EstimatorNode objects</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.TagResolver.check_compatibility">
+<span class="sig-name descname"><span class="pre">check_compatibility</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">estimator</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">requirements</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/tag_resolver.html#TagResolver.check_compatibility"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.TagResolver.check_compatibility" title="Link to this definition"></a></dt>
+<dd><p>Check if an estimator meets specific requirements.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>estimator</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="#sktime_mcp.EstimatorNode" title="sktime_mcp.registry.interface.EstimatorNode"><code class="xref py py-class docutils literal notranslate"><span class="pre">EstimatorNode</span></code></a></span>) – The estimator to check</p></li>
+<li><p><strong>requirements</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span>) – Dictionary of required tag values</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dictionary mapping requirement names to whether they are met</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.TagResolver.suggest_similar_estimators">
+<span class="sig-name descname"><span class="pre">suggest_similar_estimators</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">estimator</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_results</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/registry/tag_resolver.html#TagResolver.suggest_similar_estimators"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.TagResolver.suggest_similar_estimators" title="Link to this definition"></a></dt>
+<dd><p>Find estimators with similar capabilities.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>estimator</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="#sktime_mcp.EstimatorNode" title="sktime_mcp.registry.interface.EstimatorNode"><code class="xref py py-class docutils literal notranslate"><span class="pre">EstimatorNode</span></code></a></span>) – Reference estimator</p></li>
+<li><p><strong>max_results</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></span>) – Maximum number of results</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code>[<a class="reference internal" href="#sktime_mcp.EstimatorNode" title="sktime_mcp.registry.interface.EstimatorNode"><code class="xref py py-class docutils literal notranslate"><span class="pre">EstimatorNode</span></code></a>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List of similar estimators (same task, similar tags)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="sktime_mcp.CompositionValidator">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sktime_mcp.</span></span><span class="sig-name descname"><span class="pre">CompositionValidator</span></span><a class="reference internal" href="_modules/sktime_mcp/composition/validator.html#CompositionValidator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.CompositionValidator" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Validator for sktime estimator compositions.</p>
+<p>This class encodes the rules for valid estimator compositions
+in sktime, allowing validation at planning time rather than
+runtime.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="sktime_mcp.CompositionValidator.COMPOSITION_RULES">
+<span class="sig-name descname"><span class="pre">COMPOSITION_RULES</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">CompositionRule</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[CompositionRule(source_task='transformation',</span> <span class="pre">target_task='forecasting',</span> <span class="pre">composition_type=&lt;CompositionType.FORECASTING_PIPELINE:</span> <span class="pre">'forecasting_pipeline'&gt;,</span> <span class="pre">position='before',</span> <span class="pre">description='Transformers</span> <span class="pre">can</span> <span class="pre">be</span> <span class="pre">applied</span> <span class="pre">before</span> <span class="pre">forecasters</span> <span class="pre">in</span> <span class="pre">a</span> <span class="pre">pipeline'),</span> <span class="pre">CompositionRule(source_task='transformation',</span> <span class="pre">target_task='transformation',</span> <span class="pre">composition_type=&lt;CompositionType.TRANSFORMER_PIPELINE:</span> <span class="pre">'transformer_pipeline'&gt;,</span> <span class="pre">position='before',</span> <span class="pre">description='Transformers</span> <span class="pre">can</span> <span class="pre">be</span> <span class="pre">chained</span> <span class="pre">together'),</span> <span class="pre">CompositionRule(source_task='forecasting',</span> <span class="pre">target_task='forecasting',</span> <span class="pre">composition_type=&lt;CompositionType.ENSEMBLE:</span> <span class="pre">'ensemble'&gt;,</span> <span class="pre">position='any',</span> <span class="pre">description='Forecasters</span> <span class="pre">can</span> <span class="pre">be</span> <span class="pre">combined</span> <span class="pre">in</span> <span class="pre">an</span> <span class="pre">ensemble'),</span> <span class="pre">CompositionRule(source_task='classification',</span> <span class="pre">target_task='classification',</span> <span class="pre">composition_type=&lt;CompositionType.ENSEMBLE:</span> <span class="pre">'ensemble'&gt;,</span> <span class="pre">position='any',</span> <span class="pre">description='Classifiers</span> <span class="pre">can</span> <span class="pre">be</span> <span class="pre">combined</span> <span class="pre">in</span> <span class="pre">an</span> <span class="pre">ensemble'),</span> <span class="pre">CompositionRule(source_task='transformation',</span> <span class="pre">target_task='classification',</span> <span class="pre">composition_type=&lt;CompositionType.PIPELINE:</span> <span class="pre">'pipeline'&gt;,</span> <span class="pre">position='before',</span> <span class="pre">description='Transformers</span> <span class="pre">can</span> <span class="pre">be</span> <span class="pre">applied</span> <span class="pre">before</span> <span class="pre">classifiers'),</span> <span class="pre">CompositionRule(source_task='transformation',</span> <span class="pre">target_task='regression',</span> <span class="pre">composition_type=&lt;CompositionType.PIPELINE:</span> <span class="pre">'pipeline'&gt;,</span> <span class="pre">position='before',</span> <span class="pre">description='Transformers</span> <span class="pre">can</span> <span class="pre">be</span> <span class="pre">applied</span> <span class="pre">before</span> <span class="pre">regressors')]</span></span><a class="headerlink" href="#sktime_mcp.CompositionValidator.COMPOSITION_RULES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="sktime_mcp.CompositionValidator.TRANSFORMER_CATEGORIES">
+<span class="sig-name descname"><span class="pre">TRANSFORMER_CATEGORIES</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'BoxCoxTransformer':</span> <span class="pre">'power_transform',</span> <span class="pre">'DateTimeFeatures':</span> <span class="pre">'feature_creator',</span> <span class="pre">'Deseasonalize':</span> <span class="pre">'seasonality_remover',</span> <span class="pre">'Detrend':</span> <span class="pre">'trend_remover',</span> <span class="pre">'Differencer':</span> <span class="pre">'differencer',</span> <span class="pre">'Imputer':</span> <span class="pre">'missing_value_handler',</span> <span class="pre">'Lag':</span> <span class="pre">'lag_creator',</span> <span class="pre">'LogTransformer':</span> <span class="pre">'power_transform',</span> <span class="pre">'ScaledLogitTransformer':</span> <span class="pre">'power_transform',</span> <span class="pre">'WindowSummarizer':</span> <span class="pre">'feature_creator'}</span></span><a class="headerlink" href="#sktime_mcp.CompositionValidator.TRANSFORMER_CATEGORIES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.CompositionValidator.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/composition/validator.html#CompositionValidator.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.CompositionValidator.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the validator.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.CompositionValidator.validate_pipeline">
+<span class="sig-name descname"><span class="pre">validate_pipeline</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">components</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/composition/validator.html#CompositionValidator.validate_pipeline"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.CompositionValidator.validate_pipeline" title="Link to this definition"></a></dt>
+<dd><p>Validate a proposed pipeline composition.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>components</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>]</span>) – List of estimator names in pipeline order</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValidationResult</span></code></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ValidationResult with validity status and any issues</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.CompositionValidator.get_valid_compositions">
+<span class="sig-name descname"><span class="pre">get_valid_compositions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">estimator_name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/composition/validator.html#CompositionValidator.get_valid_compositions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.CompositionValidator.get_valid_compositions" title="Link to this definition"></a></dt>
+<dd><p>Get valid compositions for an estimator.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>estimator_name</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></span>) – Name of the estimator</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>]]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dictionary with “can_precede” and “can_follow” lists</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.CompositionValidator.suggest_pipeline">
+<span class="sig-name descname"><span class="pre">suggest_pipeline</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">requirements</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/composition/validator.html#CompositionValidator.suggest_pipeline"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.CompositionValidator.suggest_pipeline" title="Link to this definition"></a></dt>
+<dd><p>Suggest a valid pipeline for a given task.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>task</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></span>) – Target task (e.g., “forecasting”)</p></li>
+<li><p><strong>requirements</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]]</span>) – Optional requirements (e.g., {“handles_missing”: True})</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List of suggested estimator names forming a valid pipeline</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="sktime_mcp.Executor">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sktime_mcp.</span></span><span class="sig-name descname"><span class="pre">Executor</span></span><a class="reference internal" href="_modules/sktime_mcp/runtime/executor.html#Executor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.Executor" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Execution runtime for sktime estimators.</p>
+<p>Handles instantiation, fitting, and prediction.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.Executor.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/executor.html#Executor.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.Executor.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.Executor.instantiate">
+<span class="sig-name descname"><span class="pre">instantiate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">estimator_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/executor.html#Executor.instantiate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.Executor.instantiate" title="Link to this definition"></a></dt>
+<dd><p>Instantiate an estimator and return a handle.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.Executor.load_dataset">
+<span class="sig-name descname"><span class="pre">load_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/executor.html#Executor.load_dataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.Executor.load_dataset" title="Link to this definition"></a></dt>
+<dd><p>Load a demo dataset.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.Executor.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handle_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fh</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/executor.html#Executor.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.Executor.fit" title="Link to this definition"></a></dt>
+<dd><p>Fit an estimator.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.Executor.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handle_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fh</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/executor.html#Executor.predict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.Executor.predict" title="Link to this definition"></a></dt>
+<dd><p>Generate predictions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.Executor.fit_predict">
+<span class="sig-name descname"><span class="pre">fit_predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handle_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">horizon</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">12</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_handle</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/executor.html#Executor.fit_predict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.Executor.fit_predict" title="Link to this definition"></a></dt>
+<dd><p>Convenience method: load data, fit, and predict.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.Executor.fit_predict_async">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">fit_predict_async</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handle_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">horizon</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">12</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job_id</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/executor.html#Executor.fit_predict_async"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.Executor.fit_predict_async" title="Link to this definition"></a></dt>
+<dd><p>Async version of fit_predict with job tracking.</p>
+<p>This method runs the training in the background without blocking the MCP server.
+Progress is tracked via the JobManager.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>handle_id</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></span>) – Estimator handle</p></li>
+<li><p><strong>dataset</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></span>) – Dataset name</p></li>
+<li><p><strong>horizon</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></span>) – Forecast horizon</p></li>
+<li><p><strong>job_id</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>]</span>) – Optional job ID for tracking (created if not provided)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dictionary with success status and job_id</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.Executor.instantiate_pipeline">
+<span class="sig-name descname"><span class="pre">instantiate_pipeline</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">components</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params_list</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/executor.html#Executor.instantiate_pipeline"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.Executor.instantiate_pipeline" title="Link to this definition"></a></dt>
+<dd><p>Instantiate a pipeline from a list of components.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>components</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>]</span>) – List of estimator names in pipeline order</p></li>
+<li><p><strong>params_list</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]]]</span>) – Optional list of parameter dicts for each component</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dictionary with success status and handle</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.Executor.list_datasets">
+<span class="sig-name descname"><span class="pre">list_datasets</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/executor.html#Executor.list_datasets"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.Executor.list_datasets" title="Link to this definition"></a></dt>
+<dd><p>List available demo datasets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>]</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.Executor.load_data_source">
+<span class="sig-name descname"><span class="pre">load_data_source</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/executor.html#Executor.load_data_source"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.Executor.load_data_source" title="Link to this definition"></a></dt>
+<dd><p>Load data from any source (pandas, SQL, file, etc.).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>config</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span>) – Data source configuration with ‘type’ key
+Examples:
+- {“type”: “pandas”, “data”: df, “time_column”: “date”, “target_column”: “value”}
+- {“type”: “sql”, “connection_string”: “…”, “query”: “…”, “time_column”: “date”}
+- {“type”: “file”, “path”: “/path/to/data.csv”, “time_column”: “date”}</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p>success: bool</p></li>
+<li><p>data_handle: str (handle ID for the loaded data)</p></li>
+<li><p>metadata: dict (information about the data)</p></li>
+<li><p>validation: dict (validation results)</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.Executor.load_data_source_async">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">load_data_source_async</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job_id</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/executor.html#Executor.load_data_source_async"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.Executor.load_data_source_async" title="Link to this definition"></a></dt>
+<dd><p>Async version of load_data_source with job tracking.</p>
+<p>Runs data loading in the background without blocking the
+MCP server. Progress is tracked via the JobManager.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span>) – Data source configuration</p></li>
+<li><p><strong>job_id</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>]</span>) – Optional job ID (created if not provided)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dictionary with data_handle and metadata</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.Executor.format_data_handle">
+<span class="sig-name descname"><span class="pre">format_data_handle</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data_handle</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">auto_infer_freq</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fill_missing</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_duplicates</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/executor.html#Executor.format_data_handle"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.Executor.format_data_handle" title="Link to this definition"></a></dt>
+<dd><p>Format data associated with a handle.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.Executor.fit_predict_with_data">
+<span class="sig-name descname"><span class="pre">fit_predict_with_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">estimator_handle</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_handle</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">horizon</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">12</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/executor.html#Executor.fit_predict_with_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.Executor.fit_predict_with_data" title="Link to this definition"></a></dt>
+<dd><p>Fit and predict using a data handle.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>estimator_handle</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></span>) – Estimator handle from instantiate_estimator</p></li>
+<li><p><strong>data_handle</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></span>) – Data handle from load_data_source</p></li>
+<li><p><strong>horizon</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></span>) – Forecast horizon</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dictionary with predictions</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.Executor.list_data_handles">
+<span class="sig-name descname"><span class="pre">list_data_handles</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/executor.html#Executor.list_data_handles"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.Executor.list_data_handles" title="Link to this definition"></a></dt>
+<dd><p>List all loaded data handles.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span></p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dictionary with list of data handles and their metadata</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.Executor.release_data_handle">
+<span class="sig-name descname"><span class="pre">release_data_handle</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data_handle</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/executor.html#Executor.release_data_handle"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.Executor.release_data_handle" title="Link to this definition"></a></dt>
+<dd><p>Release a data handle and free memory.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>data_handle</strong> (<span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></span>) – Data handle to release</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dictionary with success status</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="sktime_mcp.HandleManager">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sktime_mcp.</span></span><span class="sig-name descname"><span class="pre">HandleManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">max_handles</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/handles.html#HandleManager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.HandleManager" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Manager for estimator instance handles.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.HandleManager.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">max_handles</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/handles.html#HandleManager.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.HandleManager.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.HandleManager.create_handle">
+<span class="sig-name descname"><span class="pre">create_handle</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">estimator_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instance</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/handles.html#HandleManager.create_handle"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.HandleManager.create_handle" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.HandleManager.get_instance">
+<span class="sig-name descname"><span class="pre">get_instance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handle_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/handles.html#HandleManager.get_instance"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.HandleManager.get_instance" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.HandleManager.get_info">
+<span class="sig-name descname"><span class="pre">get_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handle_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/handles.html#HandleManager.get_info"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.HandleManager.get_info" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">HandleInfo</span></code></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.HandleManager.exists">
+<span class="sig-name descname"><span class="pre">exists</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handle_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/handles.html#HandleManager.exists"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.HandleManager.exists" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.HandleManager.mark_fitted">
+<span class="sig-name descname"><span class="pre">mark_fitted</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handle_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/handles.html#HandleManager.mark_fitted"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.HandleManager.mark_fitted" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.HandleManager.is_fitted">
+<span class="sig-name descname"><span class="pre">is_fitted</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handle_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/handles.html#HandleManager.is_fitted"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.HandleManager.is_fitted" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.HandleManager.release_handle">
+<span class="sig-name descname"><span class="pre">release_handle</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handle_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/handles.html#HandleManager.release_handle"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.HandleManager.release_handle" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.HandleManager.list_handles">
+<span class="sig-name descname"><span class="pre">list_handles</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/handles.html#HandleManager.list_handles"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.HandleManager.list_handles" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code>]]</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sktime_mcp.HandleManager.clear_all">
+<span class="sig-name descname"><span class="pre">clear_all</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/runtime/handles.html#HandleManager.clear_all"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.HandleManager.clear_all" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<section id="module-sktime_mcp.server">
+<span id="server"></span><h2>Server<a class="headerlink" href="#module-sktime_mcp.server" title="Link to this heading"></a></h2>
+<p>MCP Server for sktime.</p>
+<p>Main entry point for the Model Context Protocol server
+that exposes sktime’s registry and execution capabilities to LLMs.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="sktime_mcp.server.sanitize_for_json">
+<span class="sig-prename descclassname"><span class="pre">sktime_mcp.server.</span></span><span class="sig-name descname"><span class="pre">sanitize_for_json</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obj</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/server.html#sanitize_for_json"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.server.sanitize_for_json" title="Link to this definition"></a></dt>
+<dd><p>Recursively convert objects to JSON-serializable format.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="sktime_mcp.server.list_tools">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sktime_mcp.server.</span></span><span class="sig-name descname"><span class="pre">list_tools</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/server.html#list_tools"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.server.list_tools" title="Link to this definition"></a></dt>
+<dd><p>List all available MCP tools.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">Tool</span></code>]</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="sktime_mcp.server.call_tool">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sktime_mcp.server.</span></span><span class="sig-name descname"><span class="pre">call_tool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arguments</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/server.html#call_tool"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.server.call_tool" title="Link to this definition"></a></dt>
+<dd><p>Handle tool calls.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">TextContent</span></code>]</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="sktime_mcp.server.run_server">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sktime_mcp.server.</span></span><span class="sig-name descname"><span class="pre">run_server</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/server.html#run_server"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.server.run_server" title="Link to this definition"></a></dt>
+<dd><p>Run the MCP server.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="sktime_mcp.server.main">
+<span class="sig-prename descclassname"><span class="pre">sktime_mcp.server.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/sktime_mcp/server.html#main"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sktime_mcp.server.main" title="Link to this definition"></a></dt>
+<dd><p>Main entry point.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="dev-guide.html" class="btn btn-neutral float-left" title="Developer Guide" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, sktime-mcp contributors.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

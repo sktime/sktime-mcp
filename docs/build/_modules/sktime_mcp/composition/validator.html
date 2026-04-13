@@ -1,0 +1,523 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>sktime_mcp.composition.validator &mdash; sktime-mcp 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            sktime-mcp
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <!-- Local TOC -->
+              <div class="local-toc"></div>
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">sktime-mcp</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">sktime_mcp.composition.validator</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for sktime_mcp.composition.validator</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Composition Validator for sktime MCP.</span>
+
+<span class="sd">sktime estimators are composable:</span>
+<span class="sd">- transformers → forecasters</span>
+<span class="sd">- pipelines</span>
+<span class="sd">- reduction strategies</span>
+
+<span class="sd">This module enforces:</span>
+<span class="sd">- Compatible task types</span>
+<span class="sd">- Valid composition order</span>
+<span class="sd">- Tag compatibility</span>
+
+<span class="sd">This prevents invalid pipelines at planning time.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.registry.interface</span><span class="w"> </span><span class="kn">import</span> <span class="n">EstimatorNode</span><span class="p">,</span> <span class="n">get_registry</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">CompositionType</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Types of composition in sktime.&quot;&quot;&quot;</span>
+
+    <span class="n">PIPELINE</span> <span class="o">=</span> <span class="s2">&quot;pipeline&quot;</span>
+    <span class="n">TRANSFORMER_PIPELINE</span> <span class="o">=</span> <span class="s2">&quot;transformer_pipeline&quot;</span>
+    <span class="n">FORECASTING_PIPELINE</span> <span class="o">=</span> <span class="s2">&quot;forecasting_pipeline&quot;</span>
+    <span class="n">MULTIPLEXER</span> <span class="o">=</span> <span class="s2">&quot;multiplexer&quot;</span>
+    <span class="n">ENSEMBLE</span> <span class="o">=</span> <span class="s2">&quot;ensemble&quot;</span>
+    <span class="n">REDUCTION</span> <span class="o">=</span> <span class="s2">&quot;reduction&quot;</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CompositionRule</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A rule describing valid compositions for an estimator type.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        source_task: The task type that can be composed</span>
+<span class="sd">        target_task: The task type it can compose with</span>
+<span class="sd">        composition_type: Type of composition</span>
+<span class="sd">        position: Where in the pipeline (before, after, any)</span>
+<span class="sd">        description: Human-readable description</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">source_task</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">target_task</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">composition_type</span><span class="p">:</span> <span class="n">CompositionType</span>
+    <span class="n">position</span><span class="p">:</span> <span class="nb">str</span>  <span class="c1"># &quot;before&quot;, &quot;after&quot;, &quot;any&quot;</span>
+    <span class="n">description</span><span class="p">:</span> <span class="nb">str</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ValidationResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Result of a composition validation.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        valid: Whether the composition is valid</span>
+<span class="sd">        errors: List of validation errors</span>
+<span class="sd">        warnings: List of warnings (valid but potentially problematic)</span>
+<span class="sd">        suggestions: Suggested fixes for invalid compositions</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">valid</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">errors</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+    <span class="n">warnings</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+    <span class="n">suggestions</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert to dictionary for JSON serialization.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;valid&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">valid</span><span class="p">,</span>
+            <span class="s2">&quot;errors&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">errors</span><span class="p">,</span>
+            <span class="s2">&quot;warnings&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">warnings</span><span class="p">,</span>
+            <span class="s2">&quot;suggestions&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">suggestions</span><span class="p">,</span>
+        <span class="p">}</span>
+
+
+<div class="viewcode-block" id="CompositionValidator">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.CompositionValidator">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CompositionValidator</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validator for sktime estimator compositions.</span>
+
+<span class="sd">    This class encodes the rules for valid estimator compositions</span>
+<span class="sd">    in sktime, allowing validation at planning time rather than</span>
+<span class="sd">    runtime.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># Valid composition rules</span>
+    <span class="n">COMPOSITION_RULES</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">CompositionRule</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="c1"># Transformers can precede forecasters</span>
+        <span class="n">CompositionRule</span><span class="p">(</span>
+            <span class="n">source_task</span><span class="o">=</span><span class="s2">&quot;transformation&quot;</span><span class="p">,</span>
+            <span class="n">target_task</span><span class="o">=</span><span class="s2">&quot;forecasting&quot;</span><span class="p">,</span>
+            <span class="n">composition_type</span><span class="o">=</span><span class="n">CompositionType</span><span class="o">.</span><span class="n">FORECASTING_PIPELINE</span><span class="p">,</span>
+            <span class="n">position</span><span class="o">=</span><span class="s2">&quot;before&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Transformers can be applied before forecasters in a pipeline&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="c1"># Transformers can be chained</span>
+        <span class="n">CompositionRule</span><span class="p">(</span>
+            <span class="n">source_task</span><span class="o">=</span><span class="s2">&quot;transformation&quot;</span><span class="p">,</span>
+            <span class="n">target_task</span><span class="o">=</span><span class="s2">&quot;transformation&quot;</span><span class="p">,</span>
+            <span class="n">composition_type</span><span class="o">=</span><span class="n">CompositionType</span><span class="o">.</span><span class="n">TRANSFORMER_PIPELINE</span><span class="p">,</span>
+            <span class="n">position</span><span class="o">=</span><span class="s2">&quot;before&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Transformers can be chained together&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="c1"># Forecasters can be ensembled</span>
+        <span class="n">CompositionRule</span><span class="p">(</span>
+            <span class="n">source_task</span><span class="o">=</span><span class="s2">&quot;forecasting&quot;</span><span class="p">,</span>
+            <span class="n">target_task</span><span class="o">=</span><span class="s2">&quot;forecasting&quot;</span><span class="p">,</span>
+            <span class="n">composition_type</span><span class="o">=</span><span class="n">CompositionType</span><span class="o">.</span><span class="n">ENSEMBLE</span><span class="p">,</span>
+            <span class="n">position</span><span class="o">=</span><span class="s2">&quot;any&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Forecasters can be combined in an ensemble&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="c1"># Classifiers can be ensembled</span>
+        <span class="n">CompositionRule</span><span class="p">(</span>
+            <span class="n">source_task</span><span class="o">=</span><span class="s2">&quot;classification&quot;</span><span class="p">,</span>
+            <span class="n">target_task</span><span class="o">=</span><span class="s2">&quot;classification&quot;</span><span class="p">,</span>
+            <span class="n">composition_type</span><span class="o">=</span><span class="n">CompositionType</span><span class="o">.</span><span class="n">ENSEMBLE</span><span class="p">,</span>
+            <span class="n">position</span><span class="o">=</span><span class="s2">&quot;any&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Classifiers can be combined in an ensemble&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="c1"># Transformers can precede classifiers</span>
+        <span class="n">CompositionRule</span><span class="p">(</span>
+            <span class="n">source_task</span><span class="o">=</span><span class="s2">&quot;transformation&quot;</span><span class="p">,</span>
+            <span class="n">target_task</span><span class="o">=</span><span class="s2">&quot;classification&quot;</span><span class="p">,</span>
+            <span class="n">composition_type</span><span class="o">=</span><span class="n">CompositionType</span><span class="o">.</span><span class="n">PIPELINE</span><span class="p">,</span>
+            <span class="n">position</span><span class="o">=</span><span class="s2">&quot;before&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Transformers can be applied before classifiers&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="c1"># Transformers can precede regressors</span>
+        <span class="n">CompositionRule</span><span class="p">(</span>
+            <span class="n">source_task</span><span class="o">=</span><span class="s2">&quot;transformation&quot;</span><span class="p">,</span>
+            <span class="n">target_task</span><span class="o">=</span><span class="s2">&quot;regression&quot;</span><span class="p">,</span>
+            <span class="n">composition_type</span><span class="o">=</span><span class="n">CompositionType</span><span class="o">.</span><span class="n">PIPELINE</span><span class="p">,</span>
+            <span class="n">position</span><span class="o">=</span><span class="s2">&quot;before&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Transformers can be applied before regressors&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+
+    <span class="c1"># Known transformer categories</span>
+    <span class="n">TRANSFORMER_CATEGORIES</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;Imputer&quot;</span><span class="p">:</span> <span class="s2">&quot;missing_value_handler&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Detrend&quot;</span><span class="p">:</span> <span class="s2">&quot;trend_remover&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Deseasonalize&quot;</span><span class="p">:</span> <span class="s2">&quot;seasonality_remover&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Differencer&quot;</span><span class="p">:</span> <span class="s2">&quot;differencer&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;BoxCoxTransformer&quot;</span><span class="p">:</span> <span class="s2">&quot;power_transform&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;LogTransformer&quot;</span><span class="p">:</span> <span class="s2">&quot;power_transform&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;ScaledLogitTransformer&quot;</span><span class="p">:</span> <span class="s2">&quot;power_transform&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Lag&quot;</span><span class="p">:</span> <span class="s2">&quot;lag_creator&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;WindowSummarizer&quot;</span><span class="p">:</span> <span class="s2">&quot;feature_creator&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;DateTimeFeatures&quot;</span><span class="p">:</span> <span class="s2">&quot;feature_creator&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+
+<div class="viewcode-block" id="CompositionValidator.__init__">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.CompositionValidator.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the validator.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span> <span class="o">=</span> <span class="n">get_registry</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="CompositionValidator.validate_pipeline">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.CompositionValidator.validate_pipeline">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">validate_pipeline</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">components</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ValidationResult</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Validate a proposed pipeline composition.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            components: List of estimator names in pipeline order</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            ValidationResult with validity status and any issues</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">components</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">ValidationResult</span><span class="p">(</span>
+                <span class="n">valid</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">errors</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Pipeline cannot be empty&quot;</span><span class="p">],</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># Single component is always valid if it exists</span>
+            <span class="n">estimator</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span><span class="o">.</span><span class="n">get_estimator_by_name</span><span class="p">(</span><span class="n">components</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">estimator</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">ValidationResult</span><span class="p">(</span>
+                    <span class="n">valid</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                    <span class="n">errors</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;Unknown estimator: </span><span class="si">{</span><span class="n">components</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">],</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="n">ValidationResult</span><span class="p">(</span><span class="n">valid</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">errors</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">warnings</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">suggestions</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Get all estimator nodes</span>
+        <span class="n">nodes</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Optional</span><span class="p">[</span><span class="n">EstimatorNode</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">components</span><span class="p">:</span>
+            <span class="n">node</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span><span class="o">.</span><span class="n">get_estimator_by_name</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+            <span class="n">nodes</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">name</span><span class="p">,</span> <span class="n">node</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">node</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown estimator: </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">errors</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">ValidationResult</span><span class="p">(</span>
+                <span class="n">valid</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">errors</span><span class="o">=</span><span class="n">errors</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Check pairwise compatibility</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">nodes</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">current_name</span><span class="p">,</span> <span class="n">current_node</span> <span class="o">=</span> <span class="n">nodes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">next_name</span><span class="p">,</span> <span class="n">next_node</span> <span class="o">=</span> <span class="n">nodes</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+
+            <span class="c1"># Check if this composition is valid</span>
+            <span class="n">valid_pair</span><span class="p">,</span> <span class="n">pair_errors</span><span class="p">,</span> <span class="n">pair_warnings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_pair_compatibility</span><span class="p">(</span>
+                <span class="n">current_node</span><span class="p">,</span> <span class="n">next_node</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">valid_pair</span><span class="p">:</span>
+                <span class="n">errors</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">pair_errors</span><span class="p">)</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">pair_warnings</span><span class="p">)</span>
+
+        <span class="c1"># Check final component is executable (forecaster, classifier, etc.)</span>
+        <span class="n">final_name</span><span class="p">,</span> <span class="n">final_node</span> <span class="o">=</span> <span class="n">nodes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">final_node</span><span class="o">.</span><span class="n">task</span> <span class="o">==</span> <span class="s2">&quot;transformation&quot;</span><span class="p">:</span>
+            <span class="n">errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Pipeline ends with transformer &#39;</span><span class="si">{</span><span class="n">final_name</span><span class="si">}</span><span class="s2">&#39;. &quot;</span>
+                <span class="s2">&quot;The final component should be a forecaster, classifier, or regressor.&quot;</span>
+            <span class="p">)</span>
+            <span class="n">suggestions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;Add a forecaster like &#39;ARIMA&#39; or &#39;ExponentialSmoothing&#39; at the end&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Check for duplicate consecutive components</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">components</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="n">components</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Duplicate consecutive component: &#39;</span><span class="si">{</span><span class="n">components</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="si">}</span><span class="s2">&#39; at positions </span><span class="si">{</span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">2</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">ValidationResult</span><span class="p">(</span>
+            <span class="n">valid</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">errors</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span>
+            <span class="n">errors</span><span class="o">=</span><span class="n">errors</span><span class="p">,</span>
+            <span class="n">warnings</span><span class="o">=</span><span class="n">warnings</span><span class="p">,</span>
+            <span class="n">suggestions</span><span class="o">=</span><span class="n">suggestions</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_pair_compatibility</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">first</span><span class="p">:</span> <span class="n">EstimatorNode</span><span class="p">,</span>
+        <span class="n">second</span><span class="p">:</span> <span class="n">EstimatorNode</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Check if two estimators can be composed in sequence.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            (is_valid, errors, warnings)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">errors</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">warnings</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Find applicable rule</span>
+        <span class="n">applicable_rule</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">rule</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">COMPOSITION_RULES</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">rule</span><span class="o">.</span><span class="n">source_task</span> <span class="o">==</span> <span class="n">first</span><span class="o">.</span><span class="n">task</span>
+                <span class="ow">and</span> <span class="n">rule</span><span class="o">.</span><span class="n">target_task</span> <span class="o">==</span> <span class="n">second</span><span class="o">.</span><span class="n">task</span>
+                <span class="ow">and</span> <span class="n">rule</span><span class="o">.</span><span class="n">position</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;before&quot;</span><span class="p">,</span> <span class="s2">&quot;any&quot;</span><span class="p">)</span>
+            <span class="p">):</span>
+                <span class="n">applicable_rule</span> <span class="o">=</span> <span class="n">rule</span>
+                <span class="k">break</span>
+
+        <span class="k">if</span> <span class="n">applicable_rule</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># No rule found - check if it&#39;s an obvious error</span>
+            <span class="k">if</span> <span class="n">first</span><span class="o">.</span><span class="n">task</span> <span class="o">==</span> <span class="n">second</span><span class="o">.</span><span class="n">task</span> <span class="o">==</span> <span class="s2">&quot;forecasting&quot;</span><span class="p">:</span>
+                <span class="n">errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Cannot chain forecasters &#39;</span><span class="si">{</span><span class="n">first</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; → &#39;</span><span class="si">{</span><span class="n">second</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; directly. &quot;</span>
+                    <span class="s2">&quot;Use an ensemble or multiplexer instead.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">elif</span> <span class="n">first</span><span class="o">.</span><span class="n">task</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;classification&quot;</span><span class="p">,</span> <span class="s2">&quot;regression&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">second</span><span class="o">.</span><span class="n">task</span> <span class="o">!=</span> <span class="n">first</span><span class="o">.</span><span class="n">task</span><span class="p">:</span>
+                <span class="n">errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Invalid composition: </span><span class="si">{</span><span class="n">first</span><span class="o">.</span><span class="n">task</span><span class="si">}</span><span class="s2"> &#39;</span><span class="si">{</span><span class="n">first</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; → </span><span class="si">{</span><span class="n">second</span><span class="o">.</span><span class="n">task</span><span class="si">}</span><span class="s2"> &#39;</span><span class="si">{</span><span class="n">second</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Unusual composition: </span><span class="si">{</span><span class="n">first</span><span class="o">.</span><span class="n">task</span><span class="si">}</span><span class="s2"> &#39;</span><span class="si">{</span><span class="n">first</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; → </span><span class="si">{</span><span class="n">second</span><span class="o">.</span><span class="n">task</span><span class="si">}</span><span class="s2"> &#39;</span><span class="si">{</span><span class="n">second</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+                <span class="p">)</span>
+
+        <span class="c1"># Check tag compatibility</span>
+        <span class="n">tag_errors</span><span class="p">,</span> <span class="n">tag_warnings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_tag_compatibility</span><span class="p">(</span><span class="n">first</span><span class="p">,</span> <span class="n">second</span><span class="p">)</span>
+        <span class="n">errors</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">tag_errors</span><span class="p">)</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">tag_warnings</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">errors</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="n">errors</span><span class="p">,</span> <span class="n">warnings</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_tag_compatibility</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">first</span><span class="p">:</span> <span class="n">EstimatorNode</span><span class="p">,</span>
+        <span class="n">second</span><span class="p">:</span> <span class="n">EstimatorNode</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check tag-based compatibility between estimators.&quot;&quot;&quot;</span>
+        <span class="n">errors</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">warnings</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Check univariate vs multivariate</span>
+        <span class="n">first_univariate</span> <span class="o">=</span> <span class="n">first</span><span class="o">.</span><span class="n">tags</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;univariate-only&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="n">second_multivariate</span> <span class="o">=</span> <span class="n">second</span><span class="o">.</span><span class="n">tags</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;capability:multivariate&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">first_univariate</span> <span class="ow">and</span> <span class="n">second_multivariate</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">first</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; is univariate-only but placed before &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;multivariate-capable &#39;</span><span class="si">{</span><span class="n">second</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Check if transformer output is compatible with next component&#39;s input</span>
+        <span class="c1"># This is a simplified check - full check would need mtype resolution</span>
+
+        <span class="k">return</span> <span class="n">errors</span><span class="p">,</span> <span class="n">warnings</span>
+
+<div class="viewcode-block" id="CompositionValidator.get_valid_compositions">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.CompositionValidator.get_valid_compositions">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_valid_compositions</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">estimator_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get valid compositions for an estimator.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            estimator_name: Name of the estimator</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dictionary with &quot;can_precede&quot; and &quot;can_follow&quot; lists</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">estimator</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span><span class="o">.</span><span class="n">get_estimator_by_name</span><span class="p">(</span><span class="n">estimator_name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">estimator</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">&quot;can_precede&quot;</span><span class="p">:</span> <span class="p">[],</span>
+                <span class="s2">&quot;can_follow&quot;</span><span class="p">:</span> <span class="p">[],</span>
+                <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Unknown estimator: </span><span class="si">{</span><span class="n">estimator_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="p">}</span>
+
+        <span class="n">can_precede</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">can_follow</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">rule</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">COMPOSITION_RULES</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">rule</span><span class="o">.</span><span class="n">source_task</span> <span class="o">==</span> <span class="n">estimator</span><span class="o">.</span><span class="n">task</span> <span class="ow">and</span> <span class="n">rule</span><span class="o">.</span><span class="n">position</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;before&quot;</span><span class="p">,</span> <span class="s2">&quot;any&quot;</span><span class="p">):</span>
+                <span class="c1"># This estimator can precede things of target_task</span>
+                <span class="n">can_precede</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">rule</span><span class="o">.</span><span class="n">target_task</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">rule</span><span class="o">.</span><span class="n">target_task</span> <span class="o">==</span> <span class="n">estimator</span><span class="o">.</span><span class="n">task</span> <span class="ow">and</span> <span class="n">rule</span><span class="o">.</span><span class="n">position</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;before&quot;</span><span class="p">,</span> <span class="s2">&quot;any&quot;</span><span class="p">):</span>
+                <span class="c1"># Things of source_task can precede this estimator</span>
+                <span class="n">can_follow</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">rule</span><span class="o">.</span><span class="n">source_task</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;can_precede&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">can_precede</span><span class="p">)),</span>
+            <span class="s2">&quot;can_follow&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">can_follow</span><span class="p">)),</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="CompositionValidator.suggest_pipeline">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.CompositionValidator.suggest_pipeline">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">suggest_pipeline</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">task</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">requirements</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Suggest a valid pipeline for a given task.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            task: Target task (e.g., &quot;forecasting&quot;)</span>
+<span class="sd">            requirements: Optional requirements (e.g., {&quot;handles_missing&quot;: True})</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List of suggested estimator names forming a valid pipeline</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">suggestions</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">if</span> <span class="n">task</span> <span class="o">==</span> <span class="s2">&quot;forecasting&quot;</span><span class="p">:</span>
+            <span class="c1"># Suggest common preprocessing → forecaster pipeline</span>
+            <span class="k">if</span> <span class="n">requirements</span> <span class="ow">and</span> <span class="n">requirements</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;handles_missing&quot;</span><span class="p">):</span>
+                <span class="n">suggestions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;Imputer&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Get a suitable forecaster</span>
+            <span class="n">forecasters</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span><span class="o">.</span><span class="n">get_all_estimators</span><span class="p">(</span>
+                <span class="n">task</span><span class="o">=</span><span class="s2">&quot;forecasting&quot;</span><span class="p">,</span>
+                <span class="n">tags</span><span class="o">=</span><span class="n">requirements</span> <span class="k">if</span> <span class="n">requirements</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">forecasters</span><span class="p">:</span>
+                <span class="c1"># Pick first match</span>
+                <span class="n">suggestions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">forecasters</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">suggestions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;NaiveForecaster&quot;</span><span class="p">)</span>  <span class="c1"># Fallback</span>
+
+        <span class="k">elif</span> <span class="n">task</span> <span class="o">==</span> <span class="s2">&quot;classification&quot;</span><span class="p">:</span>
+            <span class="c1"># Suggest transformer → classifier</span>
+            <span class="n">classifiers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span><span class="o">.</span><span class="n">get_all_estimators</span><span class="p">(</span><span class="n">task</span><span class="o">=</span><span class="s2">&quot;classification&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">classifiers</span><span class="p">:</span>
+                <span class="n">suggestions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">classifiers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">suggestions</span></div>
+</div>
+
+
+
+<span class="c1"># Singleton instance</span>
+<span class="n">_validator_instance</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CompositionValidator</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">get_composition_validator</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">CompositionValidator</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the singleton composition validator instance.&quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">_validator_instance</span>
+    <span class="k">if</span> <span class="n">_validator_instance</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_validator_instance</span> <span class="o">=</span> <span class="n">CompositionValidator</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">_validator_instance</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, sktime-mcp contributors.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

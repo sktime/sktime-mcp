@@ -1,0 +1,479 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>📘 User Guide &mdash; sktime-mcp 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/extra.css?v=e8756899" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.png"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Usage Examples" href="usage-examples.html" />
+    <link rel="prev" title="🎯 Use Cases &amp; Personas" href="use-cases.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            sktime-mcp
+              <img src="_static/favicon.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="use-cases.html">🎯 Use Cases &amp; Personas</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">📘 User Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#getting-started">🚀 Getting Started</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#prerequisites">Prerequisites</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#installation">Installation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#running-the-server">Running the Server</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#core-capabilities">🛠️ Core Capabilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#workflows">⚡ Workflows</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#the-hello-world-of-forecasting">1. The “Hello World” of Forecasting</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#query-run-forecasting-on-a-demo-dataset">Query - Run forecasting on a demo dataset.</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#response-standard-workflow-followed-by-sktime-mcp-for-forecasting-on-a-demo-dataset">Response - Standard workflow followed by SKtime MCP for forecasting on a demo dataset.</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#advanced-pipeline-composition">2. Advanced Pipeline Composition</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#query-create-sophisticated-pipelines-without-writing-complex-code">Query - Create sophisticated pipelines without writing complex code.</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#response-standard-workflow-followed-by-sktime-mcp">Response - Standard workflow followed by SKtime MCP.</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#save-a-fitted-model">3. Save a Fitted Model</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#data-management">💾 Data Management</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#supported-sources">Supported Sources</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#example-loading-a-csv-file">Example: Loading a CSV File</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#best-practices">💡 Best Practices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#known-limitations">⚠️ Known Limitations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#in-memory-handles-explicit-persistence-required">1. In-Memory Handles (Explicit Persistence Required)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mixed-sync-async-execution">2. Mixed Sync/Async Execution</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-data-wall-memory-limits">3. “The Data Wall” (Memory Limits)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#security">4. Security</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#rigid-data-formatting">5. Rigid Data Formatting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#local-only-filesystem">6. Local-Only Filesystem</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#json-serialization-loss">7. JSON Serialization Loss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#code-export-limitations">8. Code Export Limitations</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#troubleshooting">❓ Troubleshooting</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="usage-examples.html">Usage Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data-sources.html">Data Source Support</a></li>
+<li class="toctree-l1"><a class="reference internal" href="background-jobs.html">Background Job Management</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Development</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture Diagram</a></li>
+<li class="toctree-l1"><a class="reference internal" href="implementation.html">Complete Code Explanation: sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dev-guide.html">Developer Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">sktime-mcp</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">📘 User Guide</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/user-guide.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="user-guide">
+<h1>📘 User Guide<a class="headerlink" href="#user-guide" title="Link to this heading"></a></h1>
+<p>Welcome to the <strong>sktime-mcp</strong> User Guide. This comprehensive manual will help you understand how to install, configure, and master the Model Context Protocol (MCP) server for time-series forecasting.</p>
+<hr class="docutils" />
+<section id="getting-started">
+<h2>🚀 Getting Started<a class="headerlink" href="#getting-started" title="Link to this heading"></a></h2>
+<section id="prerequisites">
+<h3>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading"></a></h3>
+<p>Before you begin, ensure you have:</p>
+<ul class="simple">
+<li><p><strong>Python 3.9+</strong> installed.</p></li>
+<li><p><strong>pip</strong> package manager.</p></li>
+<li><p>A compatible MCP Client (like <strong>Claude Desktop</strong>).</p></li>
+</ul>
+</section>
+<section id="installation">
+<h3>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h3>
+<p>Install the package directly from the source. We recommend installing with all dependencies to unlock full functionality.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Standard installation</span>
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
+
+<span class="c1"># Recommended: Install with all optional extras (SQL, Forecasting, Files)</span>
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[all]&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="running-the-server">
+<h3>Running the Server<a class="headerlink" href="#running-the-server" title="Link to this heading"></a></h3>
+<p>Start the MCP server to begin listening for connections:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sktime-mcp
+</pre></div>
+</div>
+<p><em>Or manually via Python:</em></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>sktime_mcp.server
+</pre></div>
+</div>
+<p>!!! tip “Client Configuration”
+Ensure your MCP client (e.g., Claude Desktop) is configured to run this command. See the <a class="reference external" href="https://code.visualstudio.com/docs/copilot/customization/mcp-servers#_configure-the-mcpjson-file">official VSCode guidelines</a> for configuration examples.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="core-capabilities">
+<h2>🛠️ Core Capabilities<a class="headerlink" href="#core-capabilities" title="Link to this heading"></a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">sktime-mcp</span></code> server exposes a suite of tools designed for Large Language Models to interact with time-series data.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Category</p></th>
+<th class="head"><p>Tools</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Discovery</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list_estimators</span></code>, <code class="docutils literal notranslate"><span class="pre">search_estimators</span></code>, <code class="docutils literal notranslate"><span class="pre">describe_estimator</span></code></p></td>
+<td><p>Find the right model for your task (Forecasting, Classification, etc.).</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Instantiation</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">instantiate_estimator</span></code>, <code class="docutils literal notranslate"><span class="pre">instantiate_pipeline</span></code></p></td>
+<td><p>Create model instances or complex pipelines.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Execution</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fit_predict</span></code>, <code class="docutils literal notranslate"><span class="pre">fit_predict_async</span></code>, <code class="docutils literal notranslate"><span class="pre">fit_predict_with_data</span></code></p></td>
+<td><p>Train models and generate forecasts on demo or user data.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Data</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">load_data_source</span></code>, <code class="docutils literal notranslate"><span class="pre">list_available_data</span></code></p></td>
+<td><p>Load data from Pandas, CSV/Parquet, or SQL, and inspect demo datasets plus active handles.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Export</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">export_code</span></code>, <code class="docutils literal notranslate"><span class="pre">save_model</span></code></p></td>
+<td><p>Generate Python code or persist fitted estimators to a local path.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<hr class="docutils" />
+<section id="workflows">
+<h2>⚡ Workflows<a class="headerlink" href="#workflows" title="Link to this heading"></a></h2>
+<section id="the-hello-world-of-forecasting">
+<h3>1. The “Hello World” of Forecasting<a class="headerlink" href="#the-hello-world-of-forecasting" title="Link to this heading"></a></h3>
+<section id="query-run-forecasting-on-a-demo-dataset">
+<h4>Query - Run forecasting on a demo dataset.<a class="headerlink" href="#query-run-forecasting-on-a-demo-dataset" title="Link to this heading"></a></h4>
+</section>
+<section id="response-standard-workflow-followed-by-sktime-mcp-for-forecasting-on-a-demo-dataset">
+<h4>Response - Standard workflow followed by SKtime MCP for forecasting on a demo dataset.<a class="headerlink" href="#response-standard-workflow-followed-by-sktime-mcp-for-forecasting-on-a-demo-dataset" title="Link to this heading"></a></h4>
+<p><strong>Step 1: Discover Data</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="nt">&quot;tool&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;list_available_data&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;is_demo&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">}}</span>
+</pre></div>
+</div>
+<p><strong>Step 2: Find a Forecaster</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="nt">&quot;tool&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;list_estimators&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;task&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;forecasting&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="p">}}</span>
+</pre></div>
+</div>
+<p><strong>Step 3: Instantiate the Estimator</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;tool&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;instantiate_estimator&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;estimator&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;NaiveForecaster&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Returns a handle, e.g. <code class="docutils literal notranslate"><span class="pre">{&quot;success&quot;:</span> <span class="pre">true,</span> <span class="pre">&quot;handle&quot;:</span> <span class="pre">&quot;est_abc123&quot;,</span> <span class="pre">...}</span></code>.<br />
+Use the returned <code class="docutils literal notranslate"><span class="pre">handle</span></code> value in the next step as <code class="docutils literal notranslate"><span class="pre">estimator_handle</span></code>.</p>
+<p><strong>Step 4: Fit &amp; Predict</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;tool&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;fit_predict&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;estimator_handle&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;est_abc123&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;dataset&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;airline&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;horizon&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="advanced-pipeline-composition">
+<h3>2. Advanced Pipeline Composition<a class="headerlink" href="#advanced-pipeline-composition" title="Link to this heading"></a></h3>
+<section id="query-create-sophisticated-pipelines-without-writing-complex-code">
+<h4>Query - Create sophisticated pipelines without writing complex code.<a class="headerlink" href="#query-create-sophisticated-pipelines-without-writing-complex-code" title="Link to this heading"></a></h4>
+</section>
+<section id="response-standard-workflow-followed-by-sktime-mcp">
+<h4>Response - Standard workflow followed by SKtime MCP.<a class="headerlink" href="#response-standard-workflow-followed-by-sktime-mcp" title="Link to this heading"></a></h4>
+<p><strong>Step 1: Validate Pipeline</strong>
+Check if components work together (e.g., Deseasonalizer -&gt; Detrender -&gt; ARIMA).</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;tool&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;validate_pipeline&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;components&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;ConditionalDeseasonalizer&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Detrender&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;ARIMA&quot;</span><span class="p">]}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Step 2: Instantiate Pipeline</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;tool&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;instantiate_pipeline&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;components&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;ConditionalDeseasonalizer&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Detrender&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;ARIMA&quot;</span><span class="p">],</span>
+<span class="w">    </span><span class="nt">&quot;params_list&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[{},</span><span class="w"> </span><span class="p">{},</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;order&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">]}]</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="save-a-fitted-model">
+<h3>3. Save a Fitted Model<a class="headerlink" href="#save-a-fitted-model" title="Link to this heading"></a></h3>
+<p>Persist a trained estimator to a local filesystem path using sktime’s MLflow integration.</p>
+<p><strong>Step 1: Fit the estimator</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;tool&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;fit_predict&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;estimator_handle&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;est_abc123&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;dataset&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;airline&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;horizon&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Step 2: Save the fitted model</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;tool&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;save_model&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;estimator_handle&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;est_abc123&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/absolute/path/to/model_dir&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;mlflow_params&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;serialization_format&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;cloudpickle&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Typical response</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;estimator_handle&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;est_abc123&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;saved_path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/absolute/path/to/model_dir&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Model saved successfully to &#39;/absolute/path/to/model_dir&#39;&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="data-management">
+<h2>💾 Data Management<a class="headerlink" href="#data-management" title="Link to this heading"></a></h2>
+<p>Bring your own data into the MCP server.</p>
+<section id="supported-sources">
+<h3>Supported Sources<a class="headerlink" href="#supported-sources" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Local Files</strong>: CSV, Parquet, Excel</p></li>
+<li><p><strong>SQL Databases</strong>: PostgreSQL, SQLite, etc.</p></li>
+</ul>
+</section>
+<section id="example-loading-a-csv-file">
+<h3>Example: Loading a CSV File<a class="headerlink" href="#example-loading-a-csv-file" title="Link to this heading"></a></h3>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;tool&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;load_data_source&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;config&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;file&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/absolute/path/to/your/data.csv&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;time_column&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;timestamp&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;target_column&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;value&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>!!! warning “Absolute Paths Required”
+The server requires <strong>absolute file paths</strong> (e.g., <code class="docutils literal notranslate"><span class="pre">/home/user/data.csv</span></code>). Relative paths may fail depending on where the server was started.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="best-practices">
+<h2>💡 Best Practices<a class="headerlink" href="#best-practices" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>Resource Management</strong>: Explicitly release handles (<code class="docutils literal notranslate"><span class="pre">release_handle</span></code>, <code class="docutils literal notranslate"><span class="pre">release_data_handle</span></code>) when done to free up memory.</p></li>
+<li><p><strong>Reproducibility</strong>: Always use <code class="docutils literal notranslate"><span class="pre">export_code</span></code> after a successful experiment to save your work.</p></li>
+<li><p><strong>Persistence</strong>: Use <code class="docutils literal notranslate"><span class="pre">save_model</span></code> after fitting if you need the estimator to survive server restarts.</p></li>
+<li><p><strong>Data Hygiene</strong>: Use <code class="docutils literal notranslate"><span class="pre">auto_format_on_load</span></code> for messy real-world data to avoid frequent validation errors.</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="known-limitations">
+<h2>⚠️ Known Limitations<a class="headerlink" href="#known-limitations" title="Link to this heading"></a></h2>
+<p>While <code class="docutils literal notranslate"><span class="pre">sktime-mcp</span></code> is a powerful tool for prototyping, please be aware of the current architectural limitations.</p>
+<section id="in-memory-handles-explicit-persistence-required">
+<h3>1. In-Memory Handles (Explicit Persistence Required)<a class="headerlink" href="#in-memory-handles-explicit-persistence-required" title="Link to this heading"></a></h3>
+<p>The server stores active handles in standard Python dictionaries.</p>
+<blockquote>
+<div><p><strong>Impact</strong>: If the server restarts or connection drops, in-memory handles are lost. Use <code class="docutils literal notranslate"><span class="pre">save_model</span></code> to persist fitted estimators to a local filesystem path when needed.</p>
+</div></blockquote>
+</section>
+<section id="mixed-sync-async-execution">
+<h3>2. Mixed Sync/Async Execution<a class="headerlink" href="#mixed-sync-async-execution" title="Link to this heading"></a></h3>
+<p>Heavy operations can still block when using synchronous tools (like <code class="docutils literal notranslate"><span class="pre">fit_predict</span></code>).</p>
+<blockquote>
+<div><p><strong>Impact</strong>: For long-running jobs, use async tools (<code class="docutils literal notranslate"><span class="pre">fit_predict_async</span></code>, <code class="docutils literal notranslate"><span class="pre">load_data_source_async</span></code>) so the server remains responsive.</p>
+</div></blockquote>
+</section>
+<section id="the-data-wall-memory-limits">
+<h3>3. “The Data Wall” (Memory Limits)<a class="headerlink" href="#the-data-wall-memory-limits" title="Link to this heading"></a></h3>
+<p>Data Adapters read the entire dataset into RAM.</p>
+<blockquote>
+<div><p><strong>Impact</strong>: Loading multi-gigabyte files may crash the server with an <code class="docutils literal notranslate"><span class="pre">OutOfMemory</span></code> error. Lazy loading is not yet supported.</p>
+</div></blockquote>
+</section>
+<section id="security">
+<h3>4. Security<a class="headerlink" href="#security" title="Link to this heading"></a></h3>
+<p>Instantiation allows arbitrary parameters within the registry.</p>
+<blockquote>
+<div><p><strong>Impact</strong>: While constrained to valid estimators, there is limited validation on parameter values, which could theoretically be misused.</p>
+</div></blockquote>
+</section>
+<section id="rigid-data-formatting">
+<h3>5. Rigid Data Formatting<a class="headerlink" href="#rigid-data-formatting" title="Link to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">auto_format</span></code> logic is heuristic-based.</p>
+<blockquote>
+<div><p><strong>Impact</strong>: Complex time-series with irregular gaps or mixed frequencies might fail to auto-format correctly, requiring manual pre-processing outside the tool.</p>
+</div></blockquote>
+</section>
+<section id="local-only-filesystem">
+<h3>6. Local-Only Filesystem<a class="headerlink" href="#local-only-filesystem" title="Link to this heading"></a></h3>
+<blockquote>
+<div><p><strong>Impact</strong>: The server cannot easily access files if running in an isolated Docker container unless volumes are mounted. It does not support “Upload over HTTP/MCP”.</p>
+</div></blockquote>
+</section>
+<section id="json-serialization-loss">
+<h3>7. JSON Serialization Loss<a class="headerlink" href="#json-serialization-loss" title="Link to this heading"></a></h3>
+<p>Complex sktime types (Periods, Intervals) are converted to strings for LLM consumption.</p>
+<blockquote>
+<div><p><strong>Impact</strong>: Some rich metadata is lost during the conversion to JSON for the client response.</p>
+</div></blockquote>
+</section>
+<section id="code-export-limitations">
+<h3>8. Code Export Limitations<a class="headerlink" href="#code-export-limitations" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">export_code</span></code> uses template-based generation.</p>
+<blockquote>
+<div><p><strong>Impact</strong>: Highly complex custom pipelines with lambda functions or specific edge-cases might generate code that requires minor manual fixes.</p>
+</div></blockquote>
+</section>
+</section>
+<hr class="docutils" />
+<section id="troubleshooting">
+<h2>❓ Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Issue</p></th>
+<th class="head"><p>Solution</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>“Unknown estimator”</strong></p></td>
+<td><p>Use <code class="docutils literal notranslate"><span class="pre">search_estimators</span></code> to find the exact case-sensitive name.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong><code class="docutils literal notranslate"><span class="pre">No</span> <span class="pre">module</span> <span class="pre">named</span> <span class="pre">'sktime'</span></code> / <code class="docutils literal notranslate"><span class="pre">sktime</span> <span class="pre">must</span> <span class="pre">be</span> <span class="pre">installed</span></code></strong></p></td>
+<td><p>Activate your project virtual environment and reinstall: <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">-e</span> <span class="pre">&quot;.[dev]&quot;</span></code> (or <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">-e</span> <span class="pre">&quot;.[all]&quot;</span></code> if you need optional adapters).</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>“Missing dependencies”</strong></p></td>
+<td><p>Run <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">-e</span> <span class="pre">&quot;.[all]&quot;</span></code> to ensure optional extras are present.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong><code class="docutils literal notranslate"><span class="pre">save_model</span></code> import/runtime errors</strong></p></td>
+<td><p>Install MLflow in the environment used by the server. The tool relies on <code class="docutils literal notranslate"><span class="pre">sktime.utils.mlflow_sktime.save_model</span></code> and saves to a local filesystem path.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Validation Failures</strong></p></td>
+<td><p>Enable <code class="docutils literal notranslate"><span class="pre">auto_format_on_load</span></code> or use <code class="docutils literal notranslate"><span class="pre">format_time_series</span></code> to clean your data.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Server Timeout</strong></p></td>
+<td><p>Heavy models take time. Be patient or try a simpler model (e.g., <code class="docutils literal notranslate"><span class="pre">NaiveForecaster</span></code>) first.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="use-cases.html" class="btn btn-neutral float-left" title="🎯 Use Cases &amp; Personas" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="usage-examples.html" class="btn btn-neutral float-right" title="Usage Examples" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, sktime-mcp contributors.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

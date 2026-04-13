@@ -1,6 +1,6 @@
 """
 list_estimators tool for sktime MCP.
-Discovers estimators by task type and capability tags.
+Discovers estimators by task type, capability tags, and/or name search.
 """
 
 from typing import Any, Optional
@@ -11,20 +11,23 @@ from sktime_mcp.registry.interface import get_registry
 def list_estimators_tool(
     task: Optional[str] = None,
     tags: Optional[dict[str, Any]] = None,
+    query: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
 ) -> dict[str, Any]:
     """
-    Discover sktime estimators by task type and capability tags.
+    Discover sktime estimators by task type, capability tags, and/or name search.
+
+    All filters are combined: query narrows by name/docstring, then task and tags
+    are applied on top.
 
     Args:
         task: Filter by task type. Options: "forecasting", "classification",
               "regression", "transformation", "clustering"
         tags: Filter by capability tags. Example: {"capability:pred_int": True}
+        query: Search by name or description (substring, case-insensitive).
         limit: Maximum number of results to return (default: 50)
         offset: Number of results to skip for pagination (default: 0).
-                Use with limit to paginate through all estimators.
-                Example: offset=50 returns results 51-100.
 
     Returns:
         Dictionary with:
@@ -35,45 +38,27 @@ def list_estimators_tool(
         - offset: Current offset (for pagination)
         - limit: Current limit (for pagination)
         - has_more: True if more results exist beyond this page
-
-    Example:
-        >>> list_estimators_tool(task="forecasting", limit=50, offset=0)
-        {
-            "success": True,
-            "estimators": [{"name": "ARIMA", "task": "forecasting", ...}, ...],
-            "count": 50,
-            "total": 128,
-            "offset": 0,
-            "limit": 50,
-            "has_more": True
-        }
-        >>> list_estimators_tool(task="forecasting", limit=50, offset=50)
-        {
-            "success": True,
-            "estimators": [...],
-            "count": 50,
-            "total": 128,
-            "offset": 50,
-            "limit": 50,
-            "has_more": True
-        }
     """
     registry = get_registry()
     try:
-        estimators = registry.get_all_estimators(task=task, tags=tags)
+        if query:
+            estimators = registry.search_estimators(query)
+            if task:
+                estimators = [e for e in estimators if e.task == task]
+            if tags:
+                estimators = registry._filter_by_tags(estimators, tags)
+        else:
+            estimators = registry.get_all_estimators(task=task, tags=tags)
+
         total = len(estimators)
 
-        # Validate offset
         if offset < 0:
             return {
                 "success": False,
                 "error": "offset must be a non-negative integer.",
             }
 
-        # Apply offset and limit for pagination
         page = estimators[offset : offset + limit]
-
-        # Convert to summaries
         results = [est.to_summary() for est in page]
 
         return {
@@ -86,6 +71,7 @@ def list_estimators_tool(
             "has_more": (offset + limit) < total,
             "task_filter": task,
             "tag_filter": tags,
+            "query": query,
         }
     except Exception as e:
         return {
