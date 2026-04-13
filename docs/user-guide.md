@@ -56,7 +56,37 @@ The `sktime-mcp` server exposes a suite of tools designed for Large Language Mod
 | **Data** | `load_data_source`, `list_available_data` | Load data from Pandas, CSV/Parquet, or SQL, and inspect demo datasets plus active handles. |
 | **Export** | `export_code`, `save_model` | Generate Python code or persist fitted estimators to a local path. |
 
+
+### Additional Available Tools
+
+The following tools are implemented but not previously documented:
+
+- `list_handles`
+- `release_handle`
+- `validate_pipeline`
+- `get_available_tags`
+- `search_estimators`
+- `export_code`
+- `list_available_data`
+- `load_data_source`
+- `load_data_source_async`
+- `list_data_sources`
+- `fit_predict_with_data`
+- `release_data_handle`
+- `format_time_series`
+- `auto_format_on_load`
+- `check_job_status`
+- `list_jobs`
+- `cancel_job`
+- `delete_job`
+- `cleanup_old_jobs`
+- `save_model`
+- `load_model`
+
+> Note: Verified against tool definitions in src/sktime_mcp/server.py.
+
 ---
+
 
 ## ⚡ Workflows
 
