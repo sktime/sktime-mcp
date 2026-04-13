@@ -48,7 +48,7 @@ def evaluate_estimator_tool(
     try:
         n = len(y)
         # Handle small datasets gracefully
-        initial_window = max(int(n * 0.5), n - cv_folds * 2)
+        initial_window = max(int(n * 0.5), n - cv_folds)
         if initial_window < 1:
             initial_window = 1
 
@@ -63,11 +63,7 @@ def evaluate_estimator_tool(
 
         metrics = results.to_dict(orient="records")
 
-        return {
-            "success": True,
-            "results": metrics,
-            "cv_folds_run": len(metrics)
-        }
+        return {"success": True, "results": metrics, "cv_folds_run": len(metrics)}
     except Exception as e:
         logger.exception("Error during evaluate")
         return {"success": False, "error": str(e)}
