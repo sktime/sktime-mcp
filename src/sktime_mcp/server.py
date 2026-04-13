@@ -224,6 +224,11 @@ async def list_tools() -> list[Tool]:
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
                     },
+                    "coverage": {
+                        "type": ["number", "array"],
+                        "items": {"type": "number"},
+                        "description": "Optional coverage level(s) for prediction intervals, e.g. 0.9 or [0.9, 0.95]",
+                    },
                 },
                 "required": ["estimator_handle"],
             },
@@ -246,6 +251,11 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
+                    },
+                    "coverage": {
+                        "type": ["number", "array"],
+                        "items": {"type": "number"},
+                        "description": "Optional coverage level(s) for prediction intervals, e.g. 0.9 or [0.9, 0.95]",
                     },
                 },
                 "required": ["estimator_handle", "dataset"],
@@ -629,6 +639,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("dataset", ""),
                 arguments.get("horizon", 12),
                 data_handle=arguments.get("data_handle"),
+                coverage=arguments.get("coverage"),
             )
             # Sanitize immediately to handle Period objects
             result = sanitize_for_json(result)
@@ -689,6 +700,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["estimator_handle"],
                 arguments["dataset"],
                 arguments.get("horizon", 12),
+                coverage=arguments.get("coverage"),
             )
         elif name == "check_job_status":
             result = check_job_status_tool(arguments["job_id"])

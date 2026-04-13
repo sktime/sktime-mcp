@@ -27,7 +27,7 @@ def test_evaluate_estimator_tool():
         assert "results" in result
         assert result["cv_folds_run"] == 2
         assert len(result["results"]) == 2
-        
+
         # Verify result contains common metrics like test_MeanAbsolutePercentageError
         metric_columns = [k for k in result["results"][0].keys() if "test_" in k]
         assert len(metric_columns) > 0
@@ -35,6 +35,7 @@ def test_evaluate_estimator_tool():
     finally:
         # Clean up
         executor._handle_manager.release_handle(handle)
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

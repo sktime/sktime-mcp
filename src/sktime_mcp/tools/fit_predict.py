@@ -175,9 +175,7 @@ def fit_predict_async_tool(
         asyncio.set_event_loop(loop)
 
     # Schedule the coroutine (non-blocking!)
-    coro = executor.fit_predict_async(
-        estimator_handle, dataset, horizon, job_id, coverage=coverage
-    )
+    coro = executor.fit_predict_async(estimator_handle, dataset, horizon, job_id, coverage=coverage)
     asyncio.run_coroutine_threadsafe(coro, loop)
 
     return {
