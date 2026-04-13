@@ -47,7 +47,7 @@ def evaluate_estimator_tool(
 
     try:
         n = len(y)
-        # Ensure we have at least 1 observation for training
+        # Handle small datasets gracefully
         initial_window = max(1, n - cv_folds)
 
         cv = ExpandingWindowSplitter(initial_window=initial_window, step_length=1, fh=[1])
