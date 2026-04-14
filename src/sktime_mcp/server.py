@@ -56,13 +56,14 @@ JOB_MAX_AGE_HOURS = int(os.environ.get("SKTIME_MCP_JOB_MAX_AGE_HOURS", "24"))
 JOB_CLEANUP_INTERVAL_SECS = int(os.environ.get("SKTIME_MCP_JOB_CLEANUP_INTERVAL", "3600"))
 
 # Configure logging to stderr with detailed format
+_LOG_LEVEL = os.environ.get("SKTIME_MCP_LOG_LEVEL", "WARNING").upper()
+
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=getattr(logging, _LOG_LEVEL, logging.WARNING),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
-
 # Create MCP server instance
 server = Server("sktime-mcp")
 
