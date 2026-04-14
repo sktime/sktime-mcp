@@ -7,8 +7,6 @@ Covers the three synchronous tool functions in ``sktime_mcp.tools.fit_predict``:
 * ``fit_tool``          – fit-only step
 * ``predict_tool``      – predict-only step (requires prior fit)
 
-Each test class groups related scenarios: core functionality, edge cases,
-invalid inputs, and boundary conditions.
 """
 
 import sys
@@ -22,10 +20,6 @@ from sktime.forecasting.naive import NaiveForecaster
 from sktime_mcp.runtime.executor import get_executor
 from sktime_mcp.tools.fit_predict import fit_predict_tool, fit_tool, predict_tool
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _create_naive_handle(executor=None, strategy="last"):
     """Instantiate a NaiveForecaster and return (executor, handle)."""
@@ -42,16 +36,10 @@ def _release(executor, handle):
     except KeyError:
         pass
 
-
-# ====================================================================
-# fit_predict_tool tests
-# ====================================================================
-
-
 class TestFitPredictTool:
     """Tests for ``fit_predict_tool``."""
 
-    # ---- core functionality -----------------------------------------
+    #core functionality
 
     def test_fit_predict_success_airline(self):
         """Fit-predict on the airline demo dataset should succeed."""
@@ -107,7 +95,7 @@ class TestFitPredictTool:
         finally:
             _release(executor, handle)
 
-    # ---- invalid inputs ---------------------------------------------
+    # invalid inputs
 
     def test_fit_predict_unknown_handle(self):
         """Non-existent estimator handle should return success=False."""
@@ -140,7 +128,7 @@ class TestFitPredictTool:
         finally:
             _release(executor, handle)
 
-    # ---- boundary conditions ----------------------------------------
+    # boundary conditions
 
     def test_fit_predict_horizon_one(self):
         """A horizon of 1 should still produce exactly one prediction."""
@@ -187,16 +175,10 @@ class TestFitPredictTool:
             finally:
                 _release(executor, handle)
 
-
-# ====================================================================
-# fit_tool tests
-# ====================================================================
-
-
 class TestFitTool:
     """Tests for ``fit_tool``."""
 
-    # ---- core functionality -----------------------------------------
+    #core functionality
 
     def test_fit_success(self):
         """fit_tool should succeed on a valid estimator + dataset."""
@@ -222,7 +204,7 @@ class TestFitTool:
         finally:
             _release(executor, handle)
 
-    # ---- invalid inputs ---------------------------------------------
+    #invalid inputs
 
     def test_fit_unknown_handle(self):
         """Non-existent handle should produce an error."""
@@ -242,7 +224,7 @@ class TestFitTool:
         finally:
             _release(executor, handle)
 
-    # ---- idempotency / repeated fits --------------------------------
+    #idempotency / repeated fits
 
     def test_fit_can_be_called_twice(self):
         """Fitting the same estimator twice should not raise."""
@@ -256,16 +238,10 @@ class TestFitTool:
         finally:
             _release(executor, handle)
 
-
-# ====================================================================
-# predict_tool tests
-# ====================================================================
-
-
 class TestPredictTool:
     """Tests for ``predict_tool``."""
 
-    # ---- core functionality -----------------------------------------
+    #core functionality
 
     def test_predict_after_fit(self):
         """predict_tool should succeed on a fitted estimator."""
@@ -294,7 +270,7 @@ class TestPredictTool:
         finally:
             _release(executor, handle)
 
-    # ---- invalid inputs ---------------------------------------------
+    #invalid inputs
 
     def test_predict_before_fit(self):
         """Calling predict on an un-fitted estimator should fail."""
@@ -316,7 +292,7 @@ class TestPredictTool:
         assert not result["success"]
         assert "error" in result
 
-    # ---- boundary conditions ----------------------------------------
+    #boundary conditions
 
     def test_predict_horizon_one(self):
         """Horizon of 1 should return exactly one prediction."""
@@ -343,12 +319,6 @@ class TestPredictTool:
             assert len(result["predictions"]) == 50
         finally:
             _release(executor, handle)
-
-
-# ====================================================================
-# Cross-tool integration tests
-# ====================================================================
-
 
 class TestFitPredictIntegration:
     """Integration tests combining fit_tool and predict_tool."""
