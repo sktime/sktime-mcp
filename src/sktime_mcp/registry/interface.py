@@ -108,50 +108,113 @@ class RegistryInterface:
                     self._loaded = True
 
     def _load_registry(self):
-        """Load all estimators from sktime's registry.
+        """Populate the internal cache with all estimators found in sktime's registry.
+
+        Issues a single ``all_estimators`` call to avoid re-crawling the module
+        tree once per TASK_MAP key.  Estimators whose ``object_type`` tag does not
+        resolve to a TASK_MAP key are skipped silently and logged at DEBUG so they
+        remain visible during development without polluting production logs.
 
         Called while ``_lock`` is held by ``_ensure_loaded``.  Must not call any
         public method that invokes ``_ensure_loaded``; doing so would re-acquire
         ``_lock`` on the same thread (safe with RLock, but logically incorrect).
         """
+        if not self.TASK_MAP:
+            raise RuntimeError("TASK_MAP is empty — cannot load registry")
+
         try:
             from sktime.registry import all_estimators
         except ImportError as e:
             logger.debug(f"Failed to import sktime registry: {e}")
             raise RuntimeError("sktime must be installed to use sktime-mcp") from e
 
-        new_cache: dict[str, "EstimatorNode"] = {}
+        new_cache: dict[str, EstimatorNode] = {}
         new_all_tags: set = set()
 
-        for estimator_type in self.TASK_MAP:
-            try:
-                estimators = all_estimators(
-                    estimator_types=estimator_type,
-                    return_names=True,
-                    as_dataframe=False,
-                )
-            except Exception as e:
-                logger.debug(f"Failed to load estimators for type {estimator_type!r}: {e}")
-                continue
+        try:
+            # Pass estimator_types so sktime's inheritance filter excludes types not in
+            # TASK_MAP (e.g. BasePairwiseTransformerPanel) rather than relying solely on
+            # the object_type tag, and prevents pairwise transformers leaking into
+            # task='transformation'.
+            estimators = all_estimators(
+                estimator_types=list(self.TASK_MAP.keys()),
+                return_names=True,
+                as_dataframe=False,
+            )
+        except Exception as e:
+            logger.debug(f"Failed to load estimators: {e}")
+            raise
 
-            for name, cls in estimators:
-                try:
-                    node = self._create_node(name, cls, estimator_type)
-                    if name in new_cache:
-                        logger.warning(
-                            f"Name collision: {name!r} already in cache; "
-                            f"overwriting with {cls.__module__}.{cls.__name__}"
-                        )
-                    new_cache[name] = node
-                    new_all_tags.update(node.tags.keys())
-                except Exception as e:
-                    logger.debug(f"Failed to load estimator {name!r}: {e}")
+        for name, cls in estimators:
+            try:
+                estimator_type = self._get_estimator_type(cls)
+                if not estimator_type:
+                    logger.debug(f"Skipping {name!r}: object_type tag unresolvable")
                     continue
+                node = self._create_node(name, cls, estimator_type)
+                if name in new_cache:
+                    logger.warning(
+                        f"Name collision: {name!r} already in cache as {new_cache[name].module!r}; "
+                        f"overwriting with {cls.__module__}.{cls.__name__}"
+                    )
+                new_cache[name] = node
+                new_all_tags.update(node.tags.keys())
+            except Exception as e:
+                logger.debug(f"Failed to load estimator {name!r}: {e}")
+                continue
 
         # Two separate reference stores — written in sequence, not as a unit.
         self._cache = new_cache
         self._all_tags = new_all_tags
         logger.info(f"Loaded {len(self._cache)} estimators from sktime registry")
+
+    def _get_estimator_type(self, cls: type) -> str:
+        """Return the TASK_MAP key that best describes this estimator class.
+
+        Reads the ``object_type`` class tag rather than accepting a caller-supplied
+        type argument, so the mapping is always grounded in the class's own
+        declaration.  Multi-role estimators (list-valued or tuple-valued tag) resolve
+        via two-pass strategy: exact match across all candidates first, then
+        dash-prefix fallback across all candidates.  Subtype tags such as
+        ``"transformer-pairwise-panel"`` resolve via dash-prefix fallback so that
+        new subtypes require no code change here.
+
+        Args:
+            cls: An sktime estimator class that exposes ``get_class_tags()``.
+
+        Returns:
+            A key present in ``self.TASK_MAP`` (e.g. ``"forecaster"``), or ``""``
+            when the tag is absent, unresolvable, or ``get_class_tags()`` raises.
+        """
+        try:
+            tags = cls.get_class_tags()
+            raw = tags.get("object_type", "")
+            # split() handles space-separated strings (e.g. "classifier forecaster")
+            # and single-token strings uniformly; list/tuple are used as-is.
+            candidates = raw if isinstance(raw, (list, tuple)) else raw.split() if isinstance(raw, str) else []
+            normalized = [c.lower() for c in candidates if isinstance(c, str)]
+            # Pass 1: exact match — first hit wins; tie-breaking follows candidate-order
+            # returned by get_class_tags(), which is not documented as stable by sktime
+            # but matches observed behaviour for all known multi-role estimators.
+            for candidate in normalized:
+                if candidate in self.TASK_MAP:
+                    return candidate
+            # Pass 2: dash-prefix fallback — first prefix match in TASK_MAP insertion order wins.
+            # New subtypes (e.g. "transformer-pairwise") are handled here without code changes,
+            # but they are excluded upstream by the estimator_types filter in _load_registry.
+            for candidate in normalized:
+                for key in self.TASK_MAP:
+                    if candidate.startswith(key + "-"):
+                        return key
+            return ""
+        except TypeError as e:
+            # TypeError means get_class_tags is an instance method, not a classmethod —
+            # an estimator authoring bug worth surfacing above DEBUG noise.
+            logger.warning(f"_get_estimator_type: {cls!r} has non-classmethod get_class_tags: {e}")
+            return ""
+        except Exception as e:
+            logger.debug(f"_get_estimator_type failed for {cls}: {e}")
+            return ""
 
     def _create_node(self, name: str, cls: type, estimator_type: str) -> EstimatorNode:
         """Create an EstimatorNode from a class."""

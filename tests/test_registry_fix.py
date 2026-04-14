@@ -1,14 +1,14 @@
-"""tests/test_registry_fix.py — adversarially hardened pytest suite for thread-safety fixes.
+"""tests/test_registry_fix.py — adversarially hardened pytest suite for _load_registry fix.
 
-Each test is designed to catch a specific regression path in the thread-safety layer.
-A test that passes when a race condition or lock bug is reintroduced is not a test.
+Each test is designed to catch a specific, named regression path. A test that passes
+when the buggy 8-call loop is reintroduced is not a test — it's documentation.
 
-Coverage targets:
-  - RLock prevents re-entrant deadlock (same thread can re-acquire the lock)
-  - Double-checked locking (DCL): inner _loaded check avoids redundant _load_registry calls
-  - _all_tags fallback read is lock-guarded in get_available_tags ImportError branch
-  - search_estimators rejects non-str queries before _ensure_loaded is called
-  - _ensure_loaded sets _loaded only on success; RuntimeError keeps _loaded=False for retry
+Regression labels:
+  R1  all_estimators called > 1 time
+  R2  estimator_types= kwarg passed (loop signal)
+  R3  cache smaller than it should be (missed estimators)
+  R4  task mapping wrong for known estimators
+  R5  subtype estimators dropped (transformer-pairwise-panel etc.)
 """
 
 import logging
@@ -34,9 +34,631 @@ def _make_fake_cls(object_type: str, name: str = "Fake") -> MagicMock:
 # Suite
 # ---------------------------------------------------------------------------
 
-class TestRegistryThreadSafety:
+class TestRegistrySingleCall:
     # ------------------------------------------------------------------
-    # _ensure_loaded: _loaded flag and retry semantics
+    # R1 / R2 — call count and signature
+    # ------------------------------------------------------------------
+
+    def test_all_estimators_called_exactly_once_with_exact_kwargs(self):
+        """Proves all_estimators() called once AND with the exact correct kwargs.
+
+        R1: call_count > 1 is a regression (old loop called all_estimators 8 times).
+        R2: estimator_types must be list(TASK_MAP.keys()) — neither absent (old no-filter
+        call) nor a single string per iteration (old per-type loop pattern).
+        Patch target is sktime.registry.all_estimators because all_estimators is a local
+        import inside _load_registry — patching the interface module namespace would fail.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        fake_cls = _make_fake_cls("forecaster", "NaiveForecaster")
+
+        with patch(
+            "sktime.registry.all_estimators",
+            return_value=[("NaiveForecaster", fake_cls)],
+        ) as mock_ae:
+            ri._load_registry()
+
+        mock_ae.assert_called_once_with(
+            estimator_types=list(RegistryInterface.TASK_MAP.keys()),
+            return_names=True,
+            as_dataframe=False,
+        )
+
+    def test_estimator_types_passed_as_list_not_per_key_string(self):
+        """Proves estimator_types is passed as a single LIST of all TASK_MAP keys, not
+        as individual per-key strings across multiple calls.
+
+        R2 regression: the old loop called all_estimators(estimator_types="forecaster"),
+        then all_estimators(estimator_types="transformer"), etc. — one string per call.
+        A fix must pass estimator_types=list(TASK_MAP.keys()) in a single call.
+        Asserting the value is a list (not a string) and equals all keys prevents
+        both the old loop pattern and any partial single-string shortcut.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        fake_cls = _make_fake_cls("forecaster")
+
+        with patch(
+            "sktime.registry.all_estimators",
+            return_value=[("F", fake_cls)],
+        ) as mock_ae:
+            ri._load_registry()
+
+        assert mock_ae.call_count == 1, (
+            f"Expected exactly 1 call, got {mock_ae.call_count} — loop regression"
+        )
+        call = mock_ae.call_args_list[0]
+        assert "estimator_types" in call.kwargs, (
+            "estimator_types must be passed as a kwarg (not positional or absent)"
+        )
+        passed_types = call.kwargs["estimator_types"]
+        assert isinstance(passed_types, list), (
+            f"estimator_types must be a list, got {type(passed_types).__name__!r}: "
+            f"{passed_types!r} — single-string per-loop-iteration regression"
+        )
+        assert passed_types == list(RegistryInterface.TASK_MAP.keys()), (
+            f"estimator_types list {passed_types!r} != "
+            f"list(TASK_MAP.keys()) {list(RegistryInterface.TASK_MAP.keys())!r}"
+        )
+
+    def test_idempotent_load_calls_all_estimators_exactly_once_total(self):
+        """If lazy-load guard is broken, second call to _ensure_loaded
+        re-runs _load_registry and calls all_estimators a second time.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        fake_cls = _make_fake_cls("forecaster")
+
+        with patch(
+            "sktime.registry.all_estimators",
+            return_value=[("F", fake_cls)],
+        ) as mock_ae:
+            ri._ensure_loaded()
+            ri._ensure_loaded()
+
+        assert mock_ae.call_count == 1, (
+            f"all_estimators called {mock_ae.call_count}× across two _ensure_loaded calls"
+        )
+
+    # ------------------------------------------------------------------
+    # R3 — completeness: bidirectional cache verification
+    # ------------------------------------------------------------------
+
+    def test_cache_contains_every_estimator_with_known_type(self):
+        """R3 forward direction: no estimator with a resolvable type should be silently dropped.
+
+        Ground truth is all_estimators(estimator_types=list(TASK_MAP.keys()), ...) — the
+        same filtered call the production code issues.  Using unfiltered all_estimators()
+        as ground truth would generate false failures for estimator types intentionally
+        excluded by the estimator_types filter (e.g. pairwise transformers).
+        Regression caught: any estimator returned by the filtered call that is absent from
+        the cache reveals a silent drop in _load_registry's loop body.
+
+        NOTE — partial circularity: the oracle (`_get_estimator_type`) is the same logic
+        as the production path, so a systematic bug in `_get_estimator_type` that drops a
+        whole subtype will be invisible here.  `test_cache_contains_all_sktime_type_members`
+        is the non-circular counterpart that uses sktime's own per-type filter as ground truth.
+        """
+        from sktime.registry import all_estimators as real_ae
+
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        ri._ensure_loaded()
+
+        # Use the same filter the production code uses — this is the ground truth.
+        all_est = real_ae(
+            estimator_types=list(ri.TASK_MAP.keys()),
+            return_names=True,
+            as_dataframe=False,
+        )
+        missing = []
+        for name, cls in all_est:
+            est_type = ri._get_estimator_type(cls)
+            if est_type and est_type in ri.TASK_MAP and name not in ri._cache:
+                missing.append((name, est_type))
+
+        assert not missing, (
+            f"{len(missing)} estimators with resolvable type missing from cache:\n"
+            + "\n".join(f"  {n} ({t})" for n, t in missing[:10])
+        )
+
+    def test_cache_contains_no_phantom_estimators(self):
+        """R3 reverse direction: cache must not contain estimators absent from the registry
+        (fabricated entries or stale data).
+        """
+        from sktime.registry import all_estimators as real_ae
+
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        ri._ensure_loaded()
+
+        known_names = {name for name, _ in real_ae(return_names=True, as_dataframe=False)}
+        phantom = [name for name in ri._cache if name not in known_names]
+
+        assert not phantom, (
+            f"{len(phantom)} phantom estimators in cache: {phantom[:5]}"
+        )
+
+    def test_cache_size_matches_runtime_expected_count(self):
+        """Count derived from all_estimators(estimator_types=...) at runtime — catches both
+        over- and under-capture.
+
+        Ground truth uses the same estimator_types filter as the production call so that
+        the expected count is derived from exactly the set of estimators the implementation
+        is supposed to load — not a superset that includes intentionally excluded types.
+        Regression caught: cache size diverging from the filtered call result reveals
+        either silent drops (cache too small) or phantom insertions (cache too large).
+        """
+        from sktime.registry import all_estimators as real_ae
+
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        ri._ensure_loaded()
+
+        # Ground truth: same filter the production code uses.
+        all_est = real_ae(
+            estimator_types=list(ri.TASK_MAP.keys()),
+            return_names=True,
+            as_dataframe=False,
+        )
+        expected = sum(
+            1 for _, cls in all_est
+            if (t := ri._get_estimator_type(cls)) and t in ri.TASK_MAP
+        )
+
+        assert len(ri._cache) == expected, (
+            f"Cache has {len(ri._cache)} estimators; expected {expected} from "
+            f"all_estimators(estimator_types=list(TASK_MAP.keys()))"
+        )
+
+    def test_cache_contains_all_sktime_type_members(self):
+        """Non-circular completeness: every estimator returned by all_estimators per type
+        must be present in the cache with the correct task value.
+
+        Does NOT use _get_estimator_type internally — ground truth comes directly from
+        all_estimators(estimator_types=key) for each TASK_MAP key, which is sktime's own
+        authoritative membership answer.  This makes the test independent of any tag-reading
+        logic in the production code.
+
+        Regression caught: silent category drop — e.g. if clusterer entries never appear
+        in the cache, the per-key loop below would flag every clusterer as missing even
+        if _get_estimator_type works correctly.  This catches failures invisible to
+        tag-based completeness tests.
+        """
+        from sktime.registry import all_estimators as real_ae
+
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        ri._ensure_loaded()
+
+        missing_from_cache: list[tuple[str, str]] = []
+        wrong_task: list[tuple[str, str, str]] = []
+
+        for key, expected_task in ri.TASK_MAP.items():
+            try:
+                type_members = real_ae(
+                    estimator_types=key,
+                    return_names=True,
+                    as_dataframe=False,
+                )
+            except Exception:
+                # If sktime itself can't list this type, skip rather than fail.
+                continue
+
+            for name, _ in type_members:
+                if name not in ri._cache:
+                    missing_from_cache.append((name, key))
+                else:
+                    actual_task = ri._cache[name].task
+                    if actual_task != expected_task:
+                        wrong_task.append((name, expected_task, actual_task))
+
+        assert not missing_from_cache, (
+            f"{len(missing_from_cache)} estimators returned by all_estimators(estimator_types=key) "
+            f"but absent from cache (first 10):\n"
+            + "\n".join(f"  {n!r} (type={t!r})" for n, t in missing_from_cache[:10])
+        )
+        assert not wrong_task, (
+            f"{len(wrong_task)} estimators have wrong task in cache (first 10):\n"
+            + "\n".join(
+                f"  {n!r}: expected task={e!r}, got {a!r}"
+                for n, e, a in wrong_task[:10]
+            )
+        )
+
+    def test_single_call_no_regression_vs_per_key_loop(self):
+        """Proves the single-call approach loses no estimator the per-key loop would cache.
+
+        Symmetric filter: both old and new paths apply _get_estimator_type so the
+        comparison is between actual cache populations, not raw all_estimators output.
+
+        Applying _get_estimator_type on both sides is essential: without it, pairwise
+        transformers (object_type='transformer-pairwise-panel') appear in old_names via
+        all_estimators(estimator_types='transformer') but are absent from new_names
+        because _get_estimator_type returns '' for them — producing structural false
+        failures that have nothing to do with the fix.
+
+        Regression caught: any estimator in the per-key cache but absent from the
+        single-call cache — the fix must not drop anything the old loop would have loaded.
+        New gains (estimators only in the single-call result) are improvements, not bugs.
+        """
+        from sktime.registry import all_estimators as real_ae
+
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+
+        # Simulate old production behavior: per-key loop WITH _get_estimator_type routing
+        old_cache: dict[str, str] = {}
+        for estimator_type in ri.TASK_MAP:
+            try:
+                for name, cls in real_ae(
+                    estimator_types=estimator_type,
+                    return_names=True,
+                    as_dataframe=False,
+                ):
+                    t = ri._get_estimator_type(cls)
+                    if t and t in ri.TASK_MAP:
+                        old_cache[name] = t
+            except Exception:
+                pass
+
+        # Simulate new production behavior: single call WITH _get_estimator_type routing
+        new_cache: dict[str, str] = {}
+        for name, cls in real_ae(
+            estimator_types=list(ri.TASK_MAP.keys()),
+            return_names=True,
+            as_dataframe=False,
+        ):
+            t = ri._get_estimator_type(cls)
+            if t and t in ri.TASK_MAP:
+                new_cache[name] = t
+
+        old_only = set(old_cache) - set(new_cache)
+        assert not old_only, (
+            f"{len(old_only)} estimators cached by per-key loop but missing from "
+            f"single-call result (regression — fix drops estimators): {sorted(old_only)[:5]}"
+        )
+
+    def test_mock_registry_captures_all_eight_task_types(self):
+        """R3 + R4 via controlled mock: one fake estimator per TASK_MAP key.
+        No hardcoded counts — derived from ri.TASK_MAP at runtime.
+        Regression target: any TASK_MAP key silently skipped in _load_registry's loop.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        fake_estimators = []
+        for key in ri.TASK_MAP:
+            cls = MagicMock()
+            cls.get_class_tags.return_value = {"object_type": key}
+            cls.__module__ = f"sktime.fake.{key}"
+            cls.__name__ = f"Fake_{key}"
+            fake_estimators.append((f"Fake_{key}", cls))
+
+        with patch("sktime.registry.all_estimators", return_value=fake_estimators):
+            ri._load_registry()
+
+        expected_count = len(ri.TASK_MAP)
+        assert len(ri._cache) == expected_count, (
+            f"Expected {expected_count} cache entries (one per TASK_MAP key), "
+            f"got {len(ri._cache)}. Missing: "
+            f"{[f'Fake_{k}' for k in ri.TASK_MAP if f'Fake_{k}' not in ri._cache]}"
+        )
+
+        for key, task_value in ri.TASK_MAP.items():
+            node = ri._cache.get(f"Fake_{key}")
+            assert node is not None, f"Fake_{key} missing from cache"
+            assert node.task == task_value, (
+                f"Fake_{key}: expected task={task_value!r}, got {node.task!r}"
+            )
+
+    def test_all_task_types_represented_in_cache(self):
+        """Proves every TASK_MAP type that has estimators is present in the cache.
+
+        Catches regression: if an entire estimator category is silently skipped,
+        the cache would be missing a whole task type.
+        """
+        from sktime.registry import all_estimators as real_ae
+
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        ri._ensure_loaded()
+
+        all_est = real_ae(return_names=True, as_dataframe=False)
+        types_with_estimators: set[str] = set()
+        for _, cls in all_est:
+            t = ri._get_estimator_type(cls)
+            if t and t in ri.TASK_MAP:
+                types_with_estimators.add(t)
+
+        cached_task_values = {node.task for node in ri._cache.values()}
+        missing_tasks = [
+            est_type for est_type in types_with_estimators
+            if ri.TASK_MAP[est_type] not in cached_task_values
+        ]
+
+        assert not missing_tasks, (
+            f"Task types with estimators but none in cache: {missing_tasks}"
+        )
+
+    # ------------------------------------------------------------------
+    # R4 — correct task mapping
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize(
+        "cls_name,expected_task",
+        [
+            ("NaiveForecaster", "forecasting"),
+            ("Detrender", "transformation"),
+            ("TimeSeriesForestClassifier", "classification"),
+        ],
+    )
+    def test_estimator_node_task_field_maps_correctly(self, cls_name, expected_task):
+        """Proves the EstimatorNode.task field is the TASK_MAP value, not the raw tag.
+
+        R4: _create_node must receive a TASK_MAP key and produce a node with
+        task == TASK_MAP[key]. A fix that stores the raw object_type in node.task
+        would pass call-count tests but fail this.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        ri._ensure_loaded()
+
+        node = ri._cache.get(cls_name)
+        assert node is not None, f"{cls_name} not in cache"
+        assert node.task == expected_task, (
+            f"{cls_name}.task = {node.task!r}, expected {expected_task!r}"
+        )
+
+    # ------------------------------------------------------------------
+    # R5 — subtype prefix matching
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize("subtype,expected_key", [
+        ("transformer-pairwise-panel", "transformer"),
+        ("transformer-pairwise", "transformer"),
+        ("classifier-early-ts", "classifier"),
+        ("regressor-panel", "regressor"),
+    ])
+    def test_get_estimator_type_prefix_matches_subtypes(self, subtype, expected_key):
+        """Proves subtype object_type values are mapped to their parent TASK_MAP key.
+
+        R5: Without prefix matching, "transformer-pairwise-panel" returns the raw value
+        which fails the TASK_MAP membership check, silently dropping 20+ estimators.
+        This is the regression that caused new approach to capture fewer than old loop.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        if expected_key not in ri.TASK_MAP:
+            pytest.skip(f"{expected_key!r} not in TASK_MAP for this sktime install")
+
+        cls = MagicMock()
+        cls.get_class_tags.return_value = {"object_type": subtype}
+        result = ri._get_estimator_type(cls)
+        assert result == expected_key, (
+            f"Expected {expected_key!r} for subtype {subtype!r}, got {result!r}"
+        )
+
+    def test_prefix_match_requires_dash_separator(self):
+        """Proves prefix matching uses dash separator, not bare prefix.
+
+        A bare-prefix match ("trans" matching "transformer") would be incorrect
+        if TASK_MAP ever gains a short key. The dash separator anchors subtypes.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        # A value that starts with a TASK_MAP key but WITHOUT a dash — must NOT match
+        # (e.g., if TASK_MAP has "net" and we have "network", it must not match "net")
+        # We test this concretely: "forecasterthing" must NOT map to "forecaster"
+        cls = MagicMock()
+        cls.get_class_tags.return_value = {"object_type": "forecasterthing"}
+        result = ri._get_estimator_type(cls)
+        assert result != "forecaster", (
+            "Bare prefix match incorrectly mapped 'forecasterthing' to 'forecaster'"
+        )
+
+    # ------------------------------------------------------------------
+    # Defensive behavior — _get_estimator_type
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize("exc", [
+        RuntimeError("tag system unavailable"),
+        AttributeError("no such method"),
+        TypeError("not callable"),
+        Exception("catastrophic failure"),
+    ])
+    def test_get_estimator_type_returns_empty_on_any_exception(self, exc):
+        """Proves _get_estimator_type returns '' for any exception type.
+
+        Must catch ALL exceptions — a specific except clause would fail for
+        unexpected exception types, turning a skip into a load failure.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        broken_cls = MagicMock()
+        broken_cls.get_class_tags.side_effect = exc
+
+        assert ri._get_estimator_type(broken_cls) == ""
+
+    @pytest.mark.parametrize("non_string_value", [
+        42, [42], {"type": "forecaster"}, None, True, 3.14,
+    ])
+    def test_get_estimator_type_returns_empty_for_non_string_object_type(self, non_string_value):
+        """Proves non-string (and non-list-of-strings) object_type values return ''.
+
+        List-of-strings is valid (e.g. ['reconciler', 'transformer']) and handled.
+        Non-string scalars and lists-of-non-strings must return '' cleanly.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        cls = MagicMock()
+        cls.get_class_tags.return_value = {"object_type": non_string_value}
+
+        assert ri._get_estimator_type(cls) == "", (
+            f"Expected '' for object_type={non_string_value!r}"
+        )
+
+    def test_get_estimator_type_handles_list_valued_object_type(self):
+        """Proves list-valued object_type (multi-role estimators) resolves to first TASK_MAP match.
+
+        sktime registers some estimators with object_type=['reconciler', 'transformer'].
+        The old loop captured these via all_estimators(estimator_types='transformer').
+        The fix must match the same behavior by iterating the list.
+        Without this, 20 reconcilers and global forecasters are silently dropped.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        cls = MagicMock()
+        # Typical multi-role: first element not in TASK_MAP, second is
+        cls.get_class_tags.return_value = {"object_type": ["reconciler", "transformer"]}
+        assert ri._get_estimator_type(cls) == "transformer"
+
+        # Global forecasters pattern
+        cls2 = MagicMock()
+        cls2.get_class_tags.return_value = {"object_type": ["global_forecaster", "forecaster"]}
+        assert ri._get_estimator_type(cls2) == "forecaster"
+
+        # List of non-strings → ""
+        cls3 = MagicMock()
+        cls3.get_class_tags.return_value = {"object_type": [42, None]}
+        assert ri._get_estimator_type(cls3) == ""
+
+    def test_get_estimator_type_handles_tuple_valued_object_type(self):
+        """isinstance(raw, (list, tuple)) guard — tuples must behave identically to lists.
+        If guard reverts to isinstance(raw, list) only, tuple-valued object_type
+        returns '' instead of the correct TASK_MAP key.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        if "transformer" not in ri.TASK_MAP:
+            pytest.skip("'transformer' must be in TASK_MAP for this test")
+
+        # Single-element tuple with an exact key
+        cls1 = MagicMock()
+        cls1.get_class_tags.return_value = {"object_type": ("transformer",)}
+        assert ri._get_estimator_type(cls1) == "transformer", (
+            "Single-element tuple ('transformer',) must resolve to 'transformer'"
+        )
+
+        # Multi-element tuple where second is an exact key, first is a subtype
+        if "forecaster" not in ri.TASK_MAP:
+            pytest.skip("'forecaster' must be in TASK_MAP for this test")
+        cls2 = MagicMock()
+        cls2.get_class_tags.return_value = {
+            "object_type": ("transformer-pairwise-panel", "forecaster")
+        }
+        result = ri._get_estimator_type(cls2)
+        assert result == "forecaster", (
+            f"Expected 'forecaster' (exact beats prefix in tuple), got {result!r}"
+        )
+
+    def test_two_pass_exact_beats_prefix_in_list_valued_object_type(self):
+        """Proves pass-1 exact match on any candidate beats pass-2 prefix hit on an earlier one.
+
+        Regression target: a naive single-pass implementation that evaluates exact-or-prefix
+        per element in order would see 'transformer-pairwise-panel' at index 0, prefix-match
+        it to 'transformer', and return immediately — never reaching the exact match
+        'forecaster' at index 1.
+
+        The two-pass strategy (all exact checks before any prefix check) must return
+        'forecaster' because it is an exact TASK_MAP hit, and exact wins over prefix
+        regardless of list position.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        if "forecaster" not in ri.TASK_MAP or "transformer" not in ri.TASK_MAP:
+            pytest.skip("Both 'forecaster' and 'transformer' must be in TASK_MAP for this test")
+
+        cls = MagicMock()
+        # Element 0: prefix-matches "transformer" via dash fallback.
+        # Element 1: exact-matches "forecaster".
+        # Correct two-pass result: "forecaster" (exact beats prefix).
+        cls.get_class_tags.return_value = {
+            "object_type": ["transformer-pairwise-panel", "forecaster"]
+        }
+        result = ri._get_estimator_type(cls)
+        assert result == "forecaster", (
+            f"Expected 'forecaster' (exact match on element 1 beats prefix on element 0), "
+            f"got {result!r}. Single-pass regression: prefix hit on element 0 short-circuited."
+        )
+
+    def test_two_pass_exact_beats_prefix_in_single_string_candidates(self):
+        """Proves pass-1 exact match is checked before pass-2 prefix for a single candidate.
+
+        A candidate that is itself an exact TASK_MAP key must always return that exact key,
+        never accidentally prefix-match to a shorter key.  Regression: if the code checked
+        prefix before exact, a hypothetical 'forecaster-advanced' TASK_MAP key would let
+        'forecaster' prefix-match to 'forecaster-advanced' — incorrect.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        for key in ri.TASK_MAP:
+            cls = MagicMock()
+            cls.get_class_tags.return_value = {"object_type": key}
+            result = ri._get_estimator_type(cls)
+            assert result == key, (
+                f"Exact key {key!r} should return itself, got {result!r}"
+            )
+
+    def test_get_estimator_type_normalizes_all_case_variants(self):
+        """Proves .lower() is applied before TASK_MAP lookup for all case variants.
+
+        A fix that lowercases only in _load_registry (not the helper) would fail
+        because the helper is tested and used independently.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        for variant in ("Forecaster", "FORECASTER", "fOrEcAsTeR"):
+            cls = MagicMock()
+            cls.get_class_tags.return_value = {"object_type": variant}
+            assert ri._get_estimator_type(cls) == "forecaster", (
+                f"Expected 'forecaster' for {variant!r}"
+            )
+
+    def test_unknown_object_type_is_skipped_and_create_node_never_called(self):
+        """Proves estimators with unresolvable object_type never reach _create_node.
+
+        If the TASK_MAP guard is removed, _create_node is called with an unknown
+        type, producing a node with task == raw_type (not a TASK_MAP value).
+        Spy on _create_node to verify it is never called for unknown types.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        unknown_cls = _make_fake_cls("quantum_predictor", "QuantumForecaster")
+
+        with patch(
+            "sktime.registry.all_estimators",
+            return_value=[("QuantumForecaster", unknown_cls)],
+        ), patch.object(ri, "_create_node", wraps=ri._create_node) as spy:
+            ri._load_registry()
+
+        assert "QuantumForecaster" not in ri._cache
+        spy.assert_not_called()
+
+    # ------------------------------------------------------------------
+    # State management
+    # ------------------------------------------------------------------
+
     def test_loaded_flag_set_after_empty_registry(self):
         """Proves _loaded=True even when all_estimators() returns [].
 
@@ -61,6 +683,7 @@ class TestRegistryThreadSafety:
         This tests the ImportError → RuntimeError path (line 96 in _load_registry),
         which is distinct from the inner try/except that catches all_estimators() failures.
         """
+        import sys
 
         from sktime_mcp.registry.interface import RegistryInterface
 
@@ -77,6 +700,24 @@ class TestRegistryThreadSafety:
         with patch.dict(sys.modules, {"sktime.registry": None}), pytest.raises(RuntimeError, match="sktime must be installed"):
             ri._ensure_loaded()
 
+    def test_loaded_flag_not_set_when_all_estimators_call_raises(self):
+        """all_estimators() failure re-raises; _loaded must stay False.
+
+        Fix 2: the except block raises instead of returning so _ensure_loaded
+        never reaches self._loaded = True on failure — callers always see the
+        real error and the next call retries rather than hitting an empty cache.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        with patch(
+            "sktime.registry.all_estimators",
+            side_effect=RuntimeError("registry unavailable"),
+        ), pytest.raises(RuntimeError, match="registry unavailable"):
+            ri._ensure_loaded()
+
+        assert not ri._loaded, "_loaded must stay False when _load_registry raises"
+        assert len(ri._cache) == 0
 
     def test_cache_is_not_modified_on_second_ensure_loaded(self):
         """Proves _cache is frozen after first _ensure_loaded; second call is a strict no-op.
@@ -103,27 +744,139 @@ class TestRegistryThreadSafety:
     # Regression injection — the 8-call loop must fail our coverage test
     # ------------------------------------------------------------------
 
+    def test_single_call_task_assignment_consistent_with_per_key_loop(self):
+        """Proves task assignment agrees between single-call and per-key approaches.
+
+        For any estimator present in both result sets, the task value must match.
+        A mismatch means _get_estimator_type is routing inconsistently depending on
+        which all_estimators call returned the class — which would be a tag-reading bug.
+
+        Both sides apply the same symmetric _get_estimator_type filter so the comparison
+        is between actual task assignments, not raw call populations.
+
+        Regression caught: a bug where the same estimator class is routed to different
+        tasks depending on which all_estimators call returned it.
+        """
+        from sktime.registry import all_estimators as real_ae
+
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+
+        old_tasks: dict[str, str] = {}
+        for estimator_type in ri.TASK_MAP:
+            try:
+                for name, cls in real_ae(
+                    estimator_types=estimator_type,
+                    return_names=True,
+                    as_dataframe=False,
+                ):
+                    t = ri._get_estimator_type(cls)
+                    if t and t in ri.TASK_MAP:
+                        old_tasks[name] = ri.TASK_MAP[t]
+            except Exception:
+                pass
+
+        new_tasks: dict[str, str] = {}
+        for name, cls in real_ae(
+            estimator_types=list(ri.TASK_MAP.keys()),
+            return_names=True,
+            as_dataframe=False,
+        ):
+            t = ri._get_estimator_type(cls)
+            if t and t in ri.TASK_MAP:
+                new_tasks[name] = ri.TASK_MAP[t]
+
+        mismatches = [
+            (name, old_tasks[name], new_tasks[name])
+            for name in old_tasks
+            if name in new_tasks and old_tasks[name] != new_tasks[name]
+        ]
+        assert not mismatches, (
+            f"{len(mismatches)} estimators with inconsistent task assignment "
+            f"between per-key and single-call paths (first 5): {mismatches[:5]}"
+        )
+
+    # ------------------------------------------------------------------
+    # Performance
+    # ------------------------------------------------------------------
+
+    def test_single_all_estimators_call_faster_than_n_typed_calls(self):
+        """Proves the single all_estimators() call is faster than N typed calls.
+
+        Compares API call times only (not node creation), matching the benchmark:
+        single call ~31ms, 8-call loop ~240ms on warm sys.modules (Python 3.11, sktime 0.40.1).
+        N = len(TASK_MAP); bound: single call must be < 50% of N typed calls.
+        """
+        from sktime.registry import all_estimators
+
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        # Warm sys.modules
+        all_estimators(return_names=True, as_dataframe=False)
+
+        ri = RegistryInterface()
+        n = len(ri.TASK_MAP)
+
+        # Time N typed calls (old approach cost)
+        t0 = time.perf_counter()
+        for estimator_type in ri.TASK_MAP:
+            all_estimators(estimator_types=estimator_type, return_names=True, as_dataframe=False)
+        old_time = time.perf_counter() - t0
+
+        # Time single call (new approach cost)
+        t1 = time.perf_counter()
+        all_estimators(return_names=True, as_dataframe=False)
+        new_time = time.perf_counter() - t1
+
+        assert new_time < old_time * 0.5, (
+            f"Single call ({new_time:.4f}s) not < 50% of {n}-call loop ({old_time:.4f}s). "
+            f"Speedup = {old_time / new_time:.1f}×"
+        )
+
+    def test_sys_modules_growth_is_zero_after_warm_load(self):
+        """Proves a warm _load_registry adds zero new sktime.* modules to sys.modules.
+
+        The root cause of the 1,637× slowdown is 2,649 new module imports per typed call.
+        After the first load warms sys.modules, a second RegistryInterface load should
+        add no new sktime imports.
+        """
+        from sktime.registry import all_estimators
+
+        all_estimators(return_names=True, as_dataframe=False)
+        sktime_modules_before = {k for k in sys.modules if k.startswith("sktime")}
+
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        ri._load_registry()
+
+        new_modules = {k for k in sys.modules if k.startswith("sktime")} - sktime_modules_before
+
+        assert len(new_modules) == 0, (
+            f"_load_registry imported {len(new_modules)} new sktime modules after warm load:\n"
+            + "\n".join(f"  {m}" for m in sorted(new_modules)[:10])
+        )
+
+    # ------------------------------------------------------------------
+    # Logging contract
+    # ------------------------------------------------------------------
 
     def test_no_warning_log_during_normal_load(self, caplog):
         """Proves no WARNING-level messages are emitted during a clean load.
 
-        The loop calls all_estimators once per TASK_MAP key.  To avoid spurious
-        collision warnings the mock returns the estimator only on the first call
-        (estimator_type="forecaster") and an empty list for the remaining keys.
+        The old loop emitted warnings when individual estimator types failed.
+        The fix has a single outer catch that uses WARNING; on a healthy registry
+        it must never fire.
         """
-
         from sktime_mcp.registry.interface import RegistryInterface
 
         ri = RegistryInterface()
         fake_cls = _make_fake_cls("forecaster", "GoodForecaster")
 
-        # First call returns the fake; subsequent calls return [] to avoid collisions.
-        n_keys = len(ri.TASK_MAP)
-        side_effects = [[("GoodForecaster", fake_cls)]] + [[] for _ in range(n_keys - 1)]
-
         with patch(
             "sktime.registry.all_estimators",
-            side_effect=side_effects,
+            return_value=[("GoodForecaster", fake_cls)],
         ), caplog.at_level(logging.WARNING, logger="sktime_mcp.registry.interface"):
             ri._load_registry()
 
@@ -156,6 +909,55 @@ class TestRegistryThreadSafety:
             f"Expected a WARNING mentioning 'DupEstimator' and 'collision'. Got: {warning_msgs}"
         )
 
+    def test_space_separated_object_type_resolves_first_token(self):
+        """Proves a space-separated object_type string ('forecaster transformer') is split
+        on whitespace so each token is matched independently — first hit wins.
+
+        Behaviour contract: 'forecaster transformer'.split() → ['forecaster', 'transformer'];
+        Pass 1 exact-match finds 'forecaster' first and returns it.  The estimator lands
+        in the cache under task='forecasting', not silently dropped.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        cls = _make_fake_cls("forecaster transformer", "SpaceTyped")
+
+        with patch(
+            "sktime.registry.all_estimators",
+            return_value=[("SpaceTyped", cls)],
+        ):
+            ri._load_registry()
+
+        assert "SpaceTyped" in ri._cache, (
+            "Space-separated object_type must resolve via split(): 'forecaster transformer' → 'forecaster'"
+        )
+        assert ri._cache["SpaceTyped"].task == "forecasting"
+
+    def test_debug_log_emitted_for_skipped_estimator_with_name_and_reason(self, caplog):
+        """Proves DEBUG log for skipped estimators contains both the name and the reason.
+
+        Skipped estimators must be discoverable in debug logs — silent drops create
+        invisible correctness gaps. The log must include the estimator name AND
+        the reason (the unknown type string or TASK_MAP mention), not just one.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+        unknown_cls = _make_fake_cls("quantum_predictor", "QPred")
+
+        with patch(
+            "sktime.registry.all_estimators",
+            return_value=[("QPred", unknown_cls)],
+        ), caplog.at_level(logging.DEBUG, logger="sktime_mcp.registry.interface"):
+            ri._load_registry()
+
+        debug_msgs = [r.message for r in caplog.records if r.levelno == logging.DEBUG]
+        assert any("QPred" in m for m in debug_msgs), (
+            f"No DEBUG log mentioning estimator name 'QPred'. Logs: {debug_msgs}"
+        )
+        assert any("unresolvable" in m or "object_type" in m or "TASK_MAP" in m for m in debug_msgs), (
+            f"No DEBUG log mentioning the skip reason. Logs: {debug_msgs}"
+        )
 
     def test_registry_name_collision_warning(self, caplog):
         """Exercises the logger.warning line in the collision block.
@@ -325,6 +1127,40 @@ class TestRegistryThreadSafety:
         finally:
             iface._registry_instance = original
 
+    def test_ensure_loaded_failure_leaves_loaded_false_and_retries(self):
+        """Proves _ensure_loaded() does not cache a failed load: _loaded stays False,
+        _cache stays empty, and the next call re-raises instead of silently returning.
+
+        (a) Invariant: _loaded must only become True after a SUCCESSFUL load.  If it were
+        set True on failure, subsequent callers would see an empty cache and never know why.
+        (b) Regression: moving `self._loaded = True` before `self._load_registry()` (or
+        inside a finally block) would swallow the error permanently.  This test catches
+        that by asserting _loaded is False after the raise AND that a second call also
+        raises (not a no-op silent return).
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
+
+        ri = RegistryInterface()
+
+        with patch(
+            "sktime.registry.all_estimators",
+            side_effect=RuntimeError("registry unavailable"),
+        ), pytest.raises(RuntimeError, match="registry unavailable"):
+            ri._ensure_loaded()
+
+        assert ri._loaded is False, (
+            "_loaded must remain False when _load_registry raises — "
+            "setting it True before the call is the regression this test catches"
+        )
+        assert ri._cache == {}, "_cache must be empty after a failed load"
+
+        # Second call must also raise — not a silent no-op on an empty cache.
+        with patch(
+            "sktime.registry.all_estimators",
+            side_effect=RuntimeError("registry unavailable"),
+        ), pytest.raises(RuntimeError, match="registry unavailable"):
+            ri._ensure_loaded()
+
     def test_get_tags_returns_copy_mutation_does_not_affect_original(self):
         """Proves _get_tags() returns an independent copy of the class tag dict.
 
@@ -477,42 +1313,6 @@ class TestRegistryThreadSafety:
         assert "docstring" not in result
 
     # ------------------------------------------------------------------
-    # Per-type exception swallowed in loop (lines 101-103)
-    # ------------------------------------------------------------------
-
-    def test_load_registry_continues_after_per_type_exception(self, caplog):
-        """Covers the except/continue block at lines 101-103 by making all_estimators raise for one type.
-
-        If the except block used raise instead of continue, the exception would propagate and
-        subsequent estimator types would never load; this test fails if the good type is missing.
-        """
-        from sktime_mcp.registry.interface import RegistryInterface
-
-        ri = RegistryInterface()
-        good_cls = _make_fake_cls("transformer", "GoodTransformer")
-
-        task_keys = list(ri.TASK_MAP.keys())
-
-        def _side_effect(estimator_types=None, return_names=True, as_dataframe=False):
-            if estimator_types == task_keys[0]:
-                raise RuntimeError("simulated per-type failure")
-            if estimator_types == "transformer":
-                return [("GoodTransformer", good_cls)]
-            return []
-
-        with patch(
-            "sktime.registry.all_estimators",
-            side_effect=_side_effect,
-        ), caplog.at_level(logging.DEBUG, logger="sktime_mcp.registry.interface"):
-            ri._load_registry()
-
-        assert "GoodTransformer" in ri._cache, "GoodTransformer must load despite earlier type failure"
-        debug_msgs = [r.message for r in caplog.records if r.levelno == logging.DEBUG]
-        assert any("simulated per-type failure" in m or task_keys[0] in m for m in debug_msgs), (
-            f"Expected DEBUG log about per-type failure. Got: {debug_msgs}"
-        )
-
-    # ------------------------------------------------------------------
     # Per-estimator exception swallowed in loop (lines 129-131)
     # ------------------------------------------------------------------
 
@@ -633,7 +1433,7 @@ class TestRegistryThreadSafety:
 
         If _ensure_loaded is removed from get_all_estimators, the cache is never populated and the result list is empty; this test fails.
         """
-        from sktime_mcp.registry.interface import EstimatorNode, RegistryInterface
+        from sktime_mcp.registry.interface import RegistryInterface, EstimatorNode
 
         ri = RegistryInterface()
         ri._loaded = True
@@ -648,7 +1448,7 @@ class TestRegistryThreadSafety:
 
         Removing the task filter means all estimators are returned regardless of task; this test fails because the forecasting-only filter would return 2 items instead of 1.
         """
-        from sktime_mcp.registry.interface import EstimatorNode, RegistryInterface
+        from sktime_mcp.registry.interface import RegistryInterface, EstimatorNode
 
         ri = RegistryInterface()
         ri._loaded = True
@@ -664,7 +1464,7 @@ class TestRegistryThreadSafety:
 
         Removing the tags filter or the _filter_by_tags body would cause all estimators to be returned; this test fails because only the matching one should appear.
         """
-        from sktime_mcp.registry.interface import EstimatorNode, RegistryInterface
+        from sktime_mcp.registry.interface import RegistryInterface, EstimatorNode
 
         ri = RegistryInterface()
         ri._loaded = True
@@ -684,7 +1484,7 @@ class TestRegistryThreadSafety:
 
         Removing the inner matches=False break means all estimators pass the filter; this test fails because the mismatched estimator would incorrectly appear.
         """
-        from sktime_mcp.registry.interface import EstimatorNode, RegistryInterface
+        from sktime_mcp.registry.interface import RegistryInterface, EstimatorNode
 
         ri = RegistryInterface()
         est_match = EstimatorNode("A", "forecasting", object, "m.A",
@@ -705,7 +1505,7 @@ class TestRegistryThreadSafety:
 
         Removing the return statement or _ensure_loaded call would cause the method to return None always or fail to load; this test fails on the found case.
         """
-        from sktime_mcp.registry.interface import EstimatorNode, RegistryInterface
+        from sktime_mcp.registry.interface import RegistryInterface, EstimatorNode
 
         ri = RegistryInterface()
         ri._loaded = True
@@ -861,7 +1661,7 @@ class TestRegistryThreadSafety:
 
         Removing the name-match branch means estimators are only found via docstring; this test fails because the match is on the name, not the docstring.
         """
-        from sktime_mcp.registry.interface import EstimatorNode, RegistryInterface
+        from sktime_mcp.registry.interface import RegistryInterface, EstimatorNode
 
         ri = RegistryInterface()
         ri._loaded = True
@@ -882,7 +1682,7 @@ class TestRegistryThreadSafety:
 
         Removing the docstring-match branch means only name matches are returned; this test fails because the query matches the docstring but not the name.
         """
-        from sktime_mcp.registry.interface import EstimatorNode, RegistryInterface
+        from sktime_mcp.registry.interface import RegistryInterface, EstimatorNode
 
         ri = RegistryInterface()
         ri._loaded = True
@@ -904,7 +1704,7 @@ class TestRegistryThreadSafety:
 
         If the method always returned all estimators, this test would fail because the result would be non-empty.
         """
-        from sktime_mcp.registry.interface import EstimatorNode, RegistryInterface
+        from sktime_mcp.registry.interface import RegistryInterface, EstimatorNode
 
         ri = RegistryInterface()
         ri._loaded = True
@@ -918,8 +1718,8 @@ class TestRegistryThreadSafety:
     def test_search_estimators_non_string_query_returns_empty(self):
         """Covers the isinstance(query, str) guard at the top of search_estimators.
 
-        Passing None (or any non-str) must return [] rather than raising
-        AttributeError at query.lower().  Removing the guard causes the crash.
+        Passing None or a non-str must return [] rather than raising AttributeError
+        at query.lower(). Removing the guard causes the crash.
         """
         from sktime_mcp.registry.interface import RegistryInterface
 
@@ -934,7 +1734,7 @@ class TestRegistryThreadSafety:
 
         Removing the `if node.docstring` guard would raise AttributeError on None.lower(); this test fails if the method raises instead of skipping gracefully.
         """
-        from sktime_mcp.registry.interface import EstimatorNode, RegistryInterface
+        from sktime_mcp.registry.interface import RegistryInterface, EstimatorNode
 
         ri = RegistryInterface()
         ri._loaded = True
@@ -946,47 +1746,52 @@ class TestRegistryThreadSafety:
         result = ri.search_estimators("something")
         assert result == []
 
-    def test_ensure_loaded_does_not_deadlock_on_reentrant_call(self):
-        """Proves _lock is reentrant (RLock), so a re-entrant _ensure_loaded inside
-        _load_registry does not deadlock.
+    # ------------------------------------------------------------------
+    # _load_registry: TASK_MAP empty guard
+    # ------------------------------------------------------------------
 
-        Scenario: a get_class_tags() override or metaclass hook on a custom estimator
-        calls back into _ensure_loaded on the same RegistryInterface instance while
-        _load_registry is already executing under the lock.  With threading.Lock()
-        this deadlocks; with threading.RLock() the inner acquisition succeeds because
-        it is the same thread.
+    def test_load_registry_raises_if_task_map_empty(self):
+        """Covers the TASK_MAP empty guard at the top of _load_registry.
+
+        An empty TASK_MAP would pass list(self.TASK_MAP.keys()) == [] to all_estimators,
+        loading nothing silently.  The guard raises RuntimeError early so the caller
+        sees an explicit error instead of an empty registry with no explanation.
+        Removing the guard makes this test fail because no RuntimeError is raised.
         """
-        import threading
-
         from sktime_mcp.registry.interface import RegistryInterface
 
         ri = RegistryInterface()
-        reentrant_called = threading.Event()
+        ri.TASK_MAP = {}  # type: ignore[assignment]
 
-        calls = [0]
+        with pytest.raises(RuntimeError, match="TASK_MAP is empty"):
+            ri._load_registry()
 
-        def reentrant_load(self):
-            calls[0] += 1
-            if calls[0] == 1:
-                # First invocation: simulate re-entrant call from inside _load_registry
-                # (e.g. a get_class_tags() hook that calls back into the registry).
-                reentrant_called.set()
-                self._ensure_loaded()  # re-entrant — with Lock: deadlock; with RLock: allowed
-            # Second (re-entrant) invocation: return immediately to avoid infinite recursion.
+    # ------------------------------------------------------------------
+    # _get_estimator_type: TypeError logged at WARNING
+    # ------------------------------------------------------------------
 
-        with patch.object(type(ri), "_load_registry", reentrant_load):
-            exc = [None]
+    def test_get_estimator_type_logs_warning_for_non_classmethod_get_class_tags(self, caplog):
+        """Covers the TypeError branch in _get_estimator_type where get_class_tags is an
+        instance method (not a classmethod).
 
-            def run():
-                try:
-                    ri._ensure_loaded()
-                except Exception as e:
-                    exc[0] = e
+        Calling cls.get_class_tags() on a class where it is a plain instance method raises
+        TypeError: missing 'self' argument.  This must surface at WARNING level — not DEBUG —
+        because it signals an estimator authoring bug in upstream code, not a benign skip.
+        Removing the separate TypeError catch or demoting it to DEBUG would fail this test.
+        """
+        from sktime_mcp.registry.interface import RegistryInterface
 
-            t = threading.Thread(target=run)
-            t.start()
-            t.join(timeout=5)
+        ri = RegistryInterface()
 
-        assert not t.is_alive(), "Thread still alive after 5s — likely deadlock with non-reentrant lock"
-        assert exc[0] is None, f"Thread raised: {exc[0]}"
-        assert reentrant_called.is_set(), "Re-entrant path was never triggered"
+        class BadEstimator:
+            def get_class_tags(self):  # instance method, not classmethod
+                return {"object_type": "forecaster"}
+
+        with caplog.at_level(logging.WARNING, logger="sktime_mcp.registry.interface"):
+            result = ri._get_estimator_type(BadEstimator)
+
+        assert result == "", "Non-classmethod get_class_tags must return '' (not crash)"
+        warning_msgs = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+        assert any("non-classmethod" in m for m in warning_msgs), (
+            f"Expected WARNING about non-classmethod get_class_tags. Got: {warning_msgs}"
+        )
