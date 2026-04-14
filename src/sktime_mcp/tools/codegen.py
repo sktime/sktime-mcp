@@ -7,6 +7,7 @@ Generates Python code to recreate estimators and pipelines.
 from typing import Any, Optional
 
 from sktime_mcp.registry.interface import get_registry
+from sktime_mcp.runtime.executor import DEMO_DATASETS
 from sktime_mcp.runtime.handles import get_handle_manager
 
 
@@ -180,6 +181,7 @@ def export_code_tool(
     handle: str,
     var_name: str = "model",
     include_fit_example: bool = False,
+    dataset: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Export an estimator or pipeline as executable Python code.
@@ -188,6 +190,7 @@ def export_code_tool(
         handle: The handle ID of the estimator/pipeline to export
         var_name: Variable name to use in generated code (default: "model")
         include_fit_example: Whether to include a fit/predict example (default: False)
+        dataset: Optional dataset name for the fit example (default: None, falls back to airline)
 
     Returns:
         Dictionary with:
@@ -238,12 +241,23 @@ def export_code_tool(
 
     # Optionally add fit/predict example
     if include_fit_example:
+        # Resolve the dataset loader from DEMO_DATASETS
+        if dataset and dataset in DEMO_DATASETS:
+            module_path = DEMO_DATASETS[dataset]
+            module_parts = module_path.rsplit(".", 1)
+            loader_module = module_parts[0]
+            loader_func = module_parts[1]
+        else:
+            # Default to airline for backward compatibility
+            loader_module = "sktime.datasets"
+            loader_func = "load_airline"
+
         example_code = f"""
 
 # Example usage:
 # Load data
-from sktime.datasets import load_airline
-y = load_airline()
+from {loader_module} import {loader_func}
+y = {loader_func}()
 
 # Fit the model
 {var_name}.fit(y)
