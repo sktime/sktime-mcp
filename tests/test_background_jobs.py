@@ -193,6 +193,7 @@ def test_cleanup_old_jobs():
 
     # Create a job
     job_id = job_manager.create_job("fit_predict", "handle", "ARIMA")
+    time.sleep(0.02)  # Ensure clock ticks forward for created_at < cutoff
 
     # Cleanup jobs older than 0 hours (should remove all)
     count = job_manager.cleanup_old_jobs(max_age_hours=0)
