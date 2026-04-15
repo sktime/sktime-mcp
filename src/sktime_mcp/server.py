@@ -618,11 +618,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         elif name == "release_handle":
             result = release_handle_tool(arguments["handle"])
 
-        elif name == "validate_pipeline":
-            validator = get_composition_validator()
-            validation = validator.validate_pipeline(arguments["components"])
-            result = validation.to_dict()
-
         # -- Execution -------------------------------------------------------
         elif name == "fit_predict":
             result = fit_predict_tool(
