@@ -1,0 +1,925 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>sktime_mcp.server &mdash; sktime-mcp 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../_static/extra.css?v=e8756899" />
+
+  
+    <link rel="shortcut icon" href="../../_static/favicon.png"/>
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            sktime-mcp
+              <img src="../../_static/favicon.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../intro.html">sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../use-cases.html">🎯 Use Cases &amp; Personas</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../user-guide.html">📘 User Guide</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../usage-examples.html">Usage Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../data-sources.html">Data Source Support</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../background-jobs.html">Background Job Management</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Development</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../architecture.html">Architecture Diagram</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../implementation.html">Complete Code Explanation: sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../dev-guide.html">Developer Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">sktime-mcp</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">sktime_mcp.server</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for sktime_mcp.server</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">MCP Server for sktime.</span>
+
+<span class="sd">Main entry point for the Model Context Protocol server</span>
+<span class="sd">that exposes sktime&#39;s registry and execution capabilities to LLMs.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">mcp.server</span><span class="w"> </span><span class="kn">import</span> <span class="n">Server</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mcp.server.stdio</span><span class="w"> </span><span class="kn">import</span> <span class="n">stdio_server</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mcp.types</span><span class="w"> </span><span class="kn">import</span> <span class="n">TextContent</span><span class="p">,</span> <span class="n">Tool</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.composition.validator</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_composition_validator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.tools.codegen</span><span class="w"> </span><span class="kn">import</span> <span class="n">export_code_tool</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.tools.data_tools</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">fit_predict_with_data_tool</span><span class="p">,</span>
+    <span class="n">load_data_source_async_tool</span><span class="p">,</span>
+    <span class="n">load_data_source_tool</span><span class="p">,</span>
+    <span class="n">release_data_handle_tool</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.tools.describe_estimator</span><span class="w"> </span><span class="kn">import</span> <span class="n">describe_estimator_tool</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.tools.evaluate</span><span class="w"> </span><span class="kn">import</span> <span class="n">evaluate_estimator_tool</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.tools.fit_predict</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">fit_predict_async_tool</span><span class="p">,</span>
+    <span class="n">fit_predict_tool</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.tools.format_tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">format_time_series_tool</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.tools.instantiate</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">instantiate_estimator_tool</span><span class="p">,</span>
+    <span class="n">instantiate_pipeline_tool</span><span class="p">,</span>
+    <span class="n">list_handles_tool</span><span class="p">,</span>
+    <span class="n">load_model_tool</span><span class="p">,</span>
+    <span class="n">release_handle_tool</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.tools.job_tools</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">cancel_job_tool</span><span class="p">,</span>
+    <span class="n">check_job_status_tool</span><span class="p">,</span>
+    <span class="n">list_jobs_tool</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.tools.list_available_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">list_available_data_tool</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.tools.list_estimators</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">get_available_tags</span><span class="p">,</span>
+    <span class="n">list_estimators_tool</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.tools.save_model</span><span class="w"> </span><span class="kn">import</span> <span class="n">save_model_tool</span>
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Server configuration via environment variables</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="n">JOB_MAX_AGE_HOURS</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;SKTIME_MCP_JOB_MAX_AGE_HOURS&quot;</span><span class="p">,</span> <span class="s2">&quot;24&quot;</span><span class="p">))</span>
+<span class="n">JOB_CLEANUP_INTERVAL_SECS</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;SKTIME_MCP_JOB_CLEANUP_INTERVAL&quot;</span><span class="p">,</span> <span class="s2">&quot;3600&quot;</span><span class="p">))</span>
+
+<span class="c1"># Configure logging to stderr with detailed format</span>
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span>
+    <span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span>
+    <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%(asctime)s</span><span class="s2"> - </span><span class="si">%(name)s</span><span class="s2"> - </span><span class="si">%(levelname)s</span><span class="s2"> - </span><span class="si">%(message)s</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="n">handlers</span><span class="o">=</span><span class="p">[</span><span class="n">logging</span><span class="o">.</span><span class="n">StreamHandler</span><span class="p">()],</span>
+<span class="p">)</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="c1"># Create MCP server instance</span>
+<span class="n">server</span> <span class="o">=</span> <span class="n">Server</span><span class="p">(</span><span class="s2">&quot;sktime-mcp&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="sanitize_for_json">
+<a class="viewcode-back" href="../../api.html#sktime_mcp.server.sanitize_for_json">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">sanitize_for_json</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Recursively convert objects to JSON-serializable format.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="nb">str</span><span class="p">(</span><span class="n">k</span><span class="p">):</span> <span class="n">sanitize_for_json</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">obj</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">sanitize_for_json</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">obj</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">&quot;__dict__&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="kc">None</span><span class="p">))):</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">obj</span></div>
+
+
+
+<span class="c1"># ===================================================================</span>
+<span class="c1"># Tool definitions</span>
+<span class="c1"># ===================================================================</span>
+<span class="c1"># Consolidation changes applied (see docs/TOOL_CONSOLIDATION_PLAN.md):</span>
+<span class="c1">#   1. list_data_sources   -&gt; baked into load_data_source description</span>
+<span class="c1">#   2. auto_format_on_load -&gt; env var SKTIME_MCP_AUTO_FORMAT (default true)</span>
+<span class="c1">#   3. cleanup_old_jobs    -&gt; automatic periodic timer</span>
+<span class="c1">#   4. delete_job          -&gt; merged into cancel_job(delete=True)</span>
+<span class="c1">#   5. search_estimators   -&gt; merged into list_estimators(query=...)</span>
+<span class="c1"># ===================================================================</span>
+
+
+<div class="viewcode-block" id="list_tools">
+<a class="viewcode-back" href="../../api.html#sktime_mcp.server.list_tools">[docs]</a>
+<span class="nd">@server</span><span class="o">.</span><span class="n">list_tools</span><span class="p">()</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">list_tools</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Tool</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;List all available MCP tools.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="c1"># -- Discovery -------------------------------------------------------</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;list_estimators&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Discover sktime estimators by task, capability tags, or name search. &quot;</span>
+                <span class="s2">&quot;Common tags you can filter by: &quot;</span>
+                <span class="s2">&quot;&#39;capability:pred_int&#39; (bool) - prediction intervals, &quot;</span>
+                <span class="s2">&quot;&#39;capability:multivariate&#39; (bool) - multivariate support, &quot;</span>
+                <span class="s2">&quot;&#39;handles-missing-data&#39; (bool) - NaN handling, &quot;</span>
+                <span class="s2">&quot;&#39;scitype:y&#39; (str) - target type (&#39;univariate&#39;/&#39;multivariate&#39;/&#39;both&#39;), &quot;</span>
+                <span class="s2">&quot;&#39;requires-fh-in-fit&#39; (bool) - needs forecast horizon at fit time. &quot;</span>
+                <span class="s2">&quot;Use get_available_tags for the full catalog.&quot;</span>
+            <span class="p">),</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;task&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="p">(</span>
+                            <span class="s2">&quot;Task type filter: forecasting, classification, &quot;</span>
+                            <span class="s2">&quot;regression, transformation, clustering&quot;</span>
+                        <span class="p">),</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;tags&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Filter by capability tags, e.g. {&#39;capability:pred_int&#39;: true}&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;query&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="p">(</span>
+                            <span class="s2">&quot;Search by name or description (substring, case-insensitive). &quot;</span>
+                            <span class="s2">&quot;Can be combined with task and tags filters.&quot;</span>
+                        <span class="p">),</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;integer&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Maximum results (default: 50)&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;offset&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;integer&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Skip this many results for pagination (default: 0)&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;describe_estimator&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Get detailed information about a specific sktime estimator&quot;</span><span class="p">,</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;estimator&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Name of the estimator (e.g., &#39;ARIMA&#39;, &#39;RandomForest&#39;)&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;estimator&quot;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;get_available_tags&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;List all queryable capability tags with rich metadata. &quot;</span>
+                <span class="s2">&quot;Returns tag name, description, expected value type, and which &quot;</span>
+                <span class="s2">&quot;estimator types the tag applies to. Call this before &quot;</span>
+                <span class="s2">&quot;using tags in list_estimators to ensure correct tag names and values.&quot;</span>
+            <span class="p">),</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span> <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{}},</span>
+        <span class="p">),</span>
+        <span class="c1"># -- Instantiation ---------------------------------------------------</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;instantiate_estimator&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Create an estimator instance with given parameters&quot;</span><span class="p">,</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;estimator&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Name of the estimator to instantiate&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Hyperparameters for the estimator&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;estimator&quot;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;instantiate_pipeline&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Create a pipeline instance from a list of components&quot;</span><span class="p">,</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;components&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;array&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;items&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">},</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;List of estimator names in pipeline order (e.g., [&#39;Detrender&#39;, &#39;ARIMA&#39;])&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;params_list&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;array&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;items&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">},</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Optional list of hyperparameter dicts for each component&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;components&quot;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;list_handles&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;List all active estimator handles in memory&quot;</span><span class="p">,</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span> <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{}},</span>
+        <span class="p">),</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;release_handle&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Release an estimator handle and free it from memory&quot;</span><span class="p">,</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;handle&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Handle ID to release&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;handle&quot;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;validate_pipeline&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Check if a pipeline composition is valid&quot;</span><span class="p">,</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;components&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;array&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;items&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">},</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;List of estimator names in pipeline order&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;components&quot;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="c1"># -- Execution -------------------------------------------------------</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;fit_predict&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Fit an estimator on a dataset and generate predictions. &quot;</span>
+                <span class="s2">&quot;Accepts either a demo dataset name or a data_handle from load_data_source.&quot;</span>
+            <span class="p">),</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;estimator_handle&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Handle from instantiate_estimator&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;dataset&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Dataset name: airline, sunspots, lynx, etc.&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;data_handle&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="p">(</span>
+                            <span class="s2">&quot;Handle from load_data_source (use this instead &quot;</span>
+                            <span class="s2">&quot;of dataset for custom data)&quot;</span>
+                        <span class="p">),</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;horizon&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;integer&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Forecast horizon (default: 12)&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="mi">12</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;estimator_handle&quot;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;fit_predict_async&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Fit an estimator on a dataset and generate predictions &quot;</span>
+                <span class="s2">&quot;(non-blocking background job). Returns a job_id.&quot;</span>
+            <span class="p">),</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;estimator_handle&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Handle from instantiate_estimator&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;dataset&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Dataset name: airline, sunspots, lynx, etc.&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;horizon&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;integer&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Forecast horizon (default: 12)&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="mi">12</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;estimator_handle&quot;</span><span class="p">,</span> <span class="s2">&quot;dataset&quot;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;evaluate_estimator&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Evaluate an estimator using cross-validation on a dataset&quot;</span><span class="p">,</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;estimator_handle&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Handle from instantiate_estimator&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;dataset&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Dataset name: airline, sunspots, lynx, etc.&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;cv_folds&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;integer&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Number of cross-validation folds (default: 3)&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;estimator_handle&quot;</span><span class="p">,</span> <span class="s2">&quot;dataset&quot;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="c1"># -- Data ------------------------------------------------------------</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;list_available_data&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;List all data available for use — system demo datasets and active &quot;</span>
+                <span class="s2">&quot;user-loaded data handles — in a single unified response. &quot;</span>
+                <span class="s2">&quot;Use is_demo=true for demos only, is_demo=false for handles only, &quot;</span>
+                <span class="s2">&quot;or omit is_demo to get both.&quot;</span>
+            <span class="p">),</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;is_demo&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;boolean&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="p">(</span>
+                            <span class="s2">&quot;Optional filter: true = only system demos, &quot;</span>
+                            <span class="s2">&quot;false = only active data handles, omit = both.&quot;</span>
+                        <span class="p">),</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;load_data_source&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Load data from various sources into a data handle for forecasting. &quot;</span>
+                <span class="s2">&quot;Supported source types: &quot;</span>
+                <span class="s2">&quot;&#39;pandas&#39; - from a dict or inline data (keys: data, time_column, target_column). &quot;</span>
+                <span class="s2">&quot;&#39;file&#39; - from CSV, Excel (.xlsx), or Parquet (keys: path, time_column, target_column). &quot;</span>
+                <span class="s2">&quot;&#39;sql&#39; - from a SQL database (keys: connection_string, query, time_column, target_column). &quot;</span>
+                <span class="s2">&quot;&#39;url&#39; - from a web URL pointing to CSV/Excel/Parquet (keys: url, time_column, target_column). &quot;</span>
+                <span class="s2">&quot;GUIDELINES: &quot;</span>
+                <span class="s2">&quot;1. NEVER assume a column is a time index unless the user says so. &quot;</span>
+                <span class="s2">&quot;2. ALWAYS specify &#39;target_column&#39; if the user mentions a specific variable. &quot;</span>
+                <span class="s2">&quot;3. The first column is used as target by default — if that&#39;s a date column, &quot;</span>
+                <span class="s2">&quot;specify target_column explicitly. &quot;</span>
+                <span class="s2">&quot;4. For non-standard date formats, omit &#39;time_column&#39; to use an integer index.&quot;</span>
+            <span class="p">),</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;config&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="p">(</span>
+                            <span class="s2">&quot;Data source configuration. Must include &#39;type&#39; &quot;</span>
+                            <span class="s2">&quot;(pandas, sql, file, url).&quot;</span>
+                        <span class="p">),</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;config&quot;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;load_data_source_async&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Load data from any source in the background &quot;</span>
+                <span class="s2">&quot;(non-blocking). Returns a job_id to track &quot;</span>
+                <span class="s2">&quot;progress. The data_handle is available in &quot;</span>
+                <span class="s2">&quot;the job result when completed.&quot;</span>
+            <span class="p">),</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;config&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Data source configuration. Same format as load_data_source.&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;config&quot;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;release_data_handle&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Release a data handle and free memory&quot;</span><span class="p">,</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;data_handle&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Data handle to release&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;data_handle&quot;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;format_time_series&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Automatically format time series data (frequency, duplicates, missing values)&quot;</span><span class="p">,</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;data_handle&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Handle from load_data_source&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;auto_infer_freq&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;boolean&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Automatically infer and set frequency (default: True)&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;fill_missing&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;boolean&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Fill missing values with forward/backward fill (default: True)&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;remove_duplicates&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;boolean&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Remove duplicate timestamps (default: True)&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;data_handle&quot;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="c1"># -- Export / Persistence --------------------------------------------</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;export_code&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Export an estimator or pipeline as executable Python code&quot;</span><span class="p">,</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;handle&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Handle ID of the estimator/pipeline to export&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;var_name&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Variable name to use in generated code (default: &#39;model&#39;)&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="s2">&quot;model&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;include_fit_example&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;boolean&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Whether to include a fit/predict example (default: false)&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;dataset&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="p">(</span>
+                            <span class="s2">&quot;Optional dataset name for the fit example &quot;</span>
+                            <span class="s2">&quot;(e.g. &#39;airline&#39;, &#39;sunspots&#39;). Defaults to &#39;airline&#39; if omitted.&quot;</span>
+                        <span class="p">),</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;handle&quot;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;save_model&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Save an estimator/pipeline handle using sktime MLflow integration&quot;</span><span class="p">,</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;estimator_handle&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Handle ID of the estimator to save&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;path&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Local directory or URI where the model will be saved&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;mlflow_params&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Optional extra parameters for sktime.utils.mlflow_sktime.save_model&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;estimator_handle&quot;</span><span class="p">,</span> <span class="s2">&quot;path&quot;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;load_model&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Load a saved sktime model from a local path and register it for use&quot;</span><span class="p">,</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;path&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Path to the saved model directory&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;path&quot;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="c1"># -- Jobs ------------------------------------------------------------</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;check_job_status&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Check the status and progress of a background job&quot;</span><span class="p">,</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;job_id&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Job ID to check&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;job_id&quot;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;list_jobs&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;List all background jobs with optional status filter&quot;</span><span class="p">,</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Filter by status: pending, running, completed, failed, cancelled&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;integer&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Maximum number of jobs to return (default: 20)&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="mi">20</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+        <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;cancel_job&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Cancel a running or pending background job. &quot;</span>
+                <span class="s2">&quot;Set delete=true to also remove the job record entirely &quot;</span>
+                <span class="s2">&quot;(useful for cleaning up completed/failed jobs).&quot;</span>
+            <span class="p">),</span>
+            <span class="n">inputSchema</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;job_id&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Job ID to cancel&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;delete&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;boolean&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Also remove the job record after cancelling (default: false)&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;job_id&quot;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">),</span>
+    <span class="p">]</span></div>
+
+
+
+<span class="c1"># ===================================================================</span>
+<span class="c1"># Tool dispatcher</span>
+<span class="c1"># ===================================================================</span>
+
+
+<div class="viewcode-block" id="call_tool">
+<a class="viewcode-back" href="../../api.html#sktime_mcp.server.call_tool">[docs]</a>
+<span class="nd">@server</span><span class="o">.</span><span class="n">call_tool</span><span class="p">()</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">call_tool</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">arguments</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">TextContent</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Handle tool calls.&quot;&quot;&quot;</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;=== Tool Call: </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> ===&quot;</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Arguments: </span><span class="si">{</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">arguments</span><span class="p">,</span><span class="w"> </span><span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># -- Discovery -------------------------------------------------------</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;list_estimators&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">list_estimators_tool</span><span class="p">(</span>
+                <span class="n">task</span><span class="o">=</span><span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;task&quot;</span><span class="p">),</span>
+                <span class="n">tags</span><span class="o">=</span><span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tags&quot;</span><span class="p">),</span>
+                <span class="n">query</span><span class="o">=</span><span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;query&quot;</span><span class="p">),</span>
+                <span class="n">limit</span><span class="o">=</span><span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;limit&quot;</span><span class="p">,</span> <span class="mi">50</span><span class="p">),</span>
+                <span class="n">offset</span><span class="o">=</span><span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;offset&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;search_estimators&quot;</span><span class="p">:</span>
+            <span class="c1"># Deprecated — kept for backward compatibility, routes to unified list_estimators</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;search_estimators is deprecated; use list_estimators(query=...)&quot;</span><span class="p">)</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">list_estimators_tool</span><span class="p">(</span>
+                <span class="n">query</span><span class="o">=</span><span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;query&quot;</span><span class="p">],</span>
+                <span class="n">limit</span><span class="o">=</span><span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;limit&quot;</span><span class="p">,</span> <span class="mi">20</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;describe_estimator&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">describe_estimator_tool</span><span class="p">(</span><span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;estimator&quot;</span><span class="p">])</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;get_available_tags&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">get_available_tags</span><span class="p">()</span>
+
+        <span class="c1"># -- Instantiation ---------------------------------------------------</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;instantiate_estimator&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">instantiate_estimator_tool</span><span class="p">(</span>
+                <span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;estimator&quot;</span><span class="p">],</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;params&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;instantiate_pipeline&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">instantiate_pipeline_tool</span><span class="p">(</span>
+                <span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;components&quot;</span><span class="p">],</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;params_list&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;list_handles&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">list_handles_tool</span><span class="p">()</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;release_handle&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">release_handle_tool</span><span class="p">(</span><span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;handle&quot;</span><span class="p">])</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;validate_pipeline&quot;</span><span class="p">:</span>
+            <span class="n">validator</span> <span class="o">=</span> <span class="n">get_composition_validator</span><span class="p">()</span>
+            <span class="n">validation</span> <span class="o">=</span> <span class="n">validator</span><span class="o">.</span><span class="n">validate_pipeline</span><span class="p">(</span><span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;components&quot;</span><span class="p">])</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">validation</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
+
+        <span class="c1"># -- Execution -------------------------------------------------------</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;fit_predict&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">fit_predict_tool</span><span class="p">(</span>
+                <span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;estimator_handle&quot;</span><span class="p">],</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;dataset&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;horizon&quot;</span><span class="p">,</span> <span class="mi">12</span><span class="p">),</span>
+                <span class="n">data_handle</span><span class="o">=</span><span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;data_handle&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">sanitize_for_json</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;fit_predict_async&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">fit_predict_async_tool</span><span class="p">(</span>
+                <span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;estimator_handle&quot;</span><span class="p">],</span>
+                <span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;dataset&quot;</span><span class="p">],</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;horizon&quot;</span><span class="p">,</span> <span class="mi">12</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;fit_predict_with_data&quot;</span><span class="p">:</span>
+            <span class="c1"># Deprecated — kept for backward compatibility</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;fit_predict_with_data is deprecated; use fit_predict(data_handle=...)&quot;</span><span class="p">)</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">fit_predict_with_data_tool</span><span class="p">(</span>
+                <span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;estimator_handle&quot;</span><span class="p">],</span>
+                <span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;data_handle&quot;</span><span class="p">],</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;horizon&quot;</span><span class="p">,</span> <span class="mi">12</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">sanitize_for_json</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;evaluate_estimator&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">evaluate_estimator_tool</span><span class="p">(</span>
+                <span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;estimator_handle&quot;</span><span class="p">],</span>
+                <span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;dataset&quot;</span><span class="p">],</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;cv_folds&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">sanitize_for_json</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+
+        <span class="c1"># -- Data ------------------------------------------------------------</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;list_available_data&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">list_available_data_tool</span><span class="p">(</span><span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;is_demo&quot;</span><span class="p">))</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;load_data_source&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">load_data_source_tool</span><span class="p">(</span><span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;config&quot;</span><span class="p">])</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;load_data_source_async&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">load_data_source_async_tool</span><span class="p">(</span><span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;config&quot;</span><span class="p">])</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;list_data_sources&quot;</span><span class="p">:</span>
+            <span class="c1"># Deprecated — info is now in load_data_source description</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;list_data_sources is deprecated; info is in load_data_source description&quot;</span><span class="p">)</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.tools.data_tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">list_data_sources_tool</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">list_data_sources_tool</span><span class="p">()</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;release_data_handle&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">release_data_handle_tool</span><span class="p">(</span><span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;data_handle&quot;</span><span class="p">])</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;format_time_series&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">format_time_series_tool</span><span class="p">(</span>
+                <span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;data_handle&quot;</span><span class="p">],</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;auto_infer_freq&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fill_missing&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;remove_duplicates&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;auto_format_on_load&quot;</span><span class="p">:</span>
+            <span class="c1"># Deprecated — now controlled via SKTIME_MCP_AUTO_FORMAT env var</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;auto_format_on_load is deprecated; use env var SKTIME_MCP_AUTO_FORMAT=true/false&quot;</span>
+            <span class="p">)</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.tools.format_tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">auto_format_on_load_tool</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">auto_format_on_load_tool</span><span class="p">(</span><span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;enabled&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+
+        <span class="c1"># -- Export / Persistence --------------------------------------------</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;export_code&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">export_code_tool</span><span class="p">(</span>
+                <span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;handle&quot;</span><span class="p">],</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;var_name&quot;</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">),</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;include_fit_example&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;dataset&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;save_model&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">save_model_tool</span><span class="p">(</span>
+                <span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;estimator_handle&quot;</span><span class="p">],</span>
+                <span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;path&quot;</span><span class="p">],</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mlflow_params&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;load_model&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">load_model_tool</span><span class="p">(</span><span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;path&quot;</span><span class="p">])</span>
+
+        <span class="c1"># -- Jobs ------------------------------------------------------------</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;check_job_status&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">check_job_status_tool</span><span class="p">(</span><span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;job_id&quot;</span><span class="p">])</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;list_jobs&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">list_jobs_tool</span><span class="p">(</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;status&quot;</span><span class="p">),</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;limit&quot;</span><span class="p">,</span> <span class="mi">20</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;cancel_job&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">cancel_job_tool</span><span class="p">(</span>
+                <span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;job_id&quot;</span><span class="p">],</span>
+                <span class="n">delete</span><span class="o">=</span><span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;delete&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;delete_job&quot;</span><span class="p">:</span>
+            <span class="c1"># Deprecated — kept for backward compatibility</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;delete_job is deprecated; use cancel_job(delete=true)&quot;</span><span class="p">)</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">cancel_job_tool</span><span class="p">(</span><span class="n">arguments</span><span class="p">[</span><span class="s2">&quot;job_id&quot;</span><span class="p">],</span> <span class="n">delete</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;cleanup_old_jobs&quot;</span><span class="p">:</span>
+            <span class="c1"># Deprecated — now runs automatically on a periodic timer</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;cleanup_old_jobs is deprecated; jobs are cleaned up automatically&quot;</span><span class="p">)</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.tools.job_tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">cleanup_old_jobs_tool</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">cleanup_old_jobs_tool</span><span class="p">(</span><span class="n">arguments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;max_age_hours&quot;</span><span class="p">,</span> <span class="mi">24</span><span class="p">))</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Unknown tool: </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;=== Result for </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> ===&quot;</span><span class="p">)</span>
+
+        <span class="n">sanitized_result</span> <span class="o">=</span> <span class="n">sanitize_for_json</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">sanitized_result</span><span class="p">,</span><span class="w"> </span><span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="n">default</span><span class="o">=</span><span class="nb">str</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">[</span><span class="n">TextContent</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">sanitized_result</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="nb">str</span><span class="p">))]</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error in tool </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">TextContent</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)}))]</span></div>
+
+
+
+<span class="c1"># ===================================================================</span>
+<span class="c1"># Server lifecycle</span>
+<span class="c1"># ===================================================================</span>
+
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_periodic_job_cleanup</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Automatically clean up old jobs on a timer.&quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.runtime.jobs</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_job_manager</span>
+
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">JOB_CLEANUP_INTERVAL_SECS</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">job_manager</span> <span class="o">=</span> <span class="n">get_job_manager</span><span class="p">()</span>
+            <span class="n">removed</span> <span class="o">=</span> <span class="n">job_manager</span><span class="o">.</span><span class="n">cleanup_old_jobs</span><span class="p">(</span><span class="n">JOB_MAX_AGE_HOURS</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">removed</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Periodic cleanup: removed </span><span class="si">{</span><span class="n">removed</span><span class="si">}</span><span class="s2"> old job(s)&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Error during periodic job cleanup&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="run_server">
+<a class="viewcode-back" href="../../api.html#sktime_mcp.server.run_server">[docs]</a>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">run_server</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Run the MCP server.&quot;&quot;&quot;</span>
+    <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">_periodic_job_cleanup</span><span class="p">())</span>
+
+    <span class="k">async</span> <span class="k">with</span> <span class="n">stdio_server</span><span class="p">()</span> <span class="k">as</span> <span class="p">(</span><span class="n">read_stream</span><span class="p">,</span> <span class="n">write_stream</span><span class="p">):</span>
+        <span class="k">await</span> <span class="n">server</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">read_stream</span><span class="p">,</span> <span class="n">write_stream</span><span class="p">,</span> <span class="n">server</span><span class="o">.</span><span class="n">create_initialization_options</span><span class="p">())</span></div>
+
+
+
+<div class="viewcode-block" id="main">
+<a class="viewcode-back" href="../../api.html#sktime_mcp.server.main">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Main entry point.&quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Starting sktime-mcp server...&quot;</span><span class="p">)</span>
+    <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">run_server</span><span class="p">())</span></div>
+
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, sktime-mcp contributors.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
