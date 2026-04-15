@@ -4,7 +4,6 @@ fit_predict tool for sktime MCP.
 Executes complete forecasting workflows.
 """
 
-import asyncio
 import logging
 from typing import Any, Optional
 
@@ -136,6 +135,7 @@ def fit_predict_async_tool(
         }
     """
 
+    from sktime_mcp.runtime.async_scheduler import get_async_scheduler
     from sktime_mcp.runtime.jobs import get_job_manager
 
     executor = get_executor()
@@ -159,17 +159,10 @@ def fit_predict_async_tool(
         total_steps=3,
     )
 
-    # Schedule the async coroutine on the event loop
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        # No event loop in current thread, create one
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    # Schedule the coroutine (non-blocking!)
+    # Schedule via the managed async scheduler (non-blocking)
+    scheduler = get_async_scheduler()
     coro = executor.fit_predict_async(estimator_handle, dataset, horizon, job_id)
-    asyncio.run_coroutine_threadsafe(coro, loop)
+    scheduler.schedule(coro)
 
     return {
         "success": True,
