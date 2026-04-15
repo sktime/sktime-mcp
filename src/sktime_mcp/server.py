@@ -643,6 +643,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             validator = get_composition_validator()
             validation = validator.validate_pipeline(arguments["components"])
             result = validation.to_dict()
+            result["success"] = result["valid"]
         elif name == "list_available_data":
             result = list_available_data_tool(arguments.get("is_demo"))
         elif name == "get_available_tags":
@@ -723,7 +724,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         return [TextContent(type="text", text=json.dumps(sanitized_result, indent=2, default=str))]
     except Exception as e:
         logger.exception(f"Error in tool {name}")
-        return [TextContent(type="text", text=json.dumps({"error": str(e)}))]
+        return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
 
 
 async def run_server():
