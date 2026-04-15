@@ -644,6 +644,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             validation = validator.validate_pipeline(arguments["components"])
             result = validation.to_dict()
             result["success"] = result["valid"]
+
+        # -- Data ------------------------------------------------------------
         elif name == "list_available_data":
             result = list_available_data_tool(arguments.get("is_demo"))
         elif name == "get_available_tags":
