@@ -60,34 +60,6 @@ def load_data_source_tool(config: dict[str, Any]) -> dict[str, Any]:
     return executor.load_data_source(config)
 
 
-async def load_data_source_async_tool(config: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Load data asynchronously from any source.
-    
-    Returns a job_id immediately.
-    """
-    executor = get_executor()
-    
-    # Create the job first so we can return the ID immediately
-    from sktime_mcp.runtime.jobs import get_job_manager
-    job_manager = get_job_manager()
-    job_id = job_manager.create_job(
-        job_type="load_data",
-        estimator_handle="N/A",
-        dataset_name=config.get("type", "unknown"),
-        total_steps=4,
-    )
-    
-    # Run the loading in the background
-    import asyncio
-    asyncio.create_task(executor.load_data_source_async(config, job_id=job_id))
-    
-    return {
-        "success": True,
-        "job_id": job_id,
-        "status": "pending",
-        "message": "Data loading started in background"
-    }
 
 def list_data_sources_tool() -> dict[str, Any]:
     """
@@ -117,6 +89,9 @@ def list_data_sources_tool() -> dict[str, Any]:
         "sources": sources,
         "descriptions": descriptions,
     }
+
+
+
 
 
 def release_data_handle_tool(data_handle: str) -> dict[str, Any]:

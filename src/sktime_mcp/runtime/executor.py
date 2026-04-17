@@ -227,10 +227,10 @@ class Executor:
     async def fit_predict_async(
         self,
         handle_id: str,
-        dataset: Optional[str] = None,
-        data_handle: Optional[str] = None,
+        dataset: str = "",
         horizon: int = 12,
         job_id: Optional[str] = None,
+        data_handle: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         Async version of fit_predict with job tracking.
@@ -241,10 +241,10 @@ class Executor:
 
         Args:
             handle_id: Estimator handle
-            dataset: Demo dataset name
-            data_handle: Data handle from load_data_source
+            dataset: Dataset name (demo)
             horizon: Forecast horizon
             job_id: Optional job ID for tracking (created if not provided)
+            data_handle: Optional data handle from load_data_source
 
         Returns:
             Dictionary with success status and job_id
@@ -257,7 +257,7 @@ class Executor:
             logger.warning(f"Could not get estimator name: {e}")
             estimator_name = "Unknown"
 
-        source_name = dataset if dataset else data_handle
+        data_source_name = data_handle if data_handle else dataset
 
         # Create job if not provided
         if job_id is None:
@@ -265,7 +265,7 @@ class Executor:
                 job_type="fit_predict",
                 estimator_handle=handle_id,
                 estimator_name=estimator_name,
-                dataset_name=source_name,
+                dataset_name=data_source_name,
                 horizon=horizon,
                 total_steps=3,
             )
@@ -274,39 +274,26 @@ class Executor:
             # Update status to RUNNING
             self._job_manager.update_job(job_id, status=JobStatus.RUNNING)
 
-            # Step 1: Load data
+            # Step 1: Get data
             if data_handle:
-                # Use custom data from a loaded handle
                 self._job_manager.update_job(
-                    job_id,
-                    completed_steps=0,
-                    current_step=f"Loading data from handle '{data_handle}'...",
+                    job_id, completed_steps=0, current_step=f"Retrieving data handle '{data_handle}'..."
                 )
-                await asyncio.sleep(0.01)
-
                 if data_handle not in self._data_handles:
+                    err = f"Unknown data handle: {data_handle}"
                     self._job_manager.update_job(
-                        job_id,
-                        status=JobStatus.FAILED,
-                        errors=[f"Unknown data handle: {data_handle}"],
+                        job_id, status=JobStatus.FAILED, errors=[err]
                     )
-                    return {
-                        "success": False,
-                        "error": f"Unknown data handle: {data_handle}",
-                        "available_handles": list(self._data_handles.keys()),
-                    }
-
+                    return {"success": False, "error": err}
+                
                 data_info = self._data_handles[data_handle]
                 y = data_info["y"]
                 X = data_info.get("X")
             else:
-                # Use built-in demo dataset
                 self._job_manager.update_job(
-                    job_id,
-                    completed_steps=0,
-                    current_step=f"Loading dataset '{dataset}'...",
+                    job_id, completed_steps=0, current_step=f"Loading demo dataset '{dataset}'..."
                 )
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0.01)  # Yield control to event loop
 
                 data_result = self.load_dataset(dataset)
                 if not data_result["success"]:
@@ -316,7 +303,6 @@ class Executor:
                         errors=[f"Failed to load dataset: {data_result.get('error')}"],
                     )
                     return data_result
-
                 y = data_result["data"]
                 X = data_result.get("exog")
 
@@ -324,9 +310,7 @@ class Executor:
 
             # Step 2: Fit model
             self._job_manager.update_job(
-                job_id,
-                completed_steps=1,
-                current_step=f"Fitting {estimator_name} on {source_name}...",
+                job_id, completed_steps=1, current_step=f"Fitting {estimator_name} on {data_source_name}..."
             )
             await asyncio.sleep(0.01)
 
