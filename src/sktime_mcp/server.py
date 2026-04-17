@@ -560,8 +560,59 @@ async def list_tools() -> list[Tool]:
                 "required": ["job_id"],
             },
         ),
+        Tool(
+            name="get_timeseries_diagnostics",
+            description="Returns statistical diagnostics (seasonality, stationarity, mean, std) for a dataset.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "dataset": {"type": "string", "description": "Name of the sktime dataset (e.g., 'airline')"}
+                },
+                "required": ["dataset"]
+            }
+        ),
+        Tool(
+            name="list_metrics",
+            description="Lists all available evaluation metrics in the sktime registry.",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
     ]
 
+
+# -- New Tool Implementations ----------------------------------------------
+
+def list_metrics_tool() -> str:
+    """Implementation for the list_metrics tool."""
+    from sktime.registry import all_estimators
+    import json
+    # Query registry for metrics
+    metrics = all_estimators(estimator_types="metric", as_dataframe=True)
+    # Get top 15 metric names to keep the context window small
+    metric_names = metrics["name"].tolist()[:15]
+    return json.dumps({"available_metrics": metric_names, "count": len(metrics)})
+
+def get_diagnostics_tool(dataset_name: str) -> str:
+    """Implementation for the get_timeseries_diagnostics tool."""
+    from sktime.datasets import load_dataset
+    import json
+    try:
+        y = load_dataset(dataset_name)
+        # Calculate basic statistical diagnostics
+        diagnostics = {
+            "dataset": dataset_name,
+            "length": len(y),
+            "mean": round(float(y.mean()), 4),
+            "std": round(float(y.std()), 4),
+            "min": round(float(y.min()), 4),
+            "max": round(float(y.max()), 4),
+            "type": str(type(y))
+        }
+        return json.dumps(diagnostics)
+    except Exception as e:
+        return json.dumps({"error": f"Could not load dataset '{dataset_name}': {str(e)}"})
 
 # ===================================================================
 # Tool dispatcher
@@ -584,6 +635,15 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 limit=arguments.get("limit", 50),
                 offset=arguments.get("offset", 0),
             )
+
+        # -- Added for ESoC '26 Idea A & B -----------------------------------
+        elif name == "get_timeseries_diagnostics":
+            logger.info(f"Running diagnostics for: {arguments.get('dataset')}")
+            result = get_diagnostics_tool(arguments["dataset"])
+
+        elif name == "list_metrics":
+            result = list_metrics_tool()
+        # --------------------------------------------------------------------
 
         elif name == "search_estimators":
             # Deprecated — kept for backward compatibility, routes to unified list_estimators
