@@ -47,22 +47,31 @@ Get up and running in seconds. Use with **Claude Desktop**, **Cursor**, or any M
 ### 1. Install
 
 ```bash
-# Install directly from PyPI (https://pypi.org/project/sktime-mcp/0.1.0/)
+# Recommended: No installation needed! uvx handles everything
+uvx sktime-mcp
+
+# With optional dependencies (e.g., SQL support)
+uvx sktime-mcp --extra sql
+```
+
+Alternatively, install via pip:
+
+```bash
 pip install sktime-mcp
 ```
 
-Alternatively, when contributing, use GitHub to install from source:
+For development, clone and install from source:
 
 ```bash
 git clone https://github.com/sktime/sktime-mcp.git
 cd sktime-mcp
-python3 -m venv .venv
-source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
 ### 2. Run
 ```bash
+uvx sktime-mcp
+# or
 sktime-mcp
 ```
 
@@ -72,7 +81,20 @@ Add this to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "sktime": {
-      "command": "sktime-mcp"
+      "command": "uvx",
+      "args": ["sktime-mcp"]
+    }
+  }
+}
+```
+
+**With extras:**
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "uvx",
+      "args": ["sktime-mcp", "--extra", "sql"]
     }
   }
 }
