@@ -10,20 +10,38 @@ Welcome to the **sktime-mcp** User Guide. This comprehensive manual will help yo
 
 Before you begin, ensure you have:
 
-- **Python 3.9+** installed.
-- **pip** package manager.
+- **Python 3.10+** installed.
+- **`uv`** package manager (recommended) or **pip**.
 - A compatible MCP Client (like **Claude Desktop**).
 
 ### Installation
 
-Install the package directly from the source. We recommend installing with all dependencies to unlock full functionality.
+#### Recommended: No-Install with uvx
+
+The fastest way to run sktime-mcp. `uvx` automatically creates an isolated environment:
 
 ```bash
-# Standard installation
-pip install -e .
+# Run directly - no installation needed!
+uvx sktime-mcp
+```
 
-# Recommended: Install with all optional extras (SQL, Forecasting, Files)
-pip install -e ".[all]"
+With optional dependencies:
+```bash
+# With SQL support
+uvx sktime-mcp --extra sql
+
+# With all extras
+uvx sktime-mcp --extra all
+```
+
+#### Alternative: pip Installation
+
+```bash
+# Install from PyPI
+pip install sktime-mcp
+
+# With all optional dependencies
+pip install sktime-mcp[all]
 ```
 
 ### Running the Server
@@ -31,16 +49,28 @@ pip install -e ".[all]"
 Start the MCP server to begin listening for connections:
 
 ```bash
+# Recommended way
+uvx sktime-mcp
+
+# Or if installed via pip
 sktime-mcp
 ```
 
-*Or manually via Python:*
-```bash
-python -m sktime_mcp.server
-```
-
 !!! tip "Client Configuration"
-    Ensure your MCP client (e.g., Claude Desktop) is configured to run this command. See the [official VSCode guidelines](https://code.visualstudio.com/docs/copilot/customization/mcp-servers#_configure-the-mcpjson-file) for configuration examples.
+    Configure your MCP client (e.g., Claude Desktop) with:
+
+    ```json
+    {
+      "mcpServers": {
+        "sktime": {
+          "command": "uvx",
+          "args": ["sktime-mcp"]
+        }
+      }
+    }
+    ```
+
+    See the [official VSCode guidelines](https://code.visualstudio.com/docs/copilot/customization/mcp-servers#_configure-the-mcpjson-file) for more configuration examples.
 
 ---
 
