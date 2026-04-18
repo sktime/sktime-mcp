@@ -177,6 +177,31 @@ Search estimators by name or description using text query.
 
 ---
 
+#### `recommend_estimators`
+Recommend estimators for an LLM/user request using hard constraints and soft preferences.
+
+**Arguments:**
+- `query` (optional): Natural-language requirement text
+- `task` (optional): Hard task filter
+- `required_tags` (optional): Hard capability constraints
+- `preferred_tags` (optional): Soft capability preferences for ranking
+- `limit` (optional): Maximum recommendations (default: 5)
+
+**Example:**
+```json
+{
+  "query": "Forecast monthly sales with prediction intervals and missing values",
+  "preferred_tags": {
+    "capability:pred_int": true
+  },
+  "limit": 5
+}
+```
+
+**Returns:** Ranked recommendations with score and rationale per estimator.
+
+---
+
 #### 3. `describe_estimator`
 Get detailed information about a specific estimator's capabilities.
 

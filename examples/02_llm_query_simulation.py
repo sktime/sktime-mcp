@@ -24,6 +24,7 @@ from sktime_mcp.tools.describe_estimator import describe_estimator_tool, search_
 from sktime_mcp.tools.fit_predict import fit_predict_tool
 from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 from sktime_mcp.tools.list_estimators import list_estimators_tool
+from sktime_mcp.tools.recommend_estimators import recommend_estimators_tool
 
 
 def print_llm_thought(thought: str):
@@ -252,6 +253,41 @@ def simulate_query_5():
         print(f"   - Transformation: {transformers['total']} estimators")
 
 
+def simulate_query_6():
+    """
+    Query: "Recommend a forecasting model for missing data with intervals"
+    """
+    print("\n" + "=" * 70)
+    print("  QUERY 6: LLM-Oriented Recommendation")
+    print("=" * 70)
+    print('\nUser: "Recommend a forecasting model for missing data with intervals"')
+
+    print_llm_thought("I will ask for ranked recommendations with transparent rationale")
+    print_tool_call(
+        "recommend_estimators",
+        {
+            "query": "forecast monthly sales with prediction intervals and missing values",
+            "preferred_tags": {"capability:pred_int": True},
+            "limit": 3,
+        },
+    )
+
+    result = recommend_estimators_tool(
+        query="forecast monthly sales with prediction intervals and missing values",
+        preferred_tags={"capability:pred_int": True},
+        limit=3,
+    )
+    print_result(result)
+
+    print("\n🤖 LLM Response:")
+    if result["success"] and result["recommendations"]:
+        print("   Top recommendations:")
+        for rec in result["recommendations"]:
+            print(f"   - {rec['name']} (score={rec['score']})")
+    else:
+        print("   No recommendations matched your constraints.")
+
+
 def main():
     print("\n" + "🤖" * 30)
     print("  sktime-mcp: LLM Query Simulation Demo")
@@ -264,6 +300,7 @@ def main():
     simulate_query_3()  # Validate pipeline
     simulate_query_4()  # Semantic search
     simulate_query_5()  # Task comparison
+    simulate_query_6()  # Ranked recommendations
 
     print("\n" + "=" * 70)
     print("  ✅ All LLM Query Simulations Complete!")
@@ -273,7 +310,8 @@ def main():
     print("  2. Registry provides ground truth about capabilities")
     print("  3. Tag-based filtering enables constraint satisfaction")
     print("  4. Pipeline validation prevents invalid compositions")
-    print("  5. Handle-based execution is safe and reproducible")
+    print("  5. Ranked recommendations improve agentic decision-making")
+    print("  6. Handle-based execution is safe and reproducible")
 
 
 if __name__ == "__main__":

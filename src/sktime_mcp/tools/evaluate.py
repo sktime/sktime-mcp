@@ -8,7 +8,7 @@ import logging
 from typing import Any
 
 from sktime.forecasting.model_evaluation import evaluate
-from sktime.forecasting.model_selection import ExpandingWindowSplitter
+from sktime.split import ExpandingWindowSplitter
 
 from sktime_mcp.runtime.executor import get_executor
 
@@ -47,10 +47,12 @@ def evaluate_estimator_tool(
 
     try:
         n = len(y)
-        # Handle small datasets gracefully
-        initial_window = max(int(n * 0.5), n - cv_folds * 2)
-        if initial_window < 1:
-            initial_window = 1
+        if cv_folds <= 0:
+            return {"success": False, "error": "cv_folds must be a positive integer"}
+
+        # Configure splitter so it runs approximately `cv_folds` folds with fh=[1].
+        # If dataset is too small, ExpandingWindowSplitter will run fewer folds.
+        initial_window = max(1, n - cv_folds)
 
         cv = ExpandingWindowSplitter(initial_window=initial_window, step_length=1, fh=[1])
 
@@ -66,7 +68,7 @@ def evaluate_estimator_tool(
         return {
             "success": True,
             "results": metrics,
-            "cv_folds_run": len(metrics)
+            "cv_folds_run": len(metrics),
         }
     except Exception as e:
         logger.exception("Error during evaluate")

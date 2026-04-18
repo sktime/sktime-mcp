@@ -27,6 +27,7 @@ from sktime_mcp.tools.describe_estimator import (
     describe_estimator_tool,
     search_estimators_tool,
 )
+from sktime_mcp.tools.recommend_estimators import recommend_estimators_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
     fit_predict_tool,
@@ -315,6 +316,39 @@ async def list_tools() -> list[Tool]:
                     },
                 },
                 "required": ["query"],
+            },
+        ),
+        Tool(
+            name="recommend_estimators",
+            description=(
+                "Recommend estimators for an LLM/user request using hard constraints "
+                "(task/required_tags) and soft preferences (preferred_tags)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Optional natural-language requirement text",
+                    },
+                    "task": {
+                        "type": "string",
+                        "description": "Optional hard task filter",
+                    },
+                    "required_tags": {
+                        "type": "object",
+                        "description": "Hard capability constraints",
+                    },
+                    "preferred_tags": {
+                        "type": "object",
+                        "description": "Soft capability preferences used in ranking",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum recommendations to return (default: 5)",
+                        "default": 5,
+                    },
+                },
             },
         ),
         Tool(
@@ -651,6 +685,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = search_estimators_tool(
                 arguments["query"],
                 arguments.get("limit", 20),
+            )
+        elif name == "recommend_estimators":
+            result = recommend_estimators_tool(
+                query=arguments.get("query"),
+                task=arguments.get("task"),
+                required_tags=arguments.get("required_tags"),
+                preferred_tags=arguments.get("preferred_tags"),
+                limit=arguments.get("limit", 5),
             )
         elif name == "export_code":
             result = export_code_tool(

@@ -141,6 +141,20 @@ Here are some standalone examples of using specific tools.
 }
 ```
 
+**Recommend Estimators (LLM-friendly)**
+```json
+{
+  "name": "recommend_estimators",
+  "arguments": {
+    "query": "Forecast monthly sales with prediction intervals and missing values",
+    "preferred_tags": {
+      "capability:pred_int": true
+    },
+    "limit": 5
+  }
+}
+```
+
 **Search by Name**
 ```json
 {

@@ -9,10 +9,12 @@ from sktime_mcp.tools.format_tools import (
 )
 from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 from sktime_mcp.tools.list_estimators import list_estimators_tool
+from sktime_mcp.tools.recommend_estimators import recommend_estimators_tool
 from sktime_mcp.tools.save_model import save_model_tool
 
 __all__ = [
     "list_estimators_tool",
+    "recommend_estimators_tool",
     "describe_estimator_tool",
     "instantiate_estimator_tool",
     "fit_predict_tool",
