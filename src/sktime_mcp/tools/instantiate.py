@@ -30,7 +30,7 @@ def _validate_params(
     estimator_name: Optional[str] = None,
 ) -> dict[str, Any]:
     """
-    Validate params for type safety and optionally check keys.
+    Validate params for type safety and strictly check parameter keys.
 
     Args:
         params: The params argument to validate.
@@ -79,7 +79,7 @@ def _validate_params(
                 "warnings": warnings,
             }
 
-    # check if keys match known hyperparameters (warn, don't error)
+    # STRICT VALIDATION: check if keys match known hyperparameters
     if estimator_name and params:
         registry = get_registry()
         node = registry.get_estimator_by_name(estimator_name)
@@ -87,14 +87,20 @@ def _validate_params(
         if node is not None and node.hyperparameters:
             known_keys = set(node.hyperparameters.keys())
             provided_keys = set(params.keys())
-            unknown_keys = provided_keys - known_keys
+            invalid_keys = provided_keys - known_keys
 
-            if unknown_keys:
-                warnings.append(
-                    f"Unknown parameter(s) for {estimator_name}: "
-                    f"{sorted(unknown_keys)}. "
-                    f"Known parameters: {sorted(known_keys)}"
-                )
+            if invalid_keys:
+                # HARD ERROR instead of a warning to prevent silent failures
+                return {
+                    "valid": False,
+                    "error": (
+                        f"Invalid parameter(s) for estimator '{estimator_name}': "
+                        f"{sorted(invalid_keys)}. "
+                        f"Valid parameters are: {sorted(known_keys)}. "
+                        f"Use describe_estimator('{estimator_name}') to see full parameter details."
+                    ),
+                    "warnings": warnings,
+                }
 
     return {"valid": True, "warnings": warnings}
 
@@ -139,7 +145,7 @@ def instantiate_estimator_tool(
     executor = get_executor()
     result = executor.instantiate(estimator, params)
 
-    # attach any key-mismatch warnings to the response
+    # attach any warnings to the response
     if validation["warnings"] and result.get("success"):
         result["warnings"] = validation["warnings"]
 
@@ -165,19 +171,6 @@ def instantiate_pipeline_tool(
         - components: List of component names
         - params_list: Parameters used for each component
         - warnings: List of any validation warnings
-
-    Example:
-        >>> instantiate_pipeline_tool(
-        ...     ["ConditionalDeseasonalizer", "Detrender", "ARIMA"],
-        ...     [{}, {}, {"order": [1, 1, 1]}]
-        ... )
-        {
-            "success": True,
-            "handle": "est_xyz789abc123",
-            "pipeline": "ConditionalDeseasonalizer → Detrender → ARIMA",
-            "components": ["ConditionalDeseasonalizer", "Detrender", "ARIMA"],
-            "params_list": [{}, {}, {"order": [1, 1, 1]}]
-        }
     """
     all_warnings = []
 
@@ -254,16 +247,6 @@ def list_handles_tool() -> dict[str, Any]:
 def load_model_tool(path: str) -> dict[str, Any]:
     """
     Load a saved model from a local path or MLflow URI and register its handle.
-
-    Args:
-        path: Local directory path or MLflow URI to the saved model.
-              Examples:
-                - "/tmp/my_arima_model"
-                - "runs:/<run_id>/model"
-                - "mlflow-artifacts:/<run_id>/artifacts/model"
-                - "models:/<model_name>/<version>"
-    Returns:
-        Dictionary with success status and the new handle.
     """
     try:
         from sktime.utils.mlflow_sktime import load_model
