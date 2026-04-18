@@ -168,6 +168,36 @@ async def test_async_fit_predict():
     job_manager.delete_job(job_id)
 
 
+def test_async_fit_predict_tool_completes_background_job():
+    """Tool-level async fit/predict should move beyond pending."""
+    from sktime_mcp.runtime.jobs import get_job_manager
+    from sktime_mcp.tools.fit_predict import fit_predict_async_tool
+    from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+
+    job_manager = get_job_manager()
+
+    est_result = instantiate_estimator_tool("NaiveForecaster")
+    assert est_result["success"]
+    handle = est_result["handle"]
+
+    result = fit_predict_async_tool(handle, "airline", horizon=2)
+    assert result["success"]
+
+    job_id = result["job_id"]
+
+    time.sleep(2.0)
+    job = job_manager.get_job(job_id)
+    assert job is not None
+    assert job.status in (JobStatus.RUNNING, JobStatus.COMPLETED)
+
+    if job.status != JobStatus.COMPLETED:
+        time.sleep(2.0)
+        job = job_manager.get_job(job_id)
+        assert job is not None
+        assert job.status == JobStatus.COMPLETED
+        assert job.result is not None
+
+
 def test_cancel_job():
     """Test cancelling a job."""
     job_manager = get_job_manager()

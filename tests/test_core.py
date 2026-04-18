@@ -137,6 +137,46 @@ class TestTools:
         assert "estimators" in result
         assert len(result["estimators"]) <= 5
 
+    def test_list_estimators_negative_limit_rejected(self):
+        """Negative limits should be rejected."""
+        from sktime_mcp.tools.list_estimators import list_estimators_tool
+
+        result = list_estimators_tool(limit=-1, offset=0)
+
+        assert result["success"] is False
+        assert "limit must be a non-negative integer" in result["error"]
+
+    def test_list_estimators_zero_limit_returns_empty(self):
+        """Zero limit should return an empty page."""
+        from sktime_mcp.tools.list_estimators import list_estimators_tool
+
+        result = list_estimators_tool(limit=0, offset=0)
+
+        assert result["success"] is True
+        assert result["count"] == 0
+        assert result["estimators"] == []
+
+    def test_pandas_adapter_auto_detects_time_column(self):
+        """Pandas adapter should auto-detect a date-like time column when omitted."""
+        import pandas as pd
+
+        from sktime_mcp.data.adapters.pandas_adapter import PandasAdapter
+
+        config = {
+            "type": "pandas",
+            "data": {
+                "date": pd.date_range("2020-01-01", periods=12, freq="ME"),
+                "value": list(range(12)),
+            },
+            "target_column": "value",
+        }
+
+        adapter = PandasAdapter(config)
+        result = adapter.load()
+
+        assert isinstance(result.index, pd.DatetimeIndex)
+        assert result.index.name == "date"
+
     def test_describe_unknown_estimator(self):
         """Test describing an unknown estimator."""
         from sktime_mcp.tools.describe_estimator import describe_estimator_tool

@@ -58,6 +58,12 @@ def list_estimators_tool(
                 "error": "offset must be a non-negative integer.",
             }
 
+        if limit < 0:
+            return {
+                "success": False,
+                "error": "limit must be a non-negative integer.",
+            }
+
         page = estimators[offset : offset + limit]
         results = [est.to_summary() for est in page]
 
