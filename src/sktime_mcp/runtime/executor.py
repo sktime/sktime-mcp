@@ -31,7 +31,7 @@ def _can_load_without_args(obj) -> bool:
         p for p in sig.parameters.values()
         if p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)
     ]
-    return len(params) > 0 and all(p.default is not inspect.Parameter.empty for p in params)
+    return all(p.default is not inspect.Parameter.empty for p in params)
 
 
 def _discover_demo_datasets() -> dict:
