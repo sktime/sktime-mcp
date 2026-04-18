@@ -184,14 +184,94 @@ class Executor:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def predict_interval(
+        self,
+        handle_id: str,
+        fh: Optional[Union[int, list[int]]] = None,
+        X: Optional[Any] = None,
+        coverage: Union[float, list[float]] = 0.9,
+    ) -> dict[str, Any]:
+        """Generate predictions with prediction intervals.
+
+        Args:
+            handle_id: Estimator handle
+            fh: Forecast horizon
+            X: Optional exogenous variables
+            coverage: Confidence level(s) for prediction intervals.
+                      Can be a single float (e.g., 0.9 for 90% interval) or
+                      a list of floats for multiple intervals.
+
+        Returns:
+            Dictionary with success status, predictions, and intervals
+        """
+        try:
+            instance = self._handle_manager.get_instance(handle_id)
+        except KeyError:
+            return {"success": False, "error": f"Handle not found: {handle_id}"}
+
+        if not self._handle_manager.is_fitted(handle_id):
+            return {"success": False, "error": "Estimator not fitted"}
+
+        try:
+            if fh is None:
+                fh = list(range(1, 13))
+
+            # Check if estimator supports prediction intervals
+            if not hasattr(instance, "predict_interval"):
+                return {
+                    "success": False,
+                    "error": "Estimator does not support prediction intervals. "
+                    "Use a probabilistic forecaster (check capability:pred_int tag).",
+                }
+
+            pred_intervals = instance.predict_interval(fh=fh, X=X, coverage=coverage)
+
+            # Convert to JSON-serializable format
+            # The result is a DataFrame with MultiIndex columns: (variable, coverage, lower/upper)
+            pred_intervals_copy = pred_intervals.copy()
+            pred_intervals_copy.index = pred_intervals_copy.index.astype(str)
+
+            # Extract intervals into a structured format
+            intervals_dict = {}
+            for col in pred_intervals_copy.columns:
+                var_name = col[0] if isinstance(col, tuple) else "predictions"
+                cov_level = col[1] if isinstance(col, tuple) else coverage
+                bound_type = col[2] if isinstance(col, tuple) else "bound"
+
+                key = f"{var_name}_{cov_level}"
+                if key not in intervals_dict:
+                    intervals_dict[key] = {"coverage": cov_level}
+                intervals_dict[key][bound_type] = pred_intervals_copy[col].to_dict()
+
+            return {
+                "success": True,
+                "predictions": pred_intervals_copy.to_dict(),
+                "intervals": intervals_dict,
+                "horizon": len(fh) if hasattr(fh, "__len__") else fh,
+                "coverage": coverage,
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def fit_predict(
         self,
         handle_id: str,
         dataset: str,
         horizon: int = 12,
         data_handle: Optional[str] = None,
+        coverage: Optional[Union[float, list[float]]] = None,
     ) -> dict[str, Any]:
-        """Convenience method: load data, fit, and predict."""
+        """Convenience method: load data, fit, and predict.
+
+        Args:
+            handle_id: Estimator handle
+            dataset: Dataset name
+            horizon: Forecast horizon
+            data_handle: Optional data handle for custom data
+            coverage: Optional confidence level(s) for prediction intervals.
+                      If provided, uses predict_interval() instead of predict().
+                      Can be a single float (e.g., 0.9) or list of floats.
+        """
         if data_handle is not None:
             # Use custom loaded data
             if data_handle not in self._data_handles:
@@ -217,6 +297,9 @@ class Executor:
         if not fit_result["success"]:
             return fit_result
 
+        # Use predict_interval if coverage is provided, otherwise use predict
+        if coverage is not None:
+            return self.predict_interval(handle_id, fh=fh, X=X, coverage=coverage)
         return self.predict(handle_id, fh=fh, X=X)
 
     async def fit_predict_async(
@@ -225,6 +308,7 @@ class Executor:
         dataset: str,
         horizon: int = 12,
         job_id: Optional[str] = None,
+        coverage: Optional[Union[float, list[float]]] = None,
     ) -> dict[str, Any]:
         """
         Async version of fit_predict with job tracking.
@@ -237,6 +321,8 @@ class Executor:
             dataset: Dataset name
             horizon: Forecast horizon
             job_id: Optional job ID for tracking (created if not provided)
+            coverage: Optional confidence level(s) for prediction intervals.
+                      If provided, uses predict_interval() instead of predict().
 
         Returns:
             Dictionary with success status and job_id
@@ -304,17 +390,25 @@ class Executor:
                 return fit_result
 
             # Step 3: Generate predictions
+            step_msg = f"Generating predictions (horizon={horizon})"
+            if coverage is not None:
+                step_msg += f" with coverage={coverage}"
             self._job_manager.update_job(
                 job_id,
                 completed_steps=2,
-                current_step=f"Generating predictions (horizon={horizon})...",
+                current_step=step_msg,
             )
             await asyncio.sleep(0.01)  # Yield control
 
-            # Run predict in executor
-            predict_result = await loop.run_in_executor(
-                None, lambda: self.predict(handle_id, fh=fh, X=X)
-            )
+            # Run predict or predict_interval in executor
+            if coverage is not None:
+                predict_result = await loop.run_in_executor(
+                    None, lambda: self.predict_interval(handle_id, fh=fh, X=X, coverage=coverage)
+                )
+            else:
+                predict_result = await loop.run_in_executor(
+                    None, lambda: self.predict(handle_id, fh=fh, X=X)
+                )
 
             if not predict_result["success"]:
                 self._job_manager.update_job(
