@@ -165,7 +165,7 @@ class TestTools:
         config = {
             "type": "pandas",
             "data": {
-                "date": pd.date_range("2020-01-01", periods=12, freq="ME"),
+                "date": pd.date_range("2020-01-01", periods=12, freq="M"),
                 "value": list(range(12)),
             },
             "target_column": "value",

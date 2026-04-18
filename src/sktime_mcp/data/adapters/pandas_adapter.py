@@ -51,7 +51,7 @@ class PandasAdapter(DataSourceAdapter):
             if time_col not in df.columns:
                 raise ValueError(f"Time column '{time_col}' not found in data")
             df = df.set_index(time_col)
-        elif not isinstance(df.index, pd.DatetimeIndex):
+        elif not isinstance(df.index, (pd.DatetimeIndex, pd.PeriodIndex, pd.TimedeltaIndex)):
             # Try to detect time column
             time_col = self._detect_time_column(df)
             if time_col:

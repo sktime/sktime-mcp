@@ -170,32 +170,63 @@ async def test_async_fit_predict():
 
 def test_async_fit_predict_tool_completes_background_job():
     """Tool-level async fit/predict should move beyond pending."""
+    from sktime_mcp.runtime.executor import get_executor
     from sktime_mcp.runtime.jobs import get_job_manager
     from sktime_mcp.tools.fit_predict import fit_predict_async_tool
     from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 
     job_manager = get_job_manager()
+    executor = get_executor()
+    handle = None
+    job_id = None
 
-    est_result = instantiate_estimator_tool("NaiveForecaster")
-    assert est_result["success"]
-    handle = est_result["handle"]
+    try:
+        est_result = instantiate_estimator_tool("NaiveForecaster")
+        assert est_result["success"]
+        handle = est_result["handle"]
 
-    result = fit_predict_async_tool(handle, "airline", horizon=2)
-    assert result["success"]
+        result = fit_predict_async_tool(handle, "airline", horizon=2)
+        assert result["success"]
 
-    job_id = result["job_id"]
+        job_id = result["job_id"]
 
-    time.sleep(2.0)
-    job = job_manager.get_job(job_id)
-    assert job is not None
-    assert job.status in (JobStatus.RUNNING, JobStatus.COMPLETED)
-
-    if job.status != JobStatus.COMPLETED:
-        time.sleep(2.0)
+        poll_interval = 0.1
+        running_deadline = time.monotonic() + 5.0
         job = job_manager.get_job(job_id)
+
+        while (
+            job is not None
+            and job.status == JobStatus.PENDING
+            and time.monotonic() < running_deadline
+        ):
+            time.sleep(poll_interval)
+            job = job_manager.get_job(job_id)
+
+        assert job is not None
+        assert job.status in (JobStatus.RUNNING, JobStatus.COMPLETED), (
+            f"Job {job_id} did not move beyond pending; last status: {job.status.value}"
+        )
+
+        if job.status != JobStatus.COMPLETED:
+            completed_deadline = time.monotonic() + 5.0
+            while (
+                job is not None
+                and job.status != JobStatus.COMPLETED
+                and time.monotonic() < completed_deadline
+            ):
+                time.sleep(poll_interval)
+                job = job_manager.get_job(job_id)
+
+        assert job is not None
         assert job is not None
         assert job.status == JobStatus.COMPLETED
         assert job.result is not None
+
+    finally:
+        if job_id is not None:
+            job_manager.delete_job(job_id)
+        if handle is not None:
+            executor._handle_manager.release_handle(handle)
 
 
 def test_cancel_job():
