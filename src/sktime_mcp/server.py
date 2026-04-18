@@ -67,13 +67,24 @@ logger = logging.getLogger(__name__)
 server = Server("sktime-mcp")
 
 
-def sanitize_for_json(obj):
+def sanitize_for_json(obj, _seen=None):
     """Recursively convert objects to JSON-serializable format."""
+    if _seen is None:
+        _seen = set()
+    
+    if isinstance(obj, (bool, type(None), int, float, str)):
+        return obj
+    
+    obj_id = id(obj)
+    if obj_id in _seen:
+        return "<circular>"
+    _seen.add(obj_id)
+    
     if isinstance(obj, dict):
-        return {str(k): sanitize_for_json(v) for k, v in obj.items()}
+        return {str(k): sanitize_for_json(v, _seen) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
-        return [sanitize_for_json(item) for item in obj]
-    elif hasattr(obj, "__dict__") and not isinstance(obj, (str, int, float, bool, type(None))):
+        return [sanitize_for_json(item, _seen) for item in obj]
+    elif hasattr(obj, "__dict__"):
         return str(obj)
     else:
         return obj
