@@ -67,14 +67,35 @@ logger = logging.getLogger(__name__)
 server = Server("sktime-mcp")
 
 
-def sanitize_for_json(obj):
-    """Recursively convert objects to JSON-serializable format."""
-    if isinstance(obj, dict):
-        return {str(k): sanitize_for_json(v) for k, v in obj.items()}
-    elif isinstance(obj, (list, tuple)):
-        return [sanitize_for_json(item) for item in obj]
-    elif hasattr(obj, "__dict__") and not isinstance(obj, (str, int, float, bool, type(None))):
+def sanitize_for_json(obj, _seen=None):
+    """Recursively convert objects to JSON-serializable format.
+
+    Handles dict, list, tuple, and arbitrary objects. Includes cycle
+    detection to prevent RecursionError from circular references
+    (e.g., parent/child pointers in sktime estimators).
+
+    Args:
+        obj: Object to sanitize
+        _seen: Internal set of visited object ids for cycle detection
+
+    Returns:
+        JSON-serializable version of obj
+    """
+    if _seen is None:
+        _seen = set()
+
+    obj_id = id(obj)
+    if obj_id in _seen:
         return str(obj)
+    _seen.add(obj_id)
+
+    if isinstance(obj, dict):
+        return {str(k): sanitize_for_json(v, _seen) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [sanitize_for_json(item, _seen) for item in obj]
+    elif hasattr(obj, "__dict__") and not isinstance(obj, (str, int, float, bool, type(None))):
+        # Recurse into __dict__ to catch cycles in object attributes
+        return {str(k): sanitize_for_json(v, _seen) for k, v in obj.__dict__.items()}
     else:
         return obj
 
