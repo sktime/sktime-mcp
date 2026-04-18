@@ -24,7 +24,7 @@ from sktime_mcp.tools.data_tools import (
     release_data_handle_tool,
 )
 from sktime_mcp.tools.describe_estimator import describe_estimator_tool
-from sktime_mcp.tools.evaluate import evaluate_estimator_tool
+from sktime_mcp.tools.evaluate import compare_estimators_tool, evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
     fit_predict_tool,
@@ -67,14 +67,35 @@ logger = logging.getLogger(__name__)
 server = Server("sktime-mcp")
 
 
-def sanitize_for_json(obj):
-    """Recursively convert objects to JSON-serializable format."""
-    if isinstance(obj, dict):
-        return {str(k): sanitize_for_json(v) for k, v in obj.items()}
-    elif isinstance(obj, (list, tuple)):
-        return [sanitize_for_json(item) for item in obj]
-    elif hasattr(obj, "__dict__") and not isinstance(obj, (str, int, float, bool, type(None))):
+def sanitize_for_json(obj, _seen=None):
+    """Recursively convert objects to JSON-serializable format.
+
+    Handles dict, list, tuple, and arbitrary objects. Includes cycle
+    detection to prevent RecursionError from circular references
+    (e.g., parent/child pointers in sktime estimators).
+
+    Args:
+        obj: Object to sanitize
+        _seen: Internal set of visited object ids for cycle detection
+
+    Returns:
+        JSON-serializable version of obj
+    """
+    if _seen is None:
+        _seen = set()
+
+    obj_id = id(obj)
+    if obj_id in _seen:
         return str(obj)
+    _seen.add(obj_id)
+
+    if isinstance(obj, dict):
+        return {str(k): sanitize_for_json(v, _seen) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [sanitize_for_json(item, _seen) for item in obj]
+    elif hasattr(obj, "__dict__") and not isinstance(obj, (str, int, float, bool, type(None))):
+        # Recurse into __dict__ to catch cycles in object attributes
+        return {str(k): sanitize_for_json(v, _seen) for k, v in obj.__dict__.items()}
     else:
         return obj
 
@@ -244,7 +265,8 @@ async def list_tools() -> list[Tool]:
             name="fit_predict",
             description=(
                 "Fit an estimator on a dataset and generate predictions. "
-                "Accepts either a demo dataset name or a data_handle from load_data_source."
+                "Accepts either a demo dataset name or a data_handle from load_data_source. "
+                "Use the coverage parameter to get prediction intervals."
             ),
             inputSchema={
                 "type": "object",
@@ -269,6 +291,16 @@ async def list_tools() -> list[Tool]:
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
                     },
+                    "coverage": {
+                        "type": ["number", "array"],
+                        "description": (
+                            "Confidence level(s) for prediction intervals. "
+                            "Use a single number (e.g., 0.9 for 90% intervals) or "
+                            "a list of numbers for multiple intervals (e.g., [0.5, 0.9, 0.95]). "
+                            "Only works with estimators that support prediction intervals "
+                            "(check capability:pred_int tag)."
+                        ),
+                    },
                 },
                 "required": ["estimator_handle"],
             },
@@ -277,7 +309,8 @@ async def list_tools() -> list[Tool]:
             name="fit_predict_async",
             description=(
                 "Fit an estimator on a dataset and generate predictions "
-                "(non-blocking background job). Returns a job_id."
+                "(non-blocking background job). Returns a job_id. "
+                "Use the coverage parameter to get prediction intervals."
             ),
             inputSchema={
                 "type": "object",
@@ -294,6 +327,16 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
+                    },
+                    "coverage": {
+                        "type": ["number", "array"],
+                        "description": (
+                            "Confidence level(s) for prediction intervals. "
+                            "Use a single number (e.g., 0.9 for 90% intervals) or "
+                            "a list of numbers for multiple intervals (e.g., [0.5, 0.9, 0.95]). "
+                            "Only works with estimators that support prediction intervals "
+                            "(check capability:pred_int tag)."
+                        ),
                     },
                 },
                 "required": ["estimator_handle", "dataset"],
@@ -320,6 +363,59 @@ async def list_tools() -> list[Tool]:
                     },
                 },
                 "required": ["estimator_handle", "dataset"],
+            },
+        ),
+        Tool(
+            name="compare_estimators",
+            description=(
+                "Compare multiple estimators on the same dataset using cross-validation. "
+                "Runs CV on each estimator with the same dataset and metric, "
+                "then returns results ranked by performance. "
+                "Use this for agentic model selection - run multiple candidates "
+                "and automatically pick the best one."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handles": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of estimator handles from instantiate_estimator",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": (
+                            "Dataset name: airline, sunspots, lynx, etc. "
+                            "Use this or data_handle, not both."
+                        ),
+                    },
+                    "data_handle": {
+                        "type": "string",
+                        "description": (
+                            "Handle from load_data_source for custom data. "
+                            "Use this or dataset, not both."
+                        ),
+                    },
+                    "metric": {
+                        "type": "string",
+                        "description": (
+                            "Metric to use for comparison: MAE, MAPE, MSE, RMSE, SMAPE, MASE, MedAE "
+                            "(default: MAPE)"
+                        ),
+                        "default": "MAPE",
+                    },
+                    "cv_folds": {
+                        "type": "integer",
+                        "description": "Number of cross-validation folds (default: 3)",
+                        "default": 3,
+                    },
+                    "horizon": {
+                        "type": "integer",
+                        "description": "Forecast horizon for evaluation (default: 12)",
+                        "default": 12,
+                    },
+                },
+                "required": ["estimator_handles"],
             },
         ),
         # -- Data ------------------------------------------------------------
@@ -630,6 +726,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("dataset", ""),
                 arguments.get("horizon", 12),
                 data_handle=arguments.get("data_handle"),
+                coverage=arguments.get("coverage"),
             )
             result = sanitize_for_json(result)
 
@@ -638,6 +735,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["estimator_handle"],
                 arguments["dataset"],
                 arguments.get("horizon", 12),
+                coverage=arguments.get("coverage"),
             )
 
         elif name == "fit_predict_with_data":
@@ -655,6 +753,17 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["estimator_handle"],
                 arguments["dataset"],
                 arguments.get("cv_folds", 3),
+            )
+            result = sanitize_for_json(result)
+
+        elif name == "compare_estimators":
+            result = compare_estimators_tool(
+                arguments["estimator_handles"],
+                dataset=arguments.get("dataset"),
+                data_handle=arguments.get("data_handle"),
+                metric=arguments.get("metric", "MAPE"),
+                cv_folds=arguments.get("cv_folds", 3),
+                horizon=arguments.get("horizon", 12),
             )
             result = sanitize_for_json(result)
 

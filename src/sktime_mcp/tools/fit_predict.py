@@ -6,7 +6,7 @@ Executes complete forecasting workflows.
 
 import asyncio
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from sktime_mcp.runtime.executor import get_executor
 
@@ -18,6 +18,7 @@ def fit_predict_tool(
     dataset: str,
     horizon: int = 12,
     data_handle: Optional[str] = None,
+    coverage: Optional[Union[float, list[float]]] = None,
 ) -> dict[str, Any]:
     """
     Execute a complete fit-predict workflow.
@@ -27,12 +28,17 @@ def fit_predict_tool(
         dataset: Name of demo dataset (e.g., "airline", "sunspots")
         horizon: Forecast horizon (default: 12)
         data_handle: Optional handle from load_data_source for custom data
+        coverage: Optional confidence level(s) for prediction intervals.
+                  Can be a single float (e.g., 0.9 for 90% interval) or
+                  a list of floats for multiple intervals.
 
     Returns:
         Dictionary with:
         - success: bool
         - predictions: Forecast values
         - horizon: Number of steps predicted
+        - intervals: (if coverage provided) Prediction intervals with lower/upper bounds
+        - coverage: (if coverage provided) The coverage level(s) used
 
     Example:
         >>> fit_predict_tool("est_abc123", "airline", horizon=12)
@@ -41,9 +47,24 @@ def fit_predict_tool(
             "predictions": {1: 450.2, 2: 460.5, ...},
             "horizon": 12
         }
+
+        >>> fit_predict_tool("est_abc123", "airline", horizon=12, coverage=0.9)
+        {
+            "success": True,
+            "predictions": {...},
+            "intervals": {"Airline": {"coverage": 0.9, "lower": {...}, "upper": {...}}},
+            "horizon": 12,
+            "coverage": 0.9
+        }
     """
     executor = get_executor()
-    return executor.fit_predict(estimator_handle, dataset, horizon, data_handle=data_handle)
+    return executor.fit_predict(
+        estimator_handle,
+        dataset,
+        horizon,
+        data_handle=data_handle,
+        coverage=coverage,
+    )
 
 
 def fit_tool(
@@ -109,6 +130,7 @@ def fit_predict_async_tool(
     estimator_handle: str,
     dataset: str,
     horizon: int = 12,
+    coverage: Optional[Union[float, list[float]]] = None,
 ) -> dict[str, Any]:
     """
     Execute a fit-predict workflow in the background (non-blocking).
@@ -120,6 +142,9 @@ def fit_predict_async_tool(
         estimator_handle: Handle from instantiate_estimator
         dataset: Name of demo dataset (e.g., "airline", "sunspots")
         horizon: Forecast horizon (default: 12)
+        coverage: Optional confidence level(s) for prediction intervals.
+                  Can be a single float (e.g., 0.9 for 90% interval) or
+                  a list of floats for multiple intervals.
 
     Returns:
         Dictionary with:
@@ -133,6 +158,14 @@ def fit_predict_async_tool(
             "success": True,
             "job_id": "abc-123-def-456",
             "message": "Training job started. Use check_job_status to monitor progress."
+        }
+
+        >>> fit_predict_async_tool("est_abc123", "airline", horizon=12, coverage=0.9)
+        {
+            "success": True,
+            "job_id": "abc-123-def-456",
+            "message": "Training job started for ThetaForecaster on airline. Use check_job_status('abc-123-def-456') to monitor progress.",
+            "coverage": 0.9
         }
     """
 
@@ -168,10 +201,10 @@ def fit_predict_async_tool(
         asyncio.set_event_loop(loop)
 
     # Schedule the coroutine (non-blocking!)
-    coro = executor.fit_predict_async(estimator_handle, dataset, horizon, job_id)
+    coro = executor.fit_predict_async(estimator_handle, dataset, horizon, job_id, coverage)
     asyncio.run_coroutine_threadsafe(coro, loop)
 
-    return {
+    result = {
         "success": True,
         "job_id": job_id,
         "message": f"Training job started for {estimator_name} on {dataset}. Use check_job_status('{job_id}') to monitor progress.",
@@ -179,3 +212,8 @@ def fit_predict_async_tool(
         "dataset": dataset,
         "horizon": horizon,
     }
+
+    if coverage is not None:
+        result["coverage"] = coverage
+
+    return result

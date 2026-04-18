@@ -27,44 +27,45 @@ This MCP is **not** just documentation or static code analysis. It is a **semant
 ## 🛠️ Prerequisites
 
 - **Python 3.10+** (3.9 is listed in `pyproject.toml` but the `mcp` package requires 3.10+)
-- **pip** package manager
+- **`uv`** package manager (recommended) or **pip**
 
 ## 🛠️ Installation
 
-### Virtual Environment Setup
+### Recommended: No-Install with uvx
 
-It is recommended to use a virtual environment:
+The fastest way to get started. `uvx` automatically creates an isolated environment, installs the package, and runs it:
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Run directly - no installation needed!
+uvx sktime-mcp
 ```
 
-### Package Installation
-
-The recommended way to install is using `python3 -m pip`:
-
+With optional dependencies:
 ```bash
-# Install from source
-python3 -m pip install -e .
+# With forecasting extras
+uvx sktime-mcp --extra forecasting
 
-# With all optional dependencies
-python3 -m pip install -e ".[all]"
+# With SQL support
+uvx sktime-mcp --extra sql
 
-# Development installation
-python3 -m pip install -e ".[dev]"
+# With all extras
+uvx sktime-mcp --extra all
 ```
 
-Alternatively, you can use `pip`:
+### Alternative: pip Installation
+
+If you prefer pip or need to develop locally:
 
 ```bash
-# Install from source
-pip install -e .
+# Install from PyPI
+pip install sktime-mcp
 
-# With all optional dependencies
-pip install -e ".[all]"
+# Install with all optional dependencies
+pip install sktime-mcp[all]
 
-# Development installation
+# Development installation from source
+git clone https://github.com/sktime/sktime-mcp.git
+cd sktime-mcp
 pip install -e ".[dev]"
 ```
 ## 🧭 Beginner Setup (First‑Time Users)
@@ -72,26 +73,32 @@ pip install -e ".[dev]"
 If you are new to sktime‑mcp or to MCP‑based workflows, this section provides a minimal starting point to help you verify that your setup is working correctly.
 
 ### What is MCP?
-The Model Context Protocol (MCP) allows Large Language Models (LLMs) to discover, reason about, and execute sktime workflows programmatically. This project exposes sktime’s estimator registry and semantics in a structured way so that LLMs can safely compose and run real time‑series pipelines.
+The Model Context Protocol (MCP) allows Large Language Models (LLMs) to discover, reason about, and execute sktime workflows programmatically. This project exposes sktime's estimator registry and semantics in a structured way so that LLMs can safely compose and run real time‑series pipelines.
 
 ### Prerequisites
 - Python 3.10 or newer
-- A working Python virtual environment (recommended)
-- `pip` installed
+- `uv` package manager (recommended - see [uv installation](https://github.com/astral-sh/uv))
 
-### Minimal Setup Check
-After installing the package, you can verify that the MCP server starts correctly by running:
+### Quick Start with uvx
+
+The fastest way to run sktime-mcp:
 
 ```bash
-sktime-mcp
+# Install uv if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Run sktime-mcp directly - no installation needed!
+uvx sktime-mcp
 ```
 
+That's it! `uvx` handles everything automatically.
 
-> **Note:** On Windows, the `sktime-mcp` command may be installed to a directory
-> not on your `PATH` (e.g., `%APPDATA%\Python\Python3xx\Scripts`). Either add
-> that directory to your `PATH` or use `python -m sktime_mcp.server` instead.
+### Alternative: pip Installation
 
-**Note:** On some systems (like macOS), `pip` may not be available in the path. In such cases, use `python3 -m pip` to ensure the command runs with the intended Python version.
+```bash
+pip install sktime-mcp
+sktime-mcp
+```
 
 
 ## 🚀 Quick Start
@@ -99,11 +106,11 @@ sktime-mcp
 ### Running the MCP Server
 
 ```bash
-# Start the MCP server
-sktime-mcp
+# Recommended: Run directly with uvx
+uvx sktime-mcp
 
-# Or run directly
-python -m sktime_mcp.server
+# Or with pip installed
+sktime-mcp
 ```
 
 ### Connecting from an LLM Client
@@ -122,14 +129,35 @@ The server uses stdio transport by default, compatible with Claude Desktop, Clau
 {
   "mcpServers": {
     "sktime": {
-      "command": "sktime-mcp"
+      "command": "uvx",
+      "args": ["sktime-mcp"]
     }
   }
 }
 ```
 
-If `sktime-mcp` is not on your `PATH`, use the full path to the executable or
-use `python -m sktime_mcp.server` as the command instead.
+**With extras** (e.g., SQL support):
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "uvx",
+      "args": ["sktime-mcp", "--extra", "sql"]
+    }
+  }
+}
+```
+
+If you prefer pip installation instead of uvx:
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "sktime-mcp"
+    }
+  }
+}
+```
 
 ## 📚 Available Tools
 
