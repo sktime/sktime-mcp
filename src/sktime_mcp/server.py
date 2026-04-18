@@ -783,7 +783,7 @@ async def run_server():
 
 def main():
     """Main entry point."""
-    print("Starting sktime-mcp server...")
+    logger.info("Starting sktime-mcp server...")
     asyncio.run(run_server())
 
 
