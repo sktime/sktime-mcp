@@ -4,7 +4,7 @@ Example: Loading data from a SQL database.
 This example demonstrates how to use the sktime-mcp data loading
 functionality with SQL databases (SQLite in this example).
 """
-
+import tempfile
 import sqlite3
 from pathlib import Path
 
@@ -13,7 +13,9 @@ import pandas as pd
 from sktime_mcp.runtime.executor import get_executor
 
 # Create a sample SQLite database
-db_path = Path("/tmp/sample_sales.db")
+tmp_dir = Path(tempfile.gettempdir())
+
+db_path = tmp_dir / "sample_sales.db"
 
 # Create sample data
 sample_data = pd.DataFrame(
