@@ -48,6 +48,7 @@ from sktime_mcp.tools.list_estimators import (
     list_estimators_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
+from sktime_mcp.tools.recommend_forecaster import recommend_forecaster_tool  # NEW
 
 # ---------------------------------------------------------------------------
 # Server configuration via environment variables
@@ -504,6 +505,38 @@ async def list_tools() -> list[Tool]:
                 "required": ["path"],
             },
         ),
+        # -- Recommendation --------------------------------------------------
+        Tool(
+            name="recommend_forecaster",
+            description=(
+                "Recommend appropriate sktime forecasters based on data "
+                "characteristics and requirements. Handles seasonality, trend, "
+                "multivariate data, missing values, and trade-offs between "
+                "accuracy, speed, and interpretability."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "data_characteristics": {
+                        "type": "string",
+                        "description": (
+                            "JSON string with keys: length (int), seasonality (bool), "
+                            "trend (bool), multivariate (bool), missing_values (bool), "
+                            "frequency (str e.g. 'monthly')"
+                        ),
+                    },
+                    "requirements": {
+                        "type": "string",
+                        "description": (
+                            "JSON string with keys: accuracy ('high'/'medium'/'low'), "
+                            "speed ('high'/'medium'/'low'), "
+                            "interpretability ('high'/'medium'/'low'), "
+                            "forecast_horizon (int)"
+                        ),
+                    },
+                },
+            },
+        ),
         # -- Jobs ------------------------------------------------------------
         Tool(
             name="check_job_status",
@@ -711,6 +744,13 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         elif name == "load_model":
             result = load_model_tool(arguments["path"])
+
+        # -- Recommendation --------------------------------------------------
+        elif name == "recommend_forecaster":
+            result = recommend_forecaster_tool(
+                data_characteristics=arguments.get("data_characteristics"),
+                requirements=arguments.get("requirements"),
+            )
 
         # -- Jobs ------------------------------------------------------------
         elif name == "check_job_status":
