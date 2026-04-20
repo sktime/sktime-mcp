@@ -215,5 +215,75 @@ class TestTools:
         assert calls["serialization_format"] == "pickle"
 
 
+class TestMemoryLeakFix:
+    """Tests for issue #218 — memory leak in load_data_source auto-formatting."""
+
+    def test_load_data_source_no_raw_handle_leaked(self):
+        """After auto-formatted load, only one handle should exist in the executor."""
+        import pandas as pd
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+        config = {
+            "type": "pandas",
+            "data": {
+                "date": pd.date_range(start="2020-01-01", periods=24, freq="ME"),
+                "value": list(range(100, 124)),
+            },
+            "time_column": "date",
+            "target_column": "value",
+        }
+
+        result = executor.load_data_source(config)
+        assert result["success"], result.get("error")
+
+        # Only the formatted handle should remain — the raw handle must be freed
+        assert len(executor._data_handles) == 1
+        assert result["data_handle"] in executor._data_handles
+
+    def test_load_data_source_original_handle_not_in_response(self):
+        """Response should not expose a leaked original_handle field."""
+        import pandas as pd
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+        config = {
+            "type": "pandas",
+            "data": {
+                "date": pd.date_range(start="2020-01-01", periods=24, freq="ME"),
+                "value": list(range(100, 124)),
+            },
+            "time_column": "date",
+            "target_column": "value",
+        }
+
+        result = executor.load_data_source(config)
+        assert result["success"]
+
+        # original_handle was previously leaked in the response — should be gone
+        assert "original_handle" not in result
+
+    def test_repeated_loads_handle_count_stays_constant(self):
+        """Loading data N times should result in exactly N handles, not 2*N."""
+        import pandas as pd
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+        config = {
+            "type": "pandas",
+            "data": {
+                "date": pd.date_range(start="2020-01-01", periods=24, freq="ME"),
+                "value": list(range(100, 124)),
+            },
+            "time_column": "date",
+            "target_column": "value",
+        }
+
+        for _ in range(3):
+            executor.load_data_source(config)
+
+        assert len(executor._data_handles) == 3
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
