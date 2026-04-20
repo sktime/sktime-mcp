@@ -79,22 +79,36 @@ def _validate_params(
                 "warnings": warnings,
             }
 
-    # check if keys match known hyperparameters (warn, don't error)
+    # deep validation: check keys against estimator's actual get_params()
     if estimator_name and params:
         registry = get_registry()
         node = registry.get_estimator_by_name(estimator_name)
 
-        if node is not None and node.hyperparameters:
-            known_keys = set(node.hyperparameters.keys())
-            provided_keys = set(params.keys())
-            unknown_keys = provided_keys - known_keys
+        if node is not None:
+            valid_keys = None
 
-            if unknown_keys:
-                warnings.append(
-                    f"Unknown parameter(s) for {estimator_name}: "
-                    f"{sorted(unknown_keys)}. "
-                    f"Known parameters: {sorted(known_keys)}"
-                )
+            # prefer get_params() from a default instance — more reliable than
+            # registry metadata which is derived from __init__ signatures only
+            try:
+                cls = node.estimator_class
+                valid_keys = set(cls().get_params(deep=False).keys())
+            except Exception:
+                # fall back to registry hyperparameter keys if instantiation fails
+                if node.hyperparameters:
+                    valid_keys = set(node.hyperparameters.keys())
+
+            if valid_keys is not None:
+                unknown_keys = set(params.keys()) - valid_keys
+                if unknown_keys:
+                    return {
+                        "valid": False,
+                        "error": (
+                            f"Unknown parameter(s) for {estimator_name}: "
+                            f"{sorted(unknown_keys)}. "
+                            f"Valid parameters are: {sorted(valid_keys)}"
+                        ),
+                        "warnings": warnings,
+                    }
 
     return {"valid": True, "warnings": warnings}
 
