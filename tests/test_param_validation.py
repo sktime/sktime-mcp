@@ -5,6 +5,7 @@ Covers Issue #3: [ENH] Add type validation for params in instantiate_estimator.
 """
 
 import sys
+import types
 
 import pytest
 
@@ -14,6 +15,9 @@ from sktime_mcp.tools.instantiate import (
     _validate_params,
     instantiate_estimator_tool,
     instantiate_pipeline_tool,
+    list_handles_tool,
+    load_model_tool,
+    release_handle_tool,
 )
 
 
@@ -73,15 +77,28 @@ class TestValidateParams:
         assert result["valid"] is False
         assert "Unsupported type" in result["error"]
 
-    def test_unknown_key_produces_warning(self):
-        """Unknown param key should pass validation but produce a warning."""
+    def test_non_string_key_rejected(self):
+        """Top-level non-string keys should be rejected."""
+        result = _validate_params({1: "value"})
+        assert result["valid"] is False
+        assert "Parameter keys must be strings" in result["error"]
+
+    def test_nested_dict_non_string_key_rejected(self):
+        """Nested dicts with non-string keys should be rejected as unsafe."""
+        result = _validate_params({"config": {1: "bad-key"}})
+        assert result["valid"] is False
+        assert "Unsupported type" in result["error"]
+
+    def test_unknown_key_returns_error(self):
+        """Unknown param key should fail validation with clear valid-key list."""
         result = _validate_params(
             {"nonexistent_param_xyz": 1},
             estimator_name="NaiveForecaster",
         )
-        assert result["valid"] is True
-        assert len(result["warnings"]) > 0
-        assert "nonexistent_param_xyz" in result["warnings"][0]
+        assert result["valid"] is False
+        assert "Unknown parameter(s)" in result["error"]
+        assert "nonexistent_param_xyz" in result["error"]
+        assert "Valid parameters" in result["error"]
 
 
 class TestInstantiateEstimatorValidation:
@@ -104,6 +121,33 @@ class TestInstantiateEstimatorValidation:
         result = instantiate_estimator_tool("NaiveForecaster", {"fn": print})
         assert result["success"] is False
         assert "Unsupported type" in result["error"]
+
+    def test_unknown_key_returns_error(self):
+        """Unknown param key should return success=False with clear guidance."""
+        result = instantiate_estimator_tool(
+            "NaiveForecaster",
+            {"nonexistent_param_xyz": 1},
+        )
+        assert result["success"] is False
+        assert "Unknown parameter(s)" in result["error"]
+        assert "nonexistent_param_xyz" in result["error"]
+
+    def test_attaches_validation_warnings_when_successful(self, monkeypatch):
+        """Estimator tool should attach warnings when validation returns them."""
+
+        class DummyExecutor:
+            def instantiate(self, estimator, params):
+                return {"success": True, "handle": "est_123", "estimator": estimator}
+
+        monkeypatch.setattr(
+            "sktime_mcp.tools.instantiate._validate_params",
+            lambda params, estimator_name=None: {"valid": True, "warnings": ["warn-a"]},
+        )
+        monkeypatch.setattr("sktime_mcp.tools.instantiate.get_executor", lambda: DummyExecutor())
+
+        result = instantiate_estimator_tool("NaiveForecaster", {"strategy": "last"})
+        assert result["success"] is True
+        assert result["warnings"] == ["warn-a"]
 
 
 class TestPipelineParamsValidation:
@@ -129,6 +173,126 @@ class TestPipelineParamsValidation:
         )
         assert result["success"] is False
         assert "Unsupported type" in result["error"]
+
+    def test_pipeline_success_attaches_aggregated_warnings(self, monkeypatch):
+        """Pipeline tool should aggregate warnings from component validations."""
+        validation_results = iter(
+            [
+                {"valid": True, "warnings": ["w0"]},
+                {"valid": True, "warnings": ["w1"]},
+            ]
+        )
+
+        class DummyExecutor:
+            def instantiate_pipeline(self, components, params_list):
+                return {"success": True, "handle": "pipe_123", "components": components}
+
+        monkeypatch.setattr(
+            "sktime_mcp.tools.instantiate._validate_params",
+            lambda params, estimator_name=None: next(validation_results),
+        )
+        monkeypatch.setattr("sktime_mcp.tools.instantiate.get_executor", lambda: DummyExecutor())
+
+        result = instantiate_pipeline_tool(
+            ["CompA", "CompB"],
+            [{"a": 1}, {"b": 2}],
+        )
+        assert result["success"] is True
+        assert result["warnings"] == ["w0", "w1"]
+
+
+class TestHandleTools:
+    """Tests for handle-management helper tools."""
+
+    def test_release_handle_messages(self, monkeypatch):
+        """release_handle_tool should map bool result to human-friendly message."""
+
+        class DummyHandleManager:
+            def release_handle(self, handle):
+                return handle == "exists"
+
+        monkeypatch.setattr(
+            "sktime_mcp.tools.instantiate.get_handle_manager",
+            lambda: DummyHandleManager(),
+        )
+
+        ok = release_handle_tool("exists")
+        missing = release_handle_tool("missing")
+        assert ok["success"] is True
+        assert ok["message"] == "Handle released"
+        assert missing["success"] is False
+        assert missing["message"] == "Handle not found"
+
+    def test_list_handles_returns_count(self, monkeypatch):
+        """list_handles_tool should return all handles with count."""
+        handles = [{"handle": "h1"}, {"handle": "h2"}]
+
+        class DummyHandleManager:
+            def list_handles(self):
+                return handles
+
+        monkeypatch.setattr(
+            "sktime_mcp.tools.instantiate.get_handle_manager",
+            lambda: DummyHandleManager(),
+        )
+        result = list_handles_tool()
+        assert result["success"] is True
+        assert result["handles"] == handles
+        assert result["count"] == 2
+
+
+class TestLoadModelTool:
+    """Tests for load_model_tool import, success, and failure paths."""
+
+    def test_load_model_missing_mlflow_dependency(self, monkeypatch):
+        """If mlflow helper import fails, function returns a clear dependency error."""
+        monkeypatch.delitem(sys.modules, "sktime.utils.mlflow_sktime", raising=False)
+        result = load_model_tool("/tmp/model-path")
+        assert result["success"] is False
+        assert "mlflow" in result["error"].lower()
+
+    def test_load_model_success(self, monkeypatch):
+        """Successful load should create + fit handle and return metadata."""
+
+        class DummyEstimator:
+            pass
+
+        fake_module = types.ModuleType("sktime.utils.mlflow_sktime")
+        fake_module.load_model = lambda path: DummyEstimator()
+        monkeypatch.setitem(sys.modules, "sktime.utils.mlflow_sktime", fake_module)
+
+        class DummyHandleManager:
+            def __init__(self):
+                self.marked = None
+
+            def create_handle(self, estimator_name, instance, params, metadata):
+                assert estimator_name == "DummyEstimator"
+                assert params == {}
+                assert metadata["source"] == "loaded"
+                return "est_loaded_1"
+
+            def mark_fitted(self, handle):
+                self.marked = handle
+
+        hm = DummyHandleManager()
+        monkeypatch.setattr("sktime_mcp.tools.instantiate.get_handle_manager", lambda: hm)
+
+        result = load_model_tool("/tmp/model-path")
+        assert result["success"] is True
+        assert result["handle"] == "est_loaded_1"
+        assert result["estimator"] == "DummyEstimator"
+        assert hm.marked == "est_loaded_1"
+
+    def test_load_model_runtime_failure(self, monkeypatch):
+        """Unexpected load exceptions should be surfaced as tool errors."""
+        fake_module = types.ModuleType("sktime.utils.mlflow_sktime")
+        fake_module.load_model = lambda path: (_ for _ in ()).throw(RuntimeError("boom"))
+        monkeypatch.setitem(sys.modules, "sktime.utils.mlflow_sktime", fake_module)
+
+        result = load_model_tool("/tmp/model-path")
+        assert result["success"] is False
+        assert "Failed to load model" in result["error"]
+        assert result["path"] == "/tmp/model-path"
 
 
 if __name__ == "__main__":
