@@ -6,6 +6,7 @@ functionality with SQL databases (SQLite in this example).
 """
 
 import sqlite3
+import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -13,7 +14,7 @@ import pandas as pd
 from sktime_mcp.runtime.executor import get_executor
 
 # Create a sample SQLite database
-db_path = Path("/tmp/sample_sales.db")
+db_path = Path(tempfile.gettempdir()) / "sample_sales.db"
 
 # Create sample data
 sample_data = pd.DataFrame(
