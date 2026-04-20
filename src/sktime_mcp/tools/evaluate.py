@@ -52,11 +52,23 @@ def evaluate_estimator_tool(
         if initial_window < 1:
             initial_window = 1
 
-        cv = ExpandingWindowSplitter(initial_window=initial_window, step_length=1, fh=[1])
+        # Derive step_length so the splitter produces ~cv_folds splits up-front
+        # rather than generating every possible split with step_length=1 and
+        # trimming post-hoc. This gives both compute savings on large series
+        # and more representative, spread-out evaluation windows.
+        available = n - initial_window
+        if cv_folds is not None and cv_folds > 0 and available > 0:
+            step_length = max(1, available // cv_folds)
+        else:
+            step_length = 1
+
+        cv = ExpandingWindowSplitter(
+            initial_window=initial_window, step_length=step_length, fh=[1]
+        )
 
         results = evaluate(forecaster=instance, y=y, X=X, cv=cv)
-        # `ExpandingWindowSplitter(step_length=1)` can yield more splits than requested.
-        # `cv_folds` is treated as "max folds to run/return" for predictable behavior.
+        # Safety cap: integer division can still overshoot on very small series
+        # (e.g. n=10, cv_folds=3 -> step_length=1, 5 folds produced).
         if cv_folds is not None and cv_folds > 0:
             results = results.head(cv_folds)
 
