@@ -55,6 +55,10 @@ def evaluate_estimator_tool(
         cv = ExpandingWindowSplitter(initial_window=initial_window, step_length=1, fh=[1])
 
         results = evaluate(forecaster=instance, y=y, X=X, cv=cv)
+        # `ExpandingWindowSplitter(step_length=1)` can yield more splits than requested.
+        # `cv_folds` is treated as "max folds to run/return" for predictable behavior.
+        if cv_folds is not None and cv_folds > 0:
+            results = results.head(cv_folds)
 
         # Convert index or objects to strings suitable for JSON output if needed
         # We drop objects that are complex (like estimator instances themselves) from the output
