@@ -36,12 +36,20 @@ def _format_value(value: Any) -> str:
         return repr(value)
 
 
+def _get_public_module(module: str) -> str:
+    """Strip private submodule suffixes to get the public API import path."""
+    parts = module.split(".")
+    while parts and parts[-1].startswith("_"):
+        parts.pop()
+    return ".".join(parts)
+
+
 def _get_estimator_module(estimator_name: str) -> Optional[str]:
-    """Get the module path for an estimator."""
+    """Get the public module path for an estimator."""
     registry = get_registry()
     node = registry.get_estimator_by_name(estimator_name)
     if node and node.class_ref:
-        return node.class_ref.__module__
+        return _get_public_module(node.class_ref.__module__)
     return None
 
 
@@ -95,7 +103,7 @@ def _generate_pipeline_code(
         if not node:
             return {"success": False, "error": f"Unknown estimator in pipeline: {comp_name}"}
         component_tasks.append(node.task)
-        module = node.class_ref.__module__
+        module = _get_public_module(node.class_ref.__module__)
         imports.add(f"from {module} import {comp_name}")
 
     # Determine pipeline type
