@@ -215,5 +215,99 @@ class TestTools:
         assert calls["serialization_format"] == "pickle"
 
 
+class TestTransformTools:
+    """Tests for fit_transform and transform tools (Issue #167)."""
+
+    def test_fit_transform_demo_dataset(self):
+        """fit_transform on a demo dataset returns transformed series."""
+        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+        from sktime_mcp.tools.transform_tools import fit_transform_tool
+
+        inst = instantiate_estimator_tool("Detrender")
+        assert inst["success"], inst.get("error")
+        handle = inst["handle"]
+
+        result = fit_transform_tool(handle, dataset="airline")
+
+        assert result["success"], result.get("error")
+        assert "transformed" in result
+        assert result["n_timepoints"] > 0
+        assert result["output_type"] in ("series", "dataframe")
+        assert result["estimator_handle"] == handle
+
+    def test_fit_transform_marks_handle_fitted(self):
+        """fit_transform should mark the estimator handle as fitted."""
+        from sktime_mcp.runtime.handles import get_handle_manager
+        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+        from sktime_mcp.tools.transform_tools import fit_transform_tool
+
+        inst = instantiate_estimator_tool("Detrender")
+        handle = inst["handle"]
+
+        assert not get_handle_manager().is_fitted(handle)
+        fit_transform_tool(handle, dataset="airline")
+        assert get_handle_manager().is_fitted(handle)
+
+    def test_transform_after_fit_transform(self):
+        """transform should succeed after fit_transform has been called."""
+        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+        from sktime_mcp.tools.transform_tools import fit_transform_tool, transform_tool
+
+        inst = instantiate_estimator_tool("Detrender")
+        handle = inst["handle"]
+
+        fit_result = fit_transform_tool(handle, dataset="airline")
+        assert fit_result["success"]
+
+        transform_result = transform_tool(handle, dataset="airline")
+        assert transform_result["success"], transform_result.get("error")
+        assert "transformed" in transform_result
+        assert transform_result["n_timepoints"] > 0
+
+    def test_transform_without_fit_fails(self):
+        """transform on an unfitted handle should return an error."""
+        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+        from sktime_mcp.tools.transform_tools import transform_tool
+
+        inst = instantiate_estimator_tool("Detrender")
+        handle = inst["handle"]
+
+        result = transform_tool(handle, dataset="airline")
+
+        assert not result["success"]
+        assert "not fitted" in result["error"].lower()
+
+    def test_fit_transform_no_data_source_errors(self):
+        """fit_transform without dataset or data_handle should return an error."""
+        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+        from sktime_mcp.tools.transform_tools import fit_transform_tool
+
+        inst = instantiate_estimator_tool("Detrender")
+        result = fit_transform_tool(inst["handle"])
+
+        assert not result["success"]
+        assert "error" in result
+
+    def test_fit_transform_unknown_handle_errors(self):
+        """fit_transform with a non-existent handle should return an error."""
+        from sktime_mcp.tools.transform_tools import fit_transform_tool
+
+        result = fit_transform_tool("est_doesnotexist", dataset="airline")
+
+        assert not result["success"]
+        assert "not found" in result["error"].lower()
+
+    def test_server_exposes_transform_tools(self):
+        """list_tools should include fit_transform and transform."""
+        import asyncio
+
+        from sktime_mcp.server import list_tools
+
+        tools = asyncio.run(list_tools())
+        names = {t.name for t in tools}
+        assert "fit_transform" in names
+        assert "transform" in names
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
