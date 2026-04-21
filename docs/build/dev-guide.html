@@ -1,0 +1,253 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Developer Guide &mdash; sktime-mcp 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/extra.css?v=e8756899" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.png"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="API Reference" href="api.html" />
+    <link rel="prev" title="Complete Code Explanation: sktime-mcp" href="implementation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            sktime-mcp
+              <img src="_static/favicon.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="intro.html">sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="use-cases.html">🎯 Use Cases &amp; Personas</a></li>
+<li class="toctree-l1"><a class="reference internal" href="user-guide.html">📘 User Guide</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="usage-examples.html">Usage Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data-sources.html">Data Source Support</a></li>
+<li class="toctree-l1"><a class="reference internal" href="background-jobs.html">Background Job Management</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Development</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture Diagram</a></li>
+<li class="toctree-l1"><a class="reference internal" href="implementation.html">Complete Code Explanation: sktime-mcp</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#development-prerequisites">Development Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#setup">Setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#running-the-server-locally">Running The Server Locally</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#running-tests">Running Tests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#standard-local-checks">Standard Local Checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#project-layout">Project Layout</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#architecture-overview">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#adding-a-new-mcp-tool">Adding A New MCP Tool</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#adding-a-new-data-source-adapter">Adding A New Data Source Adapter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#adding-a-demo-dataset">Adding A Demo Dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#documentation-build">Documentation Build</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">sktime-mcp</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Developer Guide</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/dev-guide.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="developer-guide">
+<h1>Developer Guide<a class="headerlink" href="#developer-guide" title="Link to this heading"></a></h1>
+<p>This guide explains how the project is structured, how to develop new features, and how to test changes.</p>
+<section id="development-prerequisites">
+<h2>Development Prerequisites<a class="headerlink" href="#development-prerequisites" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Python 3.9+</p></li>
+<li><p>pip</p></li>
+<li><p>Optional: <code class="docutils literal notranslate"><span class="pre">mkdocs</span></code> if you want to build the documentation site</p></li>
+</ul>
+</section>
+<section id="setup">
+<h2>Setup<a class="headerlink" href="#setup" title="Link to this heading"></a></h2>
+<p>From the repo root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[dev]&quot;</span>
+</pre></div>
+</div>
+<p>Validate the environment before running tests:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import sktime; print(sktime.__version__)&quot;</span>
+</pre></div>
+</div>
+<p>If this command fails with <code class="docutils literal notranslate"><span class="pre">ModuleNotFoundError:</span> <span class="pre">No</span> <span class="pre">module</span> <span class="pre">named</span> <span class="pre">'sktime'</span></code>, reinstall project dependencies in the active virtual environment:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[dev]&quot;</span>
+</pre></div>
+</div>
+<p>If you work with SQL or file formats:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[sql]&quot;</span>
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[files]&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="running-the-server-locally">
+<h2>Running The Server Locally<a class="headerlink" href="#running-the-server-locally" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>sktime_mcp.server
+</pre></div>
+</div>
+</section>
+<section id="running-tests">
+<h2>Running Tests<a class="headerlink" href="#running-tests" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pytest
+</pre></div>
+</div>
+</section>
+<section id="standard-local-checks">
+<h2>Standard Local Checks<a class="headerlink" href="#standard-local-checks" title="Link to this heading"></a></h2>
+<p>From the repo root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>make<span class="w"> </span>check
+</pre></div>
+</div>
+<p>Auto-fix formatting and fixable lint issues:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>make<span class="w"> </span>format-fix
+</pre></div>
+</div>
+<p>If <code class="docutils literal notranslate"><span class="pre">make</span></code> is unavailable (common on Windows), run:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>black<span class="w"> </span>--check<span class="w"> </span>.
+python<span class="w"> </span>-m<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>.
+python<span class="w"> </span>-m<span class="w"> </span>pytest
+</pre></div>
+</div>
+</section>
+<section id="project-layout">
+<h2>Project Layout<a class="headerlink" href="#project-layout" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/server.py</span></code> MCP entry point and tool router</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/tools/</span></code> MCP tool implementations</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/registry/</span></code> sktime estimator discovery and tag logic</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/composition/</span></code> pipeline validation rules</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/runtime/</span></code> executor and handle manager</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/data/</span></code> data source adapters and registry</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">examples/</span></code> runnable examples</p></li>
+</ul>
+</section>
+<section id="architecture-overview">
+<h2>Architecture Overview<a class="headerlink" href="#architecture-overview" title="Link to this heading"></a></h2>
+<p>High-level flow:</p>
+<ol class="arabic simple">
+<li><p>MCP server receives a tool call</p></li>
+<li><p>The server routes to a tool implementation in <code class="docutils literal notranslate"><span class="pre">tools/</span></code></p></li>
+<li><p>Tools use the registry/runtime layers to execute operations</p></li>
+<li><p>Results are sanitized and returned to the client</p></li>
+</ol>
+<p>This separation keeps the MCP surface small while allowing deeper functionality in the runtime and data layers.</p>
+</section>
+<section id="adding-a-new-mcp-tool">
+<h2>Adding A New MCP Tool<a class="headerlink" href="#adding-a-new-mcp-tool" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p>Create a new module under <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/tools/</span></code> with a <code class="docutils literal notranslate"><span class="pre">*_tool</span></code> function.</p></li>
+<li><p>Add a tool schema in <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/server.py</span></code> within <code class="docutils literal notranslate"><span class="pre">list_tools()</span></code>.</p></li>
+<li><p>Add a handler in <code class="docutils literal notranslate"><span class="pre">call_tool()</span></code> to dispatch the tool name.</p></li>
+<li><p>Add tests in <code class="docutils literal notranslate"><span class="pre">tests/</span></code>.</p></li>
+<li><p>Document the tool in <code class="docutils literal notranslate"><span class="pre">docs/user-guide.md</span></code>.</p></li>
+</ol>
+</section>
+<section id="adding-a-new-data-source-adapter">
+<h2>Adding A New Data Source Adapter<a class="headerlink" href="#adding-a-new-data-source-adapter" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p>Implement a new adapter in <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/data/adapters/</span></code> that inherits <code class="docutils literal notranslate"><span class="pre">DataSourceAdapter</span></code>.</p></li>
+<li><p>Register it in <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/data/registry.py</span></code> using <code class="docutils literal notranslate"><span class="pre">DataSourceRegistry.register()</span></code>.</p></li>
+<li><p>Add tests covering <code class="docutils literal notranslate"><span class="pre">load()</span></code>, <code class="docutils literal notranslate"><span class="pre">validate()</span></code>, and <code class="docutils literal notranslate"><span class="pre">to_sktime_format()</span></code>.</p></li>
+<li><p>Update <code class="docutils literal notranslate"><span class="pre">docs/data-sources.md</span></code>.</p></li>
+</ol>
+</section>
+<section id="adding-a-demo-dataset">
+<h2>Adding A Demo Dataset<a class="headerlink" href="#adding-a-demo-dataset" title="Link to this heading"></a></h2>
+<p>Update <code class="docutils literal notranslate"><span class="pre">DEMO_DATASETS</span></code> in <code class="docutils literal notranslate"><span class="pre">src/sktime_mcp/runtime/executor.py</span></code> with a new loader string. Ensure the loader function returns a sktime-compatible dataset.</p>
+</section>
+<section id="documentation-build">
+<h2>Documentation Build<a class="headerlink" href="#documentation-build" title="Link to this heading"></a></h2>
+<p>If you want to build the docs site locally:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>mkdocs
+mkdocs<span class="w"> </span>serve
+</pre></div>
+</div>
+<p>The config lives in <code class="docutils literal notranslate"><span class="pre">mkdocs.yml</span></code> and the docs content is under <code class="docutils literal notranslate"><span class="pre">docs/</span></code>.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="implementation.html" class="btn btn-neutral float-left" title="Complete Code Explanation: sktime-mcp" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="api.html" class="btn btn-neutral float-right" title="API Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, sktime-mcp contributors.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

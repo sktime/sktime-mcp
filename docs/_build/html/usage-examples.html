@@ -1,0 +1,303 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Usage Examples &mdash; sktime-mcp 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/extra.css?v=e8756899" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.png"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Data Source Support" href="data-sources.html" />
+    <link rel="prev" title="📘 User Guide" href="user-guide.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            sktime-mcp
+              <img src="_static/favicon.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="intro.html">sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="use-cases.html">🎯 Use Cases &amp; Personas</a></li>
+<li class="toctree-l1"><a class="reference internal" href="user-guide.html">📘 User Guide</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Usage Examples</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#example-llm-flows">🔄 Example LLM Flows</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#flow-1-simple-forecasting">Flow 1: Simple Forecasting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#flow-2-pipeline-forecasting">Flow 2: Pipeline Forecasting ⭐</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#individual-tool-usage">🛠️ Individual Tool Usage</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#discovery-search">Discovery &amp; Search</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#handle-management">Handle Management</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#model-persistence">Model Persistence</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="data-sources.html">Data Source Support</a></li>
+<li class="toctree-l1"><a class="reference internal" href="background-jobs.html">Background Job Management</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Development</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture Diagram</a></li>
+<li class="toctree-l1"><a class="reference internal" href="implementation.html">Complete Code Explanation: sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dev-guide.html">Developer Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">sktime-mcp</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Usage Examples</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/usage-examples.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="usage-examples">
+<h1>Usage Examples<a class="headerlink" href="#usage-examples" title="Link to this heading"></a></h1>
+<p>This page provides common usage patterns and example flows for interacting with the sktime MCP server. These examples demonstrate how an LLM or user can interact with the server to perform time series forecasting tasks.</p>
+<section id="example-llm-flows">
+<h2>🔄 Example LLM Flows<a class="headerlink" href="#example-llm-flows" title="Link to this heading"></a></h2>
+<p>These flows show how an LLM would chain multiple tool calls to achieve a high-level goal.</p>
+<section id="flow-1-simple-forecasting">
+<h3>Flow 1: Simple Forecasting<a class="headerlink" href="#flow-1-simple-forecasting" title="Link to this heading"></a></h3>
+<p><strong>User Prompt:</strong> “Forecast monthly airline passengers using a probabilistic model.”</p>
+<p>The agent begins by searching for forecasting models that support the required capabilities.</p>
+<p><strong>1. Discover Models</strong>
+First, the agent searches for forecasting models that support prediction intervals.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;list_estimators&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;task&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;forecasting&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;tags&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;capability:pred_int&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>After identifying suitable models, the agent examines a specific estimator to understand how it can be configured.</p>
+<p><strong>2. Inspect Choice</strong>
+The agent inspects a specific estimator (e.g., ARIMA) to understand its parameters.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;describe_estimator&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;estimator&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ARIMA&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>With the estimator selected and understood, the agent creates a concrete instance that can be fitted to data.</p>
+<p><strong>3. Instantiate</strong>
+The agent instantiates the estimator with specific parameters.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;instantiate_estimator&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;estimator&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ARIMA&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;params&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;order&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">]</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><em>Returns:</em> <code class="docutils literal notranslate"><span class="pre">{&quot;handle&quot;:</span> <span class="pre">&quot;est_abc123&quot;}</span></code></p>
+<p><strong>4. Execute</strong>
+Finally, the agent fits the model on the airline dataset and generates a forecast.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;fit_predict&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;estimator_handle&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;est_abc123&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;dataset&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;airline&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;horizon&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><em>Returns:</em> <code class="docutils literal notranslate"><span class="pre">{&quot;predictions&quot;:</span> <span class="pre">{1:</span> <span class="pre">450.2,</span> <span class="pre">2:</span> <span class="pre">455.1,</span> <span class="pre">...}}</span></code></p>
+</section>
+<hr class="docutils" />
+<section id="flow-2-pipeline-forecasting">
+<h3>Flow 2: Pipeline Forecasting ⭐<a class="headerlink" href="#flow-2-pipeline-forecasting" title="Link to this heading"></a></h3>
+<p><strong>User Prompt:</strong> “Forecast with deseasonalization and detrending preprocessing.”</p>
+<p><strong>1. Validate Composition</strong>
+Before creating the pipeline, the agent checks if the components can work together.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;validate_pipeline&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;components&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;ConditionalDeseasonalizer&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Detrender&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;ARIMA&quot;</span><span class="p">]</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><em>Returns:</em> <code class="docutils literal notranslate"><span class="pre">{&quot;valid&quot;:</span> <span class="pre">true}</span></code></p>
+<p><strong>2. Instantiate Pipeline</strong>
+The agent instantiates the entire pipeline in a single call.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;instantiate_pipeline&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;components&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;ConditionalDeseasonalizer&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Detrender&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;ARIMA&quot;</span><span class="p">],</span>
+<span class="w">    </span><span class="nt">&quot;params_list&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[{},</span><span class="w"> </span><span class="p">{},</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;order&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">]}]</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><em>Returns:</em> <code class="docutils literal notranslate"><span class="pre">{&quot;handle&quot;:</span> <span class="pre">&quot;est_xyz789&quot;,</span> <span class="pre">&quot;pipeline&quot;:</span> <span class="pre">&quot;ConditionalDeseasonalizer</span> <span class="pre">→</span> <span class="pre">Detrender</span> <span class="pre">→</span> <span class="pre">ARIMA&quot;}</span></code></p>
+<p><strong>3. Execute</strong>
+The pipeline is executed just like a single estimator.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;fit_predict&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;estimator_handle&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;est_xyz789&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;dataset&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;airline&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;horizon&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="individual-tool-usage">
+<h2>🛠️ Individual Tool Usage<a class="headerlink" href="#individual-tool-usage" title="Link to this heading"></a></h2>
+<p>Here are some standalone examples of using specific tools.</p>
+<section id="discovery-search">
+<h3>Discovery &amp; Search<a class="headerlink" href="#discovery-search" title="Link to this heading"></a></h3>
+<p><strong>List Estimators</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;list_estimators&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;task&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;forecasting&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;tags&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;capability:pred_int&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Search by Name</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;search_estimators&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;query&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ARIMA&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="handle-management">
+<h3>Handle Management<a class="headerlink" href="#handle-management" title="Link to this heading"></a></h3>
+<p><strong>Release a Handle</strong>
+When you are done with an estimator, it’s good practice to release it to free up resources.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;release_handle&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;handle&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;est_abc123&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="model-persistence">
+<h3>Model Persistence<a class="headerlink" href="#model-persistence" title="Link to this heading"></a></h3>
+<p><strong>Save a Fitted Estimator</strong>
+Use <code class="docutils literal notranslate"><span class="pre">save_model</span></code> after fitting an estimator or pipeline handle. The underlying <code class="docutils literal notranslate"><span class="pre">sktime.utils.mlflow_sktime.save_model</span></code> API saves to a local filesystem path.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;save_model&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;estimator_handle&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;est_abc123&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/absolute/path/to/model_dir&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;mlflow_params&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;serialization_format&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;pickle&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><em>Returns:</em> <code class="docutils literal notranslate"><span class="pre">{&quot;success&quot;:</span> <span class="pre">true,</span> <span class="pre">&quot;saved_path&quot;:</span> <span class="pre">&quot;/absolute/path/to/model_dir&quot;,</span> <span class="pre">&quot;message&quot;:</span> <span class="pre">&quot;Model</span> <span class="pre">saved</span> <span class="pre">successfully</span> <span class="pre">to</span> <span class="pre">'/absolute/path/to/model_dir'&quot;}</span></code></p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="user-guide.html" class="btn btn-neutral float-left" title="📘 User Guide" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="data-sources.html" class="btn btn-neutral float-right" title="Data Source Support" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, sktime-mcp contributors.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

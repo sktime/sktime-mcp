@@ -1,0 +1,563 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Source Support &mdash; sktime-mcp 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/extra.css?v=e8756899" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.png"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Background Job Management" href="background-jobs.html" />
+    <link rel="prev" title="Usage Examples" href="usage-examples.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            sktime-mcp
+              <img src="_static/favicon.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="intro.html">sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="use-cases.html">🎯 Use Cases &amp; Personas</a></li>
+<li class="toctree-l1"><a class="reference internal" href="user-guide.html">📘 User Guide</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="usage-examples.html">Usage Examples</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Data Source Support</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#supported-data-sources">Supported Data Sources</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#quick-start">Quick Start</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#csv-file">1. CSV File</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sql-database">2. SQL Database</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#mcp-tools">MCP Tools</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#load-data-source"><code class="docutils literal notranslate"><span class="pre">load_data_source</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fit-predict-with-data"><code class="docutils literal notranslate"><span class="pre">fit_predict_with_data</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#list-data-sources"><code class="docutils literal notranslate"><span class="pre">list_data_sources</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#list-available-data"><code class="docutils literal notranslate"><span class="pre">list_available_data</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#release-data-handle"><code class="docutils literal notranslate"><span class="pre">release_data_handle</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#configuration-options">Configuration Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#pandas-adapter">Pandas Adapter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sql-adapter">SQL Adapter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#file-adapter">File Adapter</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#data-validation">Data Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#core-pandas-support-included">Core (Pandas support included)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#with-sql-support">With SQL support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#with-file-format-support">With file format support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#with-all-optional-dependencies">With all optional dependencies</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#architecture">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#metadata">Metadata</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#error-handling">Error Handling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#llm-guidelines-best-practices">💡 LLM Guidelines &amp; Best Practices</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#column-identification">1. Column Identification</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#strategic-loading">2. Strategic Loading</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#frequency-hurdles">3. Frequency Hurdles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#validation-first">4. Validation First</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#troubleshooting">Troubleshooting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#no-module-named-sqlalchemy">“No module named ‘sqlalchemy’”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#no-module-named-openpyxl-for-excel-files">“No module named ‘openpyxl’” (for Excel files)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#no-module-named-pyarrow-for-parquet-files">“No module named ‘pyarrow’” (for Parquet files)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#could-not-infer-frequency">“Could not infer frequency”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#index-must-be-datetimeindex">“Index must be DatetimeIndex”</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="background-jobs.html">Background Job Management</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Development</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture Diagram</a></li>
+<li class="toctree-l1"><a class="reference internal" href="implementation.html">Complete Code Explanation: sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dev-guide.html">Developer Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">sktime-mcp</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Data Source Support</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/data-sources.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="data-source-support">
+<h1>Data Source Support<a class="headerlink" href="#data-source-support" title="Link to this heading"></a></h1>
+<p>sktime-mcp now supports loading data from multiple sources beyond the built-in demo datasets!</p>
+<section id="supported-data-sources">
+<h2>Supported Data Sources<a class="headerlink" href="#supported-data-sources" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p><strong>SQL Databases</strong> - PostgreSQL, MySQL, SQLite, MSSQL</p></li>
+<li><p><strong>Files</strong> - CSV, TSV, Excel, Parquet</p></li>
+</ol>
+</section>
+<section id="quick-start">
+<h2>Quick Start<a class="headerlink" href="#quick-start" title="Link to this heading"></a></h2>
+<section id="csv-file">
+<h3>1. CSV File<a class="headerlink" href="#csv-file" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">executor</span><span class="o">.</span><span class="n">load_data_source</span><span class="p">({</span>
+    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;file&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;path&quot;</span><span class="p">:</span> <span class="s2">&quot;/path/to/data.csv&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;time_column&quot;</span><span class="p">:</span> <span class="s2">&quot;date&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;target_column&quot;</span><span class="p">:</span> <span class="s2">&quot;sales&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;exog_columns&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;temperature&quot;</span><span class="p">,</span> <span class="s2">&quot;promotion&quot;</span><span class="p">],</span>  <span class="c1"># Optional</span>
+<span class="p">})</span>
+</pre></div>
+</div>
+</section>
+<section id="sql-database">
+<h3>2. SQL Database<a class="headerlink" href="#sql-database" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># SQLite</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">executor</span><span class="o">.</span><span class="n">load_data_source</span><span class="p">({</span>
+    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;sql&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;connection_string&quot;</span><span class="p">:</span> <span class="s2">&quot;sqlite:///path/to/database.db&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;query&quot;</span><span class="p">:</span> <span class="s2">&quot;SELECT date, sales FROM sales_table&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;time_column&quot;</span><span class="p">:</span> <span class="s2">&quot;date&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;target_column&quot;</span><span class="p">:</span> <span class="s2">&quot;sales&quot;</span><span class="p">,</span>
+<span class="p">})</span>
+
+<span class="c1"># PostgreSQL</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">executor</span><span class="o">.</span><span class="n">load_data_source</span><span class="p">({</span>
+    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;sql&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;connection_string&quot;</span><span class="p">:</span> <span class="s2">&quot;postgresql://user:pass@host:5432/db&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;query&quot;</span><span class="p">:</span> <span class="s2">&quot;SELECT * FROM sales WHERE date &gt;= &#39;2020-01-01&#39;&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;time_column&quot;</span><span class="p">:</span> <span class="s2">&quot;date&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;target_column&quot;</span><span class="p">:</span> <span class="s2">&quot;sales&quot;</span><span class="p">,</span>
+<span class="p">})</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="mcp-tools">
+<h2>MCP Tools<a class="headerlink" href="#mcp-tools" title="Link to this heading"></a></h2>
+<section id="load-data-source">
+<h3><code class="docutils literal notranslate"><span class="pre">load_data_source</span></code><a class="headerlink" href="#load-data-source" title="Link to this heading"></a></h3>
+<p>Load data from any supported source.</p>
+<p><strong>Arguments:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">config</span></code> (dict): Data source configuration</p></li>
+</ul>
+<p><strong>Returns:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">success</span></code> (bool): Whether loading succeeded</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">data_handle</span></code> (str): Handle to reference the loaded data</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">metadata</span></code> (dict): Information about the data (rows, columns, frequency, etc.)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">validation</span></code> (dict): Data quality validation results</p></li>
+</ul>
+<p><strong>Example:</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;config&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;pandas&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;date&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;value&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">]},</span>
+<span class="w">    </span><span class="nt">&quot;time_column&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;date&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;target_column&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;value&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="fit-predict-with-data">
+<h3><code class="docutils literal notranslate"><span class="pre">fit_predict_with_data</span></code><a class="headerlink" href="#fit-predict-with-data" title="Link to this heading"></a></h3>
+<p>Fit a model and generate predictions using custom data.</p>
+<p><strong>Arguments:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">estimator_handle</span></code> (str): Handle from <code class="docutils literal notranslate"><span class="pre">instantiate_estimator</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">data_handle</span></code> (str): Handle from <code class="docutils literal notranslate"><span class="pre">load_data_source</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">horizon</span></code> (int): Forecast horizon (default: 12)</p></li>
+</ul>
+<p><strong>Example:</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;estimator_handle&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;est_abc123&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;data_handle&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;data_xyz789&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;horizon&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">7</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="list-data-sources">
+<h3><code class="docutils literal notranslate"><span class="pre">list_data_sources</span></code><a class="headerlink" href="#list-data-sources" title="Link to this heading"></a></h3>
+<p>List all available data source types.</p>
+<p><strong>Returns:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">sources</span></code> (list): Available source types</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">descriptions</span></code> (dict): Description for each source</p></li>
+</ul>
+</section>
+<section id="list-available-data">
+<h3><code class="docutils literal notranslate"><span class="pre">list_available_data</span></code><a class="headerlink" href="#list-available-data" title="Link to this heading"></a></h3>
+<p>List available data in a single response, including demo datasets and active handles.</p>
+<p><strong>Arguments (optional):</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">is_demo</span></code> (bool):</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">true</span></code> → only demo datasets</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">false</span></code> → only active data handles</p></li>
+<li><p>omitted → both</p></li>
+</ul>
+</li>
+</ul>
+<p><strong>Returns:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">system_demos</span></code> (list): Built-in demo dataset names</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">active_handles</span></code> (list): Active data handle information</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">total</span></code> (int): Combined count of returned entries</p></li>
+</ul>
+</section>
+<section id="release-data-handle">
+<h3><code class="docutils literal notranslate"><span class="pre">release_data_handle</span></code><a class="headerlink" href="#release-data-handle" title="Link to this heading"></a></h3>
+<p>Release a data handle and free memory.</p>
+<p><strong>Arguments:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">data_handle</span></code> (str): Handle to release</p></li>
+</ul>
+</section>
+</section>
+<section id="configuration-options">
+<h2>Configuration Options<a class="headerlink" href="#configuration-options" title="Link to this heading"></a></h2>
+<section id="pandas-adapter">
+<h3>Pandas Adapter<a class="headerlink" href="#pandas-adapter" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;pandas&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="n">df_or_dict</span><span class="p">,</span>  <span class="c1"># DataFrame or dict</span>
+    <span class="s2">&quot;time_column&quot;</span><span class="p">:</span> <span class="s2">&quot;date&quot;</span><span class="p">,</span>  <span class="c1"># Optional, will try to detect</span>
+    <span class="s2">&quot;target_column&quot;</span><span class="p">:</span> <span class="s2">&quot;sales&quot;</span><span class="p">,</span>  <span class="c1"># Optional, defaults to first column</span>
+    <span class="s2">&quot;exog_columns&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;temp&quot;</span><span class="p">,</span> <span class="s2">&quot;promo&quot;</span><span class="p">],</span>  <span class="c1"># Optional</span>
+    <span class="s2">&quot;frequency&quot;</span><span class="p">:</span> <span class="s2">&quot;D&quot;</span>  <span class="c1"># Optional, will try to infer</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="sql-adapter">
+<h3>SQL Adapter<a class="headerlink" href="#sql-adapter" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;sql&quot;</span><span class="p">,</span>
+    
+    <span class="c1"># Option 1: Connection string</span>
+    <span class="s2">&quot;connection_string&quot;</span><span class="p">:</span> <span class="s2">&quot;postgresql://user:pass@host:5432/db&quot;</span><span class="p">,</span>
+    
+    <span class="c1"># Option 2: Individual components</span>
+    <span class="s2">&quot;dialect&quot;</span><span class="p">:</span> <span class="s2">&quot;postgresql&quot;</span><span class="p">,</span>  <span class="c1"># postgresql, mysql, sqlite, mssql</span>
+    <span class="s2">&quot;host&quot;</span><span class="p">:</span> <span class="s2">&quot;localhost&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;port&quot;</span><span class="p">:</span> <span class="mi">5432</span><span class="p">,</span>
+    <span class="s2">&quot;database&quot;</span><span class="p">:</span> <span class="s2">&quot;mydb&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;username&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;password&quot;</span><span class="p">:</span> <span class="s2">&quot;pass&quot;</span><span class="p">,</span>
+    
+    <span class="c1"># Query</span>
+    <span class="s2">&quot;query&quot;</span><span class="p">:</span> <span class="s2">&quot;SELECT * FROM sales&quot;</span><span class="p">,</span>  <span class="c1"># Direct SQL query</span>
+    <span class="c1"># OR</span>
+    <span class="s2">&quot;table&quot;</span><span class="p">:</span> <span class="s2">&quot;sales&quot;</span><span class="p">,</span>  <span class="c1"># Table name</span>
+    <span class="s2">&quot;filters&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;region&quot;</span><span class="p">:</span> <span class="s2">&quot;North&quot;</span><span class="p">},</span>  <span class="c1"># Optional filters</span>
+    
+    <span class="c1"># Column mapping</span>
+    <span class="s2">&quot;time_column&quot;</span><span class="p">:</span> <span class="s2">&quot;date&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;target_column&quot;</span><span class="p">:</span> <span class="s2">&quot;sales&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;exog_columns&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;temperature&quot;</span><span class="p">],</span>
+    
+    <span class="c1"># Optional</span>
+    <span class="s2">&quot;parse_dates&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;date&quot;</span><span class="p">],</span>
+    <span class="s2">&quot;frequency&quot;</span><span class="p">:</span> <span class="s2">&quot;D&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="file-adapter">
+<h3>File Adapter<a class="headerlink" href="#file-adapter" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;file&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;path&quot;</span><span class="p">:</span> <span class="s2">&quot;/path/to/data.csv&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;format&quot;</span><span class="p">:</span> <span class="s2">&quot;csv&quot;</span><span class="p">,</span>  <span class="c1"># csv, excel, parquet (auto-detected if not specified)</span>
+    
+    <span class="c1"># Column mapping</span>
+    <span class="s2">&quot;time_column&quot;</span><span class="p">:</span> <span class="s2">&quot;date&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;target_column&quot;</span><span class="p">:</span> <span class="s2">&quot;sales&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;exog_columns&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;temperature&quot;</span><span class="p">],</span>
+    
+    <span class="c1"># CSV-specific options</span>
+    <span class="s2">&quot;csv_options&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;sep&quot;</span><span class="p">:</span> <span class="s2">&quot;,&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;header&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="s2">&quot;encoding&quot;</span><span class="p">:</span> <span class="s2">&quot;utf-8&quot;</span>
+    <span class="p">},</span>
+    
+    <span class="c1"># Excel-specific options</span>
+    <span class="s2">&quot;excel_options&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;sheet_name&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="s2">&quot;header&quot;</span><span class="p">:</span> <span class="mi">0</span>
+    <span class="p">},</span>
+    
+    <span class="c1"># Common options</span>
+    <span class="s2">&quot;parse_dates&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">&quot;frequency&quot;</span><span class="p">:</span> <span class="s2">&quot;D&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="data-validation">
+<h2>Data Validation<a class="headerlink" href="#data-validation" title="Link to this heading"></a></h2>
+<p>All data sources are automatically validated for:</p>
+<ul class="simple">
+<li><p>✅ DatetimeIndex presence</p></li>
+<li><p>✅ No duplicate time indices</p></li>
+<li><p>✅ Sufficient data points</p></li>
+<li><p>✅ Missing value detection</p></li>
+<li><p>✅ Frequency inference</p></li>
+</ul>
+<p>Validation results are included in the response:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;valid&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">&quot;errors&quot;</span><span class="p">:</span> <span class="p">[],</span>  <span class="c1"># Critical issues that prevent usage</span>
+    <span class="s2">&quot;warnings&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;Missing values detected: {&#39;sales&#39;: 5.0}&quot;</span><span class="p">]</span>  <span class="c1"># Non-critical issues</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
+<section id="core-pandas-support-included">
+<h3>Core (Pandas support included)<a class="headerlink" href="#core-pandas-support-included" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
+</pre></div>
+</div>
+</section>
+<section id="with-sql-support">
+<h3>With SQL support<a class="headerlink" href="#with-sql-support" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[sql]&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="with-file-format-support">
+<h3>With file format support<a class="headerlink" href="#with-file-format-support" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[files]&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="with-all-optional-dependencies">
+<h3>With all optional dependencies<a class="headerlink" href="#with-all-optional-dependencies" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[all]&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h2>
+<p>See the <code class="docutils literal notranslate"><span class="pre">examples/</span></code> directory for complete working examples:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">pandas_example.py</span></code> - Loading from pandas DataFrames</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">csv_example.py</span></code> - Loading from CSV/TSV files</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sql_example.py</span></code> - Loading from SQL databases (SQLite, PostgreSQL, MySQL)</p></li>
+</ul>
+</section>
+<section id="architecture">
+<h2>Architecture<a class="headerlink" href="#architecture" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Data Source Layer
+├── base.py                 # Abstract adapter interface
+├── registry.py             # Adapter registry
+└── adapters/
+    ├── pandas_adapter.py   # In-memory DataFrames
+    ├── sql_adapter.py      # SQL databases
+    └── file_adapter.py     # CSV, Excel, Parquet
+</pre></div>
+</div>
+<p>Each adapter implements:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">load()</span></code> - Load data from source</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">validate()</span></code> - Check data quality</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">to_sktime_format()</span></code> - Convert to (y, X) format</p></li>
+</ul>
+</section>
+<section id="metadata">
+<h2>Metadata<a class="headerlink" href="#metadata" title="Link to this heading"></a></h2>
+<p>Each loaded data source provides rich metadata:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="s2">&quot;sql&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;rows&quot;</span><span class="p">:</span> <span class="mi">100</span><span class="p">,</span>
+    <span class="s2">&quot;columns&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;sales&quot;</span><span class="p">,</span> <span class="s2">&quot;temperature&quot;</span><span class="p">],</span>
+    <span class="s2">&quot;frequency&quot;</span><span class="p">:</span> <span class="s2">&quot;D&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;start_date&quot;</span><span class="p">:</span> <span class="s2">&quot;2020-01-01&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;end_date&quot;</span><span class="p">:</span> <span class="s2">&quot;2020-04-09&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;missing_values&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;sales&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="error-handling">
+<h2>Error Handling<a class="headerlink" href="#error-handling" title="Link to this heading"></a></h2>
+<p>All operations return structured error information:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="s2">&quot;Could not convert index to datetime&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;error_type&quot;</span><span class="p">:</span> <span class="s2">&quot;ValueError&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;validation&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;valid&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">&quot;errors&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;Index must be DatetimeIndex&quot;</span><span class="p">]</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="llm-guidelines-best-practices">
+<h2>💡 LLM Guidelines &amp; Best Practices<a class="headerlink" href="#llm-guidelines-best-practices" title="Link to this heading"></a></h2>
+<p>When using these tools to handle user data, follow these best practices to avoid common execution errors:</p>
+<section id="column-identification">
+<h3>1. Column Identification<a class="headerlink" href="#column-identification" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Target vs. Features</strong>: Identify which column is the target (<code class="docutils literal notranslate"><span class="pre">y</span></code>) and which are exogenous features (<code class="docutils literal notranslate"><span class="pre">X</span></code>).</p></li>
+<li><p><strong>Numeric Only</strong>: Ensure the target column contains only numeric data. Forecasting models will fail if string/categorical columns are accidentally included in <code class="docutils literal notranslate"><span class="pre">y</span></code>.</p></li>
+<li><p><strong>User Confirmation</strong>: If the dataset has multiple columns and the user hasn’t specified which one to forecast, <strong>ask for clarification</strong> instead of guessing.</p></li>
+</ul>
+</section>
+<section id="strategic-loading">
+<h3>2. Strategic Loading<a class="headerlink" href="#strategic-loading" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Use <code class="docutils literal notranslate"><span class="pre">usecols</span></code></strong>: When loading from CSV or Excel, use <code class="docutils literal notranslate"><span class="pre">csv_options:</span> <span class="pre">{&quot;usecols&quot;:</span> <span class="pre">[&quot;Column1&quot;,</span> <span class="pre">&quot;Column2&quot;]}</span></code> to load only the necessary columns. This prevents string-based columns from being accidentally passed to the model.</p></li>
+<li><p><strong>Time Column Mapping</strong>: Always map the <code class="docutils literal notranslate"><span class="pre">time_column</span></code> if one exists. If it doesn’t, sktime will default to a <code class="docutils literal notranslate"><span class="pre">RangeIndex</span></code>, which is often safer for simple sequences.</p></li>
+</ul>
+</section>
+<section id="frequency-hurdles">
+<h3>3. Frequency Hurdles<a class="headerlink" href="#frequency-hurdles" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Month-Start vs Month-End</strong>: If you encounter errors like <code class="docutils literal notranslate"><span class="pre">&lt;MonthBegin&gt;</span> <span class="pre">is</span> <span class="pre">not</span> <span class="pre">supported</span> <span class="pre">as</span> <span class="pre">period</span> <span class="pre">frequency</span></code>, it is likely due to <code class="docutils literal notranslate"><span class="pre">statsmodels</span></code> limitations. In such cases, consider dropping the timestamp index and using a simple integer index (RangeIndex) by not specifying a <code class="docutils literal notranslate"><span class="pre">time_column</span></code>.</p></li>
+</ul>
+</section>
+<section id="validation-first">
+<h3>4. Validation First<a class="headerlink" href="#validation-first" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Status Check</strong>: Always inspect the <code class="docutils literal notranslate"><span class="pre">validation</span></code> object returned by <code class="docutils literal notranslate"><span class="pre">load_data_source</span></code>. If <code class="docutils literal notranslate"><span class="pre">valid</span></code> is <code class="docutils literal notranslate"><span class="pre">false</span></code>, read the <code class="docutils literal notranslate"><span class="pre">errors</span></code> list to understand why the data might break the model.</p></li>
+</ul>
+</section>
+</section>
+<section id="troubleshooting">
+<h2>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h2>
+<section id="no-module-named-sqlalchemy">
+<h3>“No module named ‘sqlalchemy’”<a class="headerlink" href="#no-module-named-sqlalchemy" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>sqlalchemy
+</pre></div>
+</div>
+</section>
+<section id="no-module-named-openpyxl-for-excel-files">
+<h3>“No module named ‘openpyxl’” (for Excel files)<a class="headerlink" href="#no-module-named-openpyxl-for-excel-files" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>openpyxl
+</pre></div>
+</div>
+</section>
+<section id="no-module-named-pyarrow-for-parquet-files">
+<h3>“No module named ‘pyarrow’” (for Parquet files)<a class="headerlink" href="#no-module-named-pyarrow-for-parquet-files" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>pyarrow
+</pre></div>
+</div>
+</section>
+<section id="could-not-infer-frequency">
+<h3>“Could not infer frequency”<a class="headerlink" href="#could-not-infer-frequency" title="Link to this heading"></a></h3>
+<p>Specify frequency explicitly in config:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">config</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="o">...</span>
+    <span class="s2">&quot;frequency&quot;</span><span class="p">:</span> <span class="s2">&quot;D&quot;</span>  <span class="c1"># Daily, &quot;W&quot; for weekly, &quot;M&quot; for monthly, etc.</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="index-must-be-datetimeindex">
+<h3>“Index must be DatetimeIndex”<a class="headerlink" href="#index-must-be-datetimeindex" title="Link to this heading"></a></h3>
+<p>Ensure your time column is specified correctly:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">config</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="o">...</span>
+    <span class="s2">&quot;time_column&quot;</span><span class="p">:</span> <span class="s2">&quot;date&quot;</span><span class="p">,</span>  <span class="c1"># Name of your date/time column</span>
+    <span class="s2">&quot;parse_dates&quot;</span><span class="p">:</span> <span class="kc">True</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="usage-examples.html" class="btn btn-neutral float-left" title="Usage Examples" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="background-jobs.html" class="btn btn-neutral float-right" title="Background Job Management" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, sktime-mcp contributors.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
