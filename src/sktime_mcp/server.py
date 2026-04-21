@@ -23,6 +23,7 @@ from sktime_mcp.tools.data_tools import (
     load_data_source_tool,
     release_data_handle_tool,
 )
+from sktime_mcp.tools.analyze_data import analyze_data_tool
 from sktime_mcp.tools.describe_estimator import describe_estimator_tool
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
@@ -436,6 +437,25 @@ async def list_tools() -> list[Tool]:
                 "required": ["data_handle"],
             },
         ),
+        Tool(
+            name="analyze_data",
+            description=(
+                "Analyze a dataset to compute standard time series statistical characteristics. "
+                "Calculates length, frequency, stationarity (via ADF test), presence of trend "
+                "(via linear regression), and seasonality (via ACF). "
+                "Helps an LLM understand the time series before choosing a forecasting algorithm."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Handle from load_data_source",
+                    },
+                },
+                "required": ["data_handle"],
+            },
+        ),
         # -- Export / Persistence --------------------------------------------
         Tool(
             name="export_code",
@@ -684,6 +704,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("fill_missing", True),
                 arguments.get("remove_duplicates", True),
             )
+
+        elif name == "analyze_data":
+            result = analyze_data_tool(arguments["data_handle"])
 
         elif name == "auto_format_on_load":
             # Deprecated — now controlled via SKTIME_MCP_AUTO_FORMAT env var
