@@ -436,6 +436,14 @@ async def list_tools() -> list[Tool]:
                 "required": ["data_handle"],
             },
         ),
+        Tool(
+                name="list_datasets",
+                description="List available built-in sktime datasets for forecasting and classification.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {},
+                },
+            ),
         # -- Export / Persistence --------------------------------------------
         Tool(
             name="export_code",
@@ -567,6 +575,28 @@ async def list_tools() -> list[Tool]:
 # Tool dispatcher
 # ===================================================================
 
+# -- New Tool Implementation: List Datasets --------------------------------
+
+def list_datasets_tool() -> str:
+    """Implementation to list available sktime datasets."""
+    from sktime.datasets import all_datasets
+    import json
+    
+    try:
+        # Get all datasets as a DataFrame
+        df = all_datasets()
+        
+        # Limit to top 25 datasets to keep the context window clean for the AI
+        datasets = df[['name', 'description']].head(25).to_dict(orient='records')
+        
+        return json.dumps({
+            "datasets": datasets,
+            "total_available": len(df),
+            "note": "Showing top 25 datasets. Use specific load functions for others."
+        })
+    except Exception as e:
+        return json.dumps({"error": f"Failed to retrieve datasets: {str(e)}"})
+
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
@@ -692,6 +722,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             )
             from sktime_mcp.tools.format_tools import auto_format_on_load_tool
             result = auto_format_on_load_tool(arguments.get("enabled", True))
+
+        elif name == "list_datasets":
+            logger.info("Listing available datasets")
+            result = list_datasets_tool()
 
         # -- Export / Persistence --------------------------------------------
         elif name == "export_code":
