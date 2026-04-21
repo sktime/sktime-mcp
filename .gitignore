@@ -2,5 +2,6 @@ mcp_server.log
 __pycache__/
 .vscode
 .venv
+venv/
 TODO.md
 dist/
