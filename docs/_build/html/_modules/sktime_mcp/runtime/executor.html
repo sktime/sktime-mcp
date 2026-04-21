@@ -1,0 +1,1082 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>sktime_mcp.runtime.executor &mdash; sktime-mcp 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/extra.css?v=e8756899" />
+
+  
+    <link rel="shortcut icon" href="../../../_static/favicon.png"/>
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            sktime-mcp
+              <img src="../../../_static/favicon.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../intro.html">sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../use-cases.html">🎯 Use Cases &amp; Personas</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../user-guide.html">📘 User Guide</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage-examples.html">Usage Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../data-sources.html">Data Source Support</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../background-jobs.html">Background Job Management</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Development</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture.html">Architecture Diagram</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../implementation.html">Complete Code Explanation: sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../dev-guide.html">Developer Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">sktime-mcp</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">sktime_mcp.runtime.executor</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for sktime_mcp.runtime.executor</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Executor for sktime MCP.</span>
+
+<span class="sd">Responsible for instantiating estimators, loading datasets,</span>
+<span class="sd">and running fit/predict operations.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.registry.interface</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_registry</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.runtime.handles</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_handle_manager</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.runtime.jobs</span><span class="w"> </span><span class="kn">import</span> <span class="n">JobStatus</span><span class="p">,</span> <span class="n">get_job_manager</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="c1"># Dynamically discover all available sktime demo datasets at import time.</span>
+<span class="c1"># This replaces the old hardcoded dictionary and automatically exposes every</span>
+<span class="c1"># load_* function in sktime.datasets to the MCP server.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_discover_demo_datasets</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a mapping of dataset name -&gt; dotted module path for every</span>
+<span class="sd">    ``load_*`` function exported by ``sktime.datasets``.&quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">sktime.datasets</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">_ds_module</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">name</span><span class="o">.</span><span class="n">removeprefix</span><span class="p">(</span><span class="s2">&quot;load_&quot;</span><span class="p">):</span> <span class="sa">f</span><span class="s2">&quot;sktime.datasets.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getmembers</span><span class="p">(</span><span class="n">_ds_module</span><span class="p">,</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isfunction</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;load_&quot;</span><span class="p">)</span>
+        <span class="p">}</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>  <span class="c1"># pragma: no cover</span>
+        <span class="k">return</span> <span class="p">{}</span>  <span class="c1"># fallback: empty dict if sktime not installed</span>
+
+
+<span class="n">DEMO_DATASETS</span> <span class="o">=</span> <span class="n">_discover_demo_datasets</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="Executor">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.Executor">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Executor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Execution runtime for sktime estimators.</span>
+
+<span class="sd">    Handles instantiation, fitting, and prediction.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="Executor.__init__">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.Executor.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span> <span class="o">=</span> <span class="n">get_registry</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_handle_manager</span> <span class="o">=</span> <span class="n">get_handle_manager</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span> <span class="o">=</span> <span class="n">get_job_manager</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_data_handles</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># Store data handles</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_auto_format_enabled</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;SKTIME_MCP_AUTO_FORMAT&quot;</span><span class="p">,</span> <span class="s2">&quot;true&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;true&quot;</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Executor.instantiate">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.Executor.instantiate">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">instantiate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">estimator_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">params</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Instantiate an estimator and return a handle.&quot;&quot;&quot;</span>
+        <span class="n">node</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span><span class="o">.</span><span class="n">get_estimator_by_name</span><span class="p">(</span><span class="n">estimator_name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">node</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Unknown estimator: </span><span class="si">{</span><span class="n">estimator_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">instance</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">class_ref</span><span class="p">(</span><span class="o">**</span><span class="p">(</span><span class="n">params</span> <span class="ow">or</span> <span class="p">{}))</span>
+            <span class="n">handle_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_manager</span><span class="o">.</span><span class="n">create_handle</span><span class="p">(</span>
+                <span class="n">estimator_name</span><span class="o">=</span><span class="n">estimator_name</span><span class="p">,</span>
+                <span class="n">instance</span><span class="o">=</span><span class="n">instance</span><span class="p">,</span>
+                <span class="n">params</span><span class="o">=</span><span class="n">params</span> <span class="ow">or</span> <span class="p">{},</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">&quot;handle&quot;</span><span class="p">:</span> <span class="n">handle_id</span><span class="p">,</span>
+                <span class="s2">&quot;estimator&quot;</span><span class="p">:</span> <span class="n">estimator_name</span><span class="p">,</span>
+                <span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="n">params</span> <span class="ow">or</span> <span class="p">{},</span>
+            <span class="p">}</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)}</span></div>
+
+
+    <span class="c1"># L-7: We can also add custom load_dataset functions here</span>
+<div class="viewcode-block" id="Executor.load_dataset">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.Executor.load_dataset">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_dataset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load a demo dataset.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">DEMO_DATASETS</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Unknown dataset: </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;available&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">DEMO_DATASETS</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
+            <span class="p">}</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">module_path</span> <span class="o">=</span> <span class="n">DEMO_DATASETS</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+            <span class="n">parts</span> <span class="o">=</span> <span class="n">module_path</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">module</span> <span class="o">=</span> <span class="nb">__import__</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">fromlist</span><span class="o">=</span><span class="p">[</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">]])</span>
+            <span class="n">loader</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">loader</span><span class="p">()</span>
+
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+                <span class="n">y</span><span class="p">,</span> <span class="n">X</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">y</span><span class="p">,</span> <span class="n">X</span> <span class="o">=</span> <span class="n">data</span><span class="p">,</span> <span class="kc">None</span>
+
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span>
+                <span class="s2">&quot;shape&quot;</span><span class="p">:</span> <span class="n">y</span><span class="o">.</span><span class="n">shape</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="s2">&quot;shape&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">),</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">y</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">),</span>
+                <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="n">y</span><span class="p">,</span>
+                <span class="s2">&quot;exog&quot;</span><span class="p">:</span> <span class="n">X</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)}</span></div>
+
+
+<div class="viewcode-block" id="Executor.fit">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.Executor.fit">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fit</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">handle_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">y</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">X</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">fh</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fit an estimator.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">instance</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_manager</span><span class="o">.</span><span class="n">get_instance</span><span class="p">(</span><span class="n">handle_id</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Handle not found: </span><span class="si">{</span><span class="n">handle_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">fh</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">instance</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">fh</span><span class="o">=</span><span class="n">fh</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">X</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">instance</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">instance</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_handle_manager</span><span class="o">.</span><span class="n">mark_fitted</span><span class="p">(</span><span class="n">handle_id</span><span class="p">)</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">&quot;handle&quot;</span><span class="p">:</span> <span class="n">handle_id</span><span class="p">,</span> <span class="s2">&quot;fitted&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)}</span></div>
+
+
+<div class="viewcode-block" id="Executor.predict">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.Executor.predict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">predict</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">handle_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">fh</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">X</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate predictions.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">instance</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_manager</span><span class="o">.</span><span class="n">get_instance</span><span class="p">(</span><span class="n">handle_id</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Handle not found: </span><span class="si">{</span><span class="n">handle_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_manager</span><span class="o">.</span><span class="n">is_fitted</span><span class="p">(</span><span class="n">handle_id</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="s2">&quot;Estimator not fitted&quot;</span><span class="p">}</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">fh</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">fh</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">13</span><span class="p">))</span>
+
+            <span class="n">predictions</span> <span class="o">=</span> <span class="n">instance</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">fh</span><span class="o">=</span><span class="n">fh</span><span class="p">,</span> <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">)</span> <span class="k">if</span> <span class="n">X</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">instance</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">fh</span><span class="o">=</span><span class="n">fh</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">predictions</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">):</span>
+                <span class="c1"># Convert index to string to avoid JSON serialization issues with Period/DatetimeIndex</span>
+                <span class="n">predictions_copy</span> <span class="o">=</span> <span class="n">predictions</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                <span class="n">predictions_copy</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">predictions_copy</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">predictions_copy</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">predictions</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">):</span>
+                <span class="n">predictions_copy</span> <span class="o">=</span> <span class="n">predictions</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                <span class="n">predictions_copy</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">predictions_copy</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">predictions_copy</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(</span><span class="n">orient</span><span class="o">=</span><span class="s2">&quot;list&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">predictions</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">predictions</span><span class="p">,</span> <span class="s2">&quot;tolist&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="n">predictions</span>
+
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">&quot;predictions&quot;</span><span class="p">:</span> <span class="n">result</span><span class="p">,</span>
+                <span class="s2">&quot;horizon&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">fh</span><span class="p">)</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">fh</span><span class="p">,</span> <span class="s2">&quot;__len__&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="n">fh</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)}</span></div>
+
+
+<div class="viewcode-block" id="Executor.fit_predict">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.Executor.fit_predict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fit_predict</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">handle_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">dataset</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">horizon</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">12</span><span class="p">,</span>
+        <span class="n">data_handle</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convenience method: load data, fit, and predict.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">data_handle</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Use custom loaded data</span>
+            <span class="k">if</span> <span class="n">data_handle</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_handles</span><span class="p">:</span>
+                <span class="k">return</span> <span class="p">{</span>
+                    <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                    <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Unknown data handle: </span><span class="si">{</span><span class="n">data_handle</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;available_handles&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data_handles</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
+                <span class="p">}</span>
+            <span class="n">data_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_handles</span><span class="p">[</span><span class="n">data_handle</span><span class="p">]</span>
+            <span class="n">y</span> <span class="o">=</span> <span class="n">data_info</span><span class="p">[</span><span class="s2">&quot;y&quot;</span><span class="p">]</span>
+            <span class="n">X</span> <span class="o">=</span> <span class="n">data_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;X&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Use demo dataset</span>
+            <span class="n">data_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">data_result</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
+                <span class="k">return</span> <span class="n">data_result</span>
+            <span class="n">y</span> <span class="o">=</span> <span class="n">data_result</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
+            <span class="n">X</span> <span class="o">=</span> <span class="n">data_result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;exog&quot;</span><span class="p">)</span>
+
+        <span class="n">fh</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">horizon</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
+
+        <span class="n">fit_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">handle_id</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">fh</span><span class="o">=</span><span class="n">fh</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">fit_result</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="n">fit_result</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">handle_id</span><span class="p">,</span> <span class="n">fh</span><span class="o">=</span><span class="n">fh</span><span class="p">,</span> <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Executor.fit_predict_async">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.Executor.fit_predict_async">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">fit_predict_async</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">handle_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">dataset</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">horizon</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">12</span><span class="p">,</span>
+        <span class="n">job_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Async version of fit_predict with job tracking.</span>
+
+<span class="sd">        This method runs the training in the background without blocking the MCP server.</span>
+<span class="sd">        Progress is tracked via the JobManager.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            handle_id: Estimator handle</span>
+<span class="sd">            dataset: Dataset name</span>
+<span class="sd">            horizon: Forecast horizon</span>
+<span class="sd">            job_id: Optional job ID for tracking (created if not provided)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dictionary with success status and job_id</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Get estimator info for job tracking</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">handle_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_manager</span><span class="o">.</span><span class="n">get_info</span><span class="p">(</span><span class="n">handle_id</span><span class="p">)</span>
+            <span class="n">estimator_name</span> <span class="o">=</span> <span class="n">handle_info</span><span class="o">.</span><span class="n">estimator_name</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not get estimator name: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">estimator_name</span> <span class="o">=</span> <span class="s2">&quot;Unknown&quot;</span>
+
+        <span class="c1"># Create job if not provided</span>
+        <span class="k">if</span> <span class="n">job_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">job_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">create_job</span><span class="p">(</span>
+                <span class="n">job_type</span><span class="o">=</span><span class="s2">&quot;fit_predict&quot;</span><span class="p">,</span>
+                <span class="n">estimator_handle</span><span class="o">=</span><span class="n">handle_id</span><span class="p">,</span>
+                <span class="n">estimator_name</span><span class="o">=</span><span class="n">estimator_name</span><span class="p">,</span>
+                <span class="n">dataset_name</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
+                <span class="n">horizon</span><span class="o">=</span><span class="n">horizon</span><span class="p">,</span>
+                <span class="n">total_steps</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="c1"># load data, fit, predict</span>
+            <span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Update status to RUNNING</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span><span class="n">job_id</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="n">JobStatus</span><span class="o">.</span><span class="n">RUNNING</span><span class="p">)</span>
+
+            <span class="c1"># Step 1: Load dataset</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span>
+                <span class="n">job_id</span><span class="p">,</span> <span class="n">completed_steps</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">current_step</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Loading dataset &#39;</span><span class="si">{</span><span class="n">dataset</span><span class="si">}</span><span class="s2">&#39;...&quot;</span>
+            <span class="p">)</span>
+            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.01</span><span class="p">)</span>  <span class="c1"># Yield control to event loop</span>
+
+            <span class="n">data_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">data_result</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span>
+                    <span class="n">job_id</span><span class="p">,</span>
+                    <span class="n">status</span><span class="o">=</span><span class="n">JobStatus</span><span class="o">.</span><span class="n">FAILED</span><span class="p">,</span>
+                    <span class="n">errors</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;Failed to load dataset: </span><span class="si">{</span><span class="n">data_result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;error&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">],</span>
+                <span class="p">)</span>
+                <span class="k">return</span> <span class="n">data_result</span>
+
+            <span class="n">y</span> <span class="o">=</span> <span class="n">data_result</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
+            <span class="n">X</span> <span class="o">=</span> <span class="n">data_result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;exog&quot;</span><span class="p">)</span>
+            <span class="n">fh</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">horizon</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
+
+            <span class="c1"># Step 2: Fit model</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span>
+                <span class="n">job_id</span><span class="p">,</span> <span class="n">completed_steps</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">current_step</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Fitting </span><span class="si">{</span><span class="n">estimator_name</span><span class="si">}</span><span class="s2"> on </span><span class="si">{</span><span class="n">dataset</span><span class="si">}</span><span class="s2">...&quot;</span>
+            <span class="p">)</span>
+            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.01</span><span class="p">)</span>  <span class="c1"># Yield control</span>
+
+            <span class="c1"># Run fit in executor to avoid blocking</span>
+            <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">()</span>
+            <span class="n">fit_result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">loop</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span>
+                <span class="kc">None</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">handle_id</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">fh</span><span class="o">=</span><span class="n">fh</span><span class="p">)</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">fit_result</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span>
+                    <span class="n">job_id</span><span class="p">,</span>
+                    <span class="n">status</span><span class="o">=</span><span class="n">JobStatus</span><span class="o">.</span><span class="n">FAILED</span><span class="p">,</span>
+                    <span class="n">errors</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;Fit failed: </span><span class="si">{</span><span class="n">fit_result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;error&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">],</span>
+                <span class="p">)</span>
+                <span class="k">return</span> <span class="n">fit_result</span>
+
+            <span class="c1"># Step 3: Generate predictions</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span>
+                <span class="n">job_id</span><span class="p">,</span>
+                <span class="n">completed_steps</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                <span class="n">current_step</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Generating predictions (horizon=</span><span class="si">{</span><span class="n">horizon</span><span class="si">}</span><span class="s2">)...&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.01</span><span class="p">)</span>  <span class="c1"># Yield control</span>
+
+            <span class="c1"># Run predict in executor</span>
+            <span class="n">predict_result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">loop</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span>
+                <span class="kc">None</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">handle_id</span><span class="p">,</span> <span class="n">fh</span><span class="o">=</span><span class="n">fh</span><span class="p">,</span> <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">)</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">predict_result</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span>
+                    <span class="n">job_id</span><span class="p">,</span>
+                    <span class="n">status</span><span class="o">=</span><span class="n">JobStatus</span><span class="o">.</span><span class="n">FAILED</span><span class="p">,</span>
+                    <span class="n">errors</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;Prediction failed: </span><span class="si">{</span><span class="n">predict_result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;error&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">],</span>
+                <span class="p">)</span>
+                <span class="k">return</span> <span class="n">predict_result</span>
+
+            <span class="c1"># Mark as completed</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span>
+                <span class="n">job_id</span><span class="p">,</span>
+                <span class="n">status</span><span class="o">=</span><span class="n">JobStatus</span><span class="o">.</span><span class="n">COMPLETED</span><span class="p">,</span>
+                <span class="n">completed_steps</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+                <span class="n">current_step</span><span class="o">=</span><span class="s2">&quot;Completed&quot;</span><span class="p">,</span>
+                <span class="n">result</span><span class="o">=</span><span class="n">predict_result</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">predict_result</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error in async fit_predict for job </span><span class="si">{</span><span class="n">job_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span><span class="n">job_id</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="n">JobStatus</span><span class="o">.</span><span class="n">FAILED</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)])</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="s2">&quot;job_id&quot;</span><span class="p">:</span> <span class="n">job_id</span><span class="p">}</span></div>
+
+
+    <span class="c1"># L-9: We can add more methods here to handle diverse use cases and their pipelines</span>
+<div class="viewcode-block" id="Executor.instantiate_pipeline">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.Executor.instantiate_pipeline">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">instantiate_pipeline</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">components</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">params_list</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Instantiate a pipeline from a list of components.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            components: List of estimator names in pipeline order</span>
+<span class="sd">            params_list: Optional list of parameter dicts for each component</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dictionary with success status and handle</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">components</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="s2">&quot;Pipeline cannot be empty&quot;</span><span class="p">}</span>
+
+        <span class="c1"># Validate the pipeline first</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.composition.validator</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_composition_validator</span>
+
+        <span class="n">validator</span> <span class="o">=</span> <span class="n">get_composition_validator</span><span class="p">()</span>
+        <span class="n">validation</span> <span class="o">=</span> <span class="n">validator</span><span class="o">.</span><span class="n">validate_pipeline</span><span class="p">(</span><span class="n">components</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="s2">&quot;Invalid pipeline composition&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;validation_errors&quot;</span><span class="p">:</span> <span class="n">validation</span><span class="o">.</span><span class="n">errors</span><span class="p">,</span>
+                <span class="s2">&quot;suggestions&quot;</span><span class="p">:</span> <span class="n">validation</span><span class="o">.</span><span class="n">suggestions</span><span class="p">,</span>
+            <span class="p">}</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># If only one component, just instantiate it directly</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">params</span> <span class="o">=</span> <span class="n">params_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">params_list</span> <span class="k">else</span> <span class="p">{}</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">instantiate</span><span class="p">(</span><span class="n">components</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">params</span><span class="p">)</span>
+
+            <span class="c1"># Build the pipeline</span>
+            <span class="c1"># Get all component nodes</span>
+            <span class="n">component_instances</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">params_list</span> <span class="o">=</span> <span class="n">params_list</span> <span class="ow">or</span> <span class="p">[{}]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">comp_name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">components</span><span class="p">):</span>
+                <span class="n">node</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span><span class="o">.</span><span class="n">get_estimator_by_name</span><span class="p">(</span><span class="n">comp_name</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">node</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Unknown estimator: </span><span class="si">{</span><span class="n">comp_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
+
+                <span class="n">params</span> <span class="o">=</span> <span class="n">params_list</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">params_list</span><span class="p">)</span> <span class="k">else</span> <span class="p">{}</span>
+                <span class="n">instance</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">class_ref</span><span class="p">(</span><span class="o">**</span><span class="n">params</span><span class="p">)</span>
+                <span class="n">component_instances</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">instance</span><span class="p">)</span>
+
+            <span class="c1"># Determine the type of pipeline to create</span>
+            <span class="c1"># Check if all but last are transformers</span>
+            <span class="n">all_transformers_except_last</span> <span class="o">=</span> <span class="nb">all</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span><span class="o">.</span><span class="n">get_estimator_by_name</span><span class="p">(</span><span class="n">comp</span><span class="p">)</span><span class="o">.</span><span class="n">task</span> <span class="o">==</span> <span class="s2">&quot;transformation&quot;</span>
+                <span class="k">for</span> <span class="n">comp</span> <span class="ow">in</span> <span class="n">components</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="p">)</span>
+
+            <span class="n">final_task</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span><span class="o">.</span><span class="n">get_estimator_by_name</span><span class="p">(</span><span class="n">components</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">task</span>
+
+            <span class="k">if</span> <span class="n">all_transformers_except_last</span> <span class="ow">and</span> <span class="n">final_task</span> <span class="o">==</span> <span class="s2">&quot;forecasting&quot;</span><span class="p">:</span>
+                <span class="c1"># Use TransformedTargetForecaster</span>
+                <span class="kn">from</span><span class="w"> </span><span class="nn">sktime.forecasting.compose</span><span class="w"> </span><span class="kn">import</span> <span class="n">TransformedTargetForecaster</span>
+
+                <span class="c1"># Chain transformers if multiple</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">component_instances</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+                    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">TransformedTargetForecaster</span><span class="p">(</span>
+                        <span class="p">[</span>
+                            <span class="p">(</span><span class="s2">&quot;transformer&quot;</span><span class="p">,</span> <span class="n">component_instances</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+                            <span class="p">(</span><span class="s2">&quot;forecaster&quot;</span><span class="p">,</span> <span class="n">component_instances</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span>
+                        <span class="p">]</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># Multiple transformers - chain them</span>
+                    <span class="kn">from</span><span class="w"> </span><span class="nn">sktime.transformations.compose</span><span class="w"> </span><span class="kn">import</span> <span class="n">TransformerPipeline</span>
+
+                    <span class="n">transformer_pipeline</span> <span class="o">=</span> <span class="n">TransformerPipeline</span><span class="p">(</span>
+                        <span class="p">[(</span><span class="sa">f</span><span class="s2">&quot;step_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">comp</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">comp</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">component_instances</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])]</span>
+                    <span class="p">)</span>
+                    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">TransformedTargetForecaster</span><span class="p">(</span>
+                        <span class="p">[</span>
+                            <span class="p">(</span><span class="s2">&quot;transformers&quot;</span><span class="p">,</span> <span class="n">transformer_pipeline</span><span class="p">),</span>
+                            <span class="p">(</span><span class="s2">&quot;forecaster&quot;</span><span class="p">,</span> <span class="n">component_instances</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span>
+                        <span class="p">]</span>
+                    <span class="p">)</span>
+
+            <span class="k">elif</span> <span class="n">all_transformers_except_last</span> <span class="ow">and</span> <span class="n">final_task</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;classification&quot;</span><span class="p">,</span> <span class="s2">&quot;regression&quot;</span><span class="p">):</span>
+                <span class="c1"># Use sklearn-style Pipeline</span>
+                <span class="kn">from</span><span class="w"> </span><span class="nn">sktime.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">Pipeline</span>
+
+                <span class="n">pipeline</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">(</span>
+                    <span class="p">[(</span><span class="sa">f</span><span class="s2">&quot;step_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">comp</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">comp</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">component_instances</span><span class="p">)]</span>
+                <span class="p">)</span>
+
+            <span class="k">elif</span> <span class="nb">all</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span><span class="o">.</span><span class="n">get_estimator_by_name</span><span class="p">(</span><span class="n">comp</span><span class="p">)</span><span class="o">.</span><span class="n">task</span> <span class="o">==</span> <span class="s2">&quot;transformation&quot;</span>
+                <span class="k">for</span> <span class="n">comp</span> <span class="ow">in</span> <span class="n">components</span>
+            <span class="p">):</span>
+                <span class="c1"># All transformers - use TransformerPipeline</span>
+                <span class="kn">from</span><span class="w"> </span><span class="nn">sktime.transformations.compose</span><span class="w"> </span><span class="kn">import</span> <span class="n">TransformerPipeline</span>
+
+                <span class="n">pipeline</span> <span class="o">=</span> <span class="n">TransformerPipeline</span><span class="p">(</span>
+                    <span class="p">[(</span><span class="sa">f</span><span class="s2">&quot;step_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">comp</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">comp</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">component_instances</span><span class="p">)]</span>
+                <span class="p">)</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="p">{</span>
+                    <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                    <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="s2">&quot;Unsupported pipeline composition type&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;hint&quot;</span><span class="p">:</span> <span class="s2">&quot;Currently supports: transformers → forecaster, transformers → classifier/regressor, or transformer chains&quot;</span><span class="p">,</span>
+                <span class="p">}</span>
+
+            <span class="c1"># Create a handle for the pipeline</span>
+            <span class="n">pipeline_name</span> <span class="o">=</span> <span class="s2">&quot; → &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">components</span><span class="p">)</span>
+            <span class="n">handle_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_manager</span><span class="o">.</span><span class="n">create_handle</span><span class="p">(</span>
+                <span class="n">estimator_name</span><span class="o">=</span><span class="n">pipeline_name</span><span class="p">,</span>
+                <span class="n">instance</span><span class="o">=</span><span class="n">pipeline</span><span class="p">,</span>
+                <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;components&quot;</span><span class="p">:</span> <span class="n">components</span><span class="p">,</span> <span class="s2">&quot;params_list&quot;</span><span class="p">:</span> <span class="n">params_list</span><span class="p">},</span>
+            <span class="p">)</span>
+
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">&quot;handle&quot;</span><span class="p">:</span> <span class="n">handle_id</span><span class="p">,</span>
+                <span class="s2">&quot;pipeline&quot;</span><span class="p">:</span> <span class="n">pipeline_name</span><span class="p">,</span>
+                <span class="s2">&quot;components&quot;</span><span class="p">:</span> <span class="n">components</span><span class="p">,</span>
+                <span class="s2">&quot;params_list&quot;</span><span class="p">:</span> <span class="n">params_list</span><span class="p">,</span>
+            <span class="p">}</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">traceback</span>
+
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span>
+                <span class="s2">&quot;traceback&quot;</span><span class="p">:</span> <span class="n">traceback</span><span class="o">.</span><span class="n">format_exc</span><span class="p">(),</span>
+            <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="Executor.list_datasets">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.Executor.list_datasets">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">list_datasets</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;List available demo datasets.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">DEMO_DATASETS</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span></div>
+
+
+<div class="viewcode-block" id="Executor.load_data_source">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.Executor.load_data_source">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_data_source</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Load data from any source (pandas, SQL, file, etc.).</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            config: Data source configuration with &#39;type&#39; key</span>
+<span class="sd">                Examples:</span>
+<span class="sd">                - {&quot;type&quot;: &quot;pandas&quot;, &quot;data&quot;: df, &quot;time_column&quot;: &quot;date&quot;, &quot;target_column&quot;: &quot;value&quot;}</span>
+<span class="sd">                - {&quot;type&quot;: &quot;sql&quot;, &quot;connection_string&quot;: &quot;...&quot;, &quot;query&quot;: &quot;...&quot;, &quot;time_column&quot;: &quot;date&quot;}</span>
+<span class="sd">                - {&quot;type&quot;: &quot;file&quot;, &quot;path&quot;: &quot;/path/to/data.csv&quot;, &quot;time_column&quot;: &quot;date&quot;}</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dictionary with:</span>
+<span class="sd">            - success: bool</span>
+<span class="sd">            - data_handle: str (handle ID for the loaded data)</span>
+<span class="sd">            - metadata: dict (information about the data)</span>
+<span class="sd">            - validation: dict (validation results)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataSourceRegistry</span>
+
+            <span class="c1"># Create adapter</span>
+            <span class="n">adapter</span> <span class="o">=</span> <span class="n">DataSourceRegistry</span><span class="o">.</span><span class="n">create_adapter</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+
+            <span class="c1"># Load data</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>
+
+            <span class="c1"># Validate</span>
+            <span class="n">is_valid</span><span class="p">,</span> <span class="n">validation_report</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">is_valid</span><span class="p">:</span>
+                <span class="k">return</span> <span class="p">{</span>
+                    <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                    <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="s2">&quot;Data validation failed&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;validation&quot;</span><span class="p">:</span> <span class="n">validation_report</span><span class="p">,</span>
+                <span class="p">}</span>
+
+            <span class="c1"># Convert to sktime format</span>
+            <span class="n">y</span><span class="p">,</span> <span class="n">X</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">to_sktime_format</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+            <span class="c1"># Update metadata to reflect the target and used columns</span>
+            <span class="n">metadata</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">get_metadata</span><span class="p">()</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;columns&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">y</span><span class="o">.</span><span class="n">name</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">y</span><span class="o">.</span><span class="n">name</span> <span class="k">else</span> <span class="s2">&quot;target&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">X</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;exog_columns&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span>
+            <span class="c1"># Inject column dtypes so LLMs can distinguish time index vs target</span>
+            <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;dtypes&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">col</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span> <span class="k">for</span> <span class="n">col</span><span class="p">,</span> <span class="n">dtype</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">dtypes</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+            <span class="c1"># Generate handle</span>
+            <span class="n">data_handle</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;data_</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[:</span><span class="mi">8</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+
+            <span class="c1"># Store</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_data_handles</span><span class="p">[</span><span class="n">data_handle</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="n">y</span><span class="p">,</span>
+                <span class="s2">&quot;X&quot;</span><span class="p">:</span> <span class="n">X</span><span class="p">,</span>
+                <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">metadata</span><span class="p">,</span>
+                <span class="s2">&quot;validation&quot;</span><span class="p">:</span> <span class="n">validation_report</span><span class="p">,</span>
+                <span class="s2">&quot;config&quot;</span><span class="p">:</span> <span class="n">config</span><span class="p">,</span>  <span class="c1"># Store config for reference</span>
+            <span class="p">}</span>
+
+            <span class="c1"># Apply auto-formatting if enabled</span>
+            <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_auto_format_enabled&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">format_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">format_data_handle</span><span class="p">(</span>
+                        <span class="n">data_handle</span><span class="p">,</span> <span class="n">auto_infer_freq</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">fill_missing</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">remove_duplicates</span><span class="o">=</span><span class="kc">True</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">format_result</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
+                        <span class="c1"># Return the NEW handle (formatted)</span>
+                        <span class="k">return</span> <span class="p">{</span>
+                            <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                            <span class="s2">&quot;data_handle&quot;</span><span class="p">:</span> <span class="n">format_result</span><span class="p">[</span><span class="s2">&quot;data_handle&quot;</span><span class="p">],</span>
+                            <span class="s2">&quot;original_handle&quot;</span><span class="p">:</span> <span class="n">data_handle</span><span class="p">,</span>
+                            <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">format_result</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">],</span>
+                            <span class="s2">&quot;validation&quot;</span><span class="p">:</span> <span class="n">validation_report</span><span class="p">,</span>
+                            <span class="s2">&quot;formatted&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                            <span class="s2">&quot;changes_made&quot;</span><span class="p">:</span> <span class="n">format_result</span><span class="p">[</span><span class="s2">&quot;changes_made&quot;</span><span class="p">],</span>
+                        <span class="p">}</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Auto-formatting failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="c1"># Continue with unformatted data if formatting fails</span>
+            <span class="n">_final_meta</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">get_metadata</span><span class="p">()</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="n">_final_meta</span><span class="p">[</span><span class="s2">&quot;dtypes&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">col</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span> <span class="k">for</span> <span class="n">col</span><span class="p">,</span> <span class="n">dtype</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">dtypes</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">&quot;data_handle&quot;</span><span class="p">:</span> <span class="n">data_handle</span><span class="p">,</span>
+                <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">_final_meta</span><span class="p">,</span>
+                <span class="s2">&quot;validation&quot;</span><span class="p">:</span> <span class="n">validation_report</span><span class="p">,</span>
+            <span class="p">}</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Error loading data source&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span>
+                <span class="s2">&quot;error_type&quot;</span><span class="p">:</span> <span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+            <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="Executor.load_data_source_async">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.Executor.load_data_source_async">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">load_data_source_async</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">job_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Async version of load_data_source with job tracking.</span>
+
+<span class="sd">        Runs data loading in the background without blocking the</span>
+<span class="sd">        MCP server. Progress is tracked via the JobManager.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            config: Data source configuration</span>
+<span class="sd">            job_id: Optional job ID (created if not provided)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dictionary with data_handle and metadata</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">source_type</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">,</span> <span class="s2">&quot;unknown&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">job_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">job_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">create_job</span><span class="p">(</span>
+                <span class="n">job_type</span><span class="o">=</span><span class="s2">&quot;data_loading&quot;</span><span class="p">,</span>
+                <span class="n">estimator_handle</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+                <span class="n">dataset_name</span><span class="o">=</span><span class="n">source_type</span><span class="p">,</span>
+                <span class="n">total_steps</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span><span class="n">job_id</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="n">JobStatus</span><span class="o">.</span><span class="n">RUNNING</span><span class="p">)</span>
+
+            <span class="c1"># Step 1: Load raw data</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span>
+                <span class="n">job_id</span><span class="p">,</span> <span class="n">completed_steps</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">current_step</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Loading data from &#39;</span><span class="si">{</span><span class="n">source_type</span><span class="si">}</span><span class="s2">&#39;...&quot;</span>
+            <span class="p">)</span>
+            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.01</span><span class="p">)</span>
+
+            <span class="kn">from</span><span class="w"> </span><span class="nn">sktime_mcp.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataSourceRegistry</span>
+
+            <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">()</span>
+            <span class="n">adapter</span> <span class="o">=</span> <span class="n">DataSourceRegistry</span><span class="o">.</span><span class="n">create_adapter</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">loop</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">adapter</span><span class="o">.</span><span class="n">load</span><span class="p">)</span>
+
+            <span class="c1"># Step 2: Validate</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span>
+                <span class="n">job_id</span><span class="p">,</span> <span class="n">completed_steps</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">current_step</span><span class="o">=</span><span class="s2">&quot;Validating data...&quot;</span>
+            <span class="p">)</span>
+            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.01</span><span class="p">)</span>
+
+            <span class="n">is_valid</span><span class="p">,</span> <span class="n">validation_report</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">is_valid</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span>
+                    <span class="n">job_id</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="n">JobStatus</span><span class="o">.</span><span class="n">FAILED</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Data validation failed&quot;</span><span class="p">]</span>
+                <span class="p">)</span>
+                <span class="k">return</span> <span class="p">{</span>
+                    <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                    <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="s2">&quot;Data validation failed&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;validation&quot;</span><span class="p">:</span> <span class="n">validation_report</span><span class="p">,</span>
+                <span class="p">}</span>
+
+            <span class="c1"># Step 3: Convert, store, and format</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span>
+                <span class="n">job_id</span><span class="p">,</span> <span class="n">completed_steps</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">current_step</span><span class="o">=</span><span class="s2">&quot;Converting to sktime format...&quot;</span>
+            <span class="p">)</span>
+            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.01</span><span class="p">)</span>
+
+            <span class="n">y</span><span class="p">,</span> <span class="n">X</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">to_sktime_format</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+            <span class="n">metadata</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">get_metadata</span><span class="p">()</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;columns&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">y</span><span class="o">.</span><span class="n">name</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">y</span><span class="o">.</span><span class="n">name</span> <span class="k">else</span> <span class="s2">&quot;target&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">X</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;exog_columns&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span>
+            <span class="c1"># Inject column dtypes so LLMs can distinguish time index vs target</span>
+            <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;dtypes&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">col</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span> <span class="k">for</span> <span class="n">col</span><span class="p">,</span> <span class="n">dtype</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">dtypes</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+            <span class="n">data_handle</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;data_</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[:</span><span class="mi">8</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_data_handles</span><span class="p">[</span><span class="n">data_handle</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="n">y</span><span class="p">,</span>
+                <span class="s2">&quot;X&quot;</span><span class="p">:</span> <span class="n">X</span><span class="p">,</span>
+                <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">metadata</span><span class="p">,</span>
+                <span class="s2">&quot;validation&quot;</span><span class="p">:</span> <span class="n">validation_report</span><span class="p">,</span>
+                <span class="s2">&quot;config&quot;</span><span class="p">:</span> <span class="n">config</span><span class="p">,</span>
+            <span class="p">}</span>
+
+            <span class="c1"># auto-format if enabled</span>
+            <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_auto_format_enabled&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">format_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">format_data_handle</span><span class="p">(</span>
+                        <span class="n">data_handle</span><span class="p">,</span> <span class="n">auto_infer_freq</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">fill_missing</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">remove_duplicates</span><span class="o">=</span><span class="kc">True</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">format_result</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
+                        <span class="n">data_handle</span> <span class="o">=</span> <span class="n">format_result</span><span class="p">[</span><span class="s2">&quot;data_handle&quot;</span><span class="p">]</span>
+                        <span class="n">metadata</span> <span class="o">=</span> <span class="n">format_result</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Auto-formatting failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+            <span class="n">result</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">&quot;data_handle&quot;</span><span class="p">:</span> <span class="n">data_handle</span><span class="p">,</span>
+                <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">metadata</span><span class="p">,</span>
+                <span class="s2">&quot;validation&quot;</span><span class="p">:</span> <span class="n">validation_report</span><span class="p">,</span>
+            <span class="p">}</span>
+
+            <span class="c1"># mark completed with the data_handle in the result</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span>
+                <span class="n">job_id</span><span class="p">,</span>
+                <span class="n">status</span><span class="o">=</span><span class="n">JobStatus</span><span class="o">.</span><span class="n">COMPLETED</span><span class="p">,</span>
+                <span class="n">completed_steps</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+                <span class="n">current_step</span><span class="o">=</span><span class="s2">&quot;Completed&quot;</span><span class="p">,</span>
+                <span class="n">result</span><span class="o">=</span><span class="n">result</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">result</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error in async data loading for job </span><span class="si">{</span><span class="n">job_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span><span class="n">job_id</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="n">JobStatus</span><span class="o">.</span><span class="n">FAILED</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)])</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span>
+                <span class="s2">&quot;job_id&quot;</span><span class="p">:</span> <span class="n">job_id</span><span class="p">,</span>
+            <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="Executor.format_data_handle">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.Executor.format_data_handle">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">format_data_handle</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">data_handle</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">auto_infer_freq</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">fill_missing</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">remove_duplicates</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Format data associated with a handle.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">data_handle</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_handles</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Data handle &#39;</span><span class="si">{</span><span class="n">data_handle</span><span class="si">}</span><span class="s2">&#39; not found&quot;</span><span class="p">}</span>
+
+        <span class="n">data_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_handles</span><span class="p">[</span><span class="n">data_handle</span><span class="p">]</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="n">data_info</span><span class="p">[</span><span class="s2">&quot;y&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">X</span> <span class="o">=</span> <span class="n">data_info</span><span class="p">[</span><span class="s2">&quot;X&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span> <span class="k">if</span> <span class="n">data_info</span><span class="p">[</span><span class="s2">&quot;X&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+
+        <span class="n">changes_made</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;frequency_set&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="s2">&quot;duplicates_removed&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+            <span class="s2">&quot;missing_filled&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+            <span class="s2">&quot;gaps_filled&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="c1"># 1. Remove duplicates</span>
+        <span class="k">if</span> <span class="n">remove_duplicates</span> <span class="ow">and</span> <span class="n">y</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">duplicated</span><span class="p">()</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="n">n_duplicates</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">duplicated</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+            <span class="n">y</span> <span class="o">=</span> <span class="n">y</span><span class="p">[</span><span class="o">~</span><span class="n">y</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">duplicated</span><span class="p">(</span><span class="n">keep</span><span class="o">=</span><span class="s2">&quot;first&quot;</span><span class="p">)]</span>
+            <span class="k">if</span> <span class="n">X</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">X</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="o">~</span><span class="n">X</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">duplicated</span><span class="p">(</span><span class="n">keep</span><span class="o">=</span><span class="s2">&quot;first&quot;</span><span class="p">)]</span>
+            <span class="n">changes_made</span><span class="p">[</span><span class="s2">&quot;duplicates_removed&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_duplicates</span>
+
+        <span class="c1"># 2. Sort by index</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">sort_index</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">X</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">X</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">sort_index</span><span class="p">()</span>
+
+        <span class="c1"># 3. Infer and set frequency</span>
+        <span class="k">if</span> <span class="n">auto_infer_freq</span><span class="p">:</span>
+            <span class="n">freq</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">freq</span>
+
+            <span class="k">if</span> <span class="n">freq</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Try to infer</span>
+                <span class="n">freq</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">infer_freq</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">freq</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="c1"># Manual inference</span>
+                    <span class="n">time_diffs</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">to_series</span><span class="p">()</span><span class="o">.</span><span class="n">diff</span><span class="p">()</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">time_diffs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="n">most_common_diff</span> <span class="o">=</span> <span class="n">time_diffs</span><span class="o">.</span><span class="n">mode</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+
+                        <span class="k">if</span> <span class="n">most_common_diff</span> <span class="o">==</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+                            <span class="n">freq</span> <span class="o">=</span> <span class="s2">&quot;D&quot;</span>
+                        <span class="k">elif</span> <span class="n">most_common_diff</span> <span class="o">==</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">hours</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+                            <span class="n">freq</span> <span class="o">=</span> <span class="s2">&quot;h&quot;</span>
+                        <span class="k">elif</span> <span class="n">most_common_diff</span> <span class="o">==</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">minutes</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+                            <span class="n">freq</span> <span class="o">=</span> <span class="s2">&quot;min&quot;</span>
+                        <span class="k">elif</span> <span class="n">most_common_diff</span> <span class="o">==</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+                            <span class="n">freq</span> <span class="o">=</span> <span class="s2">&quot;s&quot;</span>
+                        <span class="k">elif</span> <span class="n">most_common_diff</span> <span class="o">==</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">7</span><span class="p">):</span>
+                            <span class="n">freq</span> <span class="o">=</span> <span class="s2">&quot;W&quot;</span>
+                        <span class="k">elif</span> <span class="n">most_common_diff</span><span class="o">.</span><span class="n">days</span> <span class="o">&gt;=</span> <span class="mi">28</span> <span class="ow">and</span> <span class="n">most_common_diff</span><span class="o">.</span><span class="n">days</span> <span class="o">&lt;=</span> <span class="mi">31</span><span class="p">:</span>
+                            <span class="n">freq</span> <span class="o">=</span> <span class="s2">&quot;MS&quot;</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">freq</span> <span class="o">=</span> <span class="s2">&quot;D&quot;</span>
+
+                <span class="c1"># Create complete date range</span>
+                <span class="k">if</span> <span class="n">freq</span><span class="p">:</span>
+                    <span class="n">full_range</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="n">y</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="n">end</span><span class="o">=</span><span class="n">y</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="n">freq</span><span class="o">=</span><span class="n">freq</span><span class="p">)</span>
+
+                    <span class="n">n_gaps</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">full_range</span><span class="p">)</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
+
+                    <span class="n">y</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">reindex</span><span class="p">(</span><span class="n">full_range</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">X</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">X</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">reindex</span><span class="p">(</span><span class="n">full_range</span><span class="p">)</span>
+
+                    <span class="n">changes_made</span><span class="p">[</span><span class="s2">&quot;gaps_filled&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_gaps</span>
+                    <span class="n">changes_made</span><span class="p">[</span><span class="s2">&quot;frequency_set&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="n">changes_made</span><span class="p">[</span><span class="s2">&quot;frequency&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">freq</span>
+
+        <span class="c1"># 4. Fill missing values</span>
+        <span class="k">if</span> <span class="n">fill_missing</span> <span class="ow">and</span> <span class="n">y</span><span class="o">.</span><span class="n">isna</span><span class="p">()</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="n">n_missing</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">isna</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+            <span class="n">y</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">ffill</span><span class="p">()</span><span class="o">.</span><span class="n">bfill</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">X</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">X</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">ffill</span><span class="p">()</span><span class="o">.</span><span class="n">bfill</span><span class="p">()</span>
+            <span class="n">changes_made</span><span class="p">[</span><span class="s2">&quot;missing_filled&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_missing</span>
+
+        <span class="c1"># 5. Set frequency explicitly on index</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="s2">&quot;freq&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">changes_made</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;frequency&quot;</span><span class="p">):</span>
+            <span class="n">y</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">freq</span> <span class="o">=</span> <span class="n">changes_made</span><span class="p">[</span><span class="s2">&quot;frequency&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">X</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">X</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">freq</span> <span class="o">=</span> <span class="n">changes_made</span><span class="p">[</span><span class="s2">&quot;frequency&quot;</span><span class="p">]</span>
+
+        <span class="c1"># Generate new handle</span>
+        <span class="n">new_handle</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;data_</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[:</span><span class="mi">8</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+
+        <span class="c1"># Store formatted data</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_data_handles</span><span class="p">[</span><span class="n">new_handle</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="n">y</span><span class="p">,</span>
+            <span class="s2">&quot;X&quot;</span><span class="p">:</span> <span class="n">X</span><span class="p">,</span>
+            <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="o">**</span><span class="n">data_info</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;formatted&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">&quot;frequency&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">freq</span><span class="p">)</span> <span class="k">if</span> <span class="n">y</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">freq</span> <span class="k">else</span> <span class="n">changes_made</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;frequency&quot;</span><span class="p">),</span>
+                <span class="s2">&quot;rows&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">),</span>
+                <span class="s2">&quot;start_date&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">min</span><span class="p">()),</span>
+                <span class="s2">&quot;end_date&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">max</span><span class="p">()),</span>
+            <span class="p">},</span>
+            <span class="s2">&quot;validation&quot;</span><span class="p">:</span> <span class="n">data_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;validation&quot;</span><span class="p">,</span> <span class="p">{}),</span>
+            <span class="s2">&quot;config&quot;</span><span class="p">:</span> <span class="n">data_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;config&quot;</span><span class="p">,</span> <span class="p">{}),</span>
+            <span class="s2">&quot;original_handle&quot;</span><span class="p">:</span> <span class="n">data_handle</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;data_handle&quot;</span><span class="p">:</span> <span class="n">new_handle</span><span class="p">,</span>
+            <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_handles</span><span class="p">[</span><span class="n">new_handle</span><span class="p">][</span><span class="s2">&quot;metadata&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;changes_made&quot;</span><span class="p">:</span> <span class="n">changes_made</span><span class="p">,</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="Executor.fit_predict_with_data">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.Executor.fit_predict_with_data">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fit_predict_with_data</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">estimator_handle</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">data_handle</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">horizon</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">12</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Fit and predict using a data handle.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            estimator_handle: Estimator handle from instantiate_estimator</span>
+<span class="sd">            data_handle: Data handle from load_data_source</span>
+<span class="sd">            horizon: Forecast horizon</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dictionary with predictions</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">data_handle</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_handles</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Unknown data handle: </span><span class="si">{</span><span class="n">data_handle</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;available_handles&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data_handles</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
+            <span class="p">}</span>
+
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_handles</span><span class="p">[</span><span class="n">data_handle</span><span class="p">]</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;y&quot;</span><span class="p">]</span>
+        <span class="n">X</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;X&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Fit</span>
+        <span class="n">fh</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">horizon</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">fit_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">estimator_handle</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">fh</span><span class="o">=</span><span class="n">fh</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">fit_result</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="n">fit_result</span>
+
+        <span class="c1"># Predict</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">estimator_handle</span><span class="p">,</span> <span class="n">fh</span><span class="o">=</span><span class="n">fh</span><span class="p">,</span> <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Executor.list_data_handles">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.Executor.list_data_handles">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">list_data_handles</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        List all loaded data handles.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dictionary with list of data handles and their metadata</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">handles</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">handle_id</span><span class="p">,</span> <span class="n">data_info</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_handles</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">handles</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;handle&quot;</span><span class="p">:</span> <span class="n">handle_id</span><span class="p">,</span>
+                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">data_info</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">],</span>
+                    <span class="s2">&quot;validation&quot;</span><span class="p">:</span> <span class="n">data_info</span><span class="p">[</span><span class="s2">&quot;validation&quot;</span><span class="p">],</span>
+                <span class="p">}</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">handles</span><span class="p">),</span>
+            <span class="s2">&quot;handles&quot;</span><span class="p">:</span> <span class="n">handles</span><span class="p">,</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="Executor.release_data_handle">
+<a class="viewcode-back" href="../../../api.html#sktime_mcp.Executor.release_data_handle">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">release_data_handle</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data_handle</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Release a data handle and free memory.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            data_handle: Data handle to release</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dictionary with success status</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">data_handle</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_handles</span><span class="p">:</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_handles</span><span class="p">[</span><span class="n">data_handle</span><span class="p">]</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Data handle &#39;</span><span class="si">{</span><span class="n">data_handle</span><span class="si">}</span><span class="s2">&#39; released&quot;</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Data handle &#39;</span><span class="si">{</span><span class="n">data_handle</span><span class="si">}</span><span class="s2">&#39; not found&quot;</span><span class="p">,</span>
+            <span class="p">}</span></div>
+</div>
+
+
+
+<span class="n">_executor_instance</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Executor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">get_executor</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Executor</span><span class="p">:</span>
+    <span class="k">global</span> <span class="n">_executor_instance</span>
+    <span class="k">if</span> <span class="n">_executor_instance</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_executor_instance</span> <span class="o">=</span> <span class="n">Executor</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">_executor_instance</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, sktime-mcp contributors.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

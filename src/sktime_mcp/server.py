@@ -8,25 +8,31 @@ that exposes sktime's registry and execution capabilities to LLMs.
 import asyncio
 import json
 import logging
-from typing import Any, Dict, List, Optional
+import os
+from typing import Any
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+from mcp.types import TextContent, Tool
 
-from sktime_mcp.tools.list_estimators import (
-    list_estimators_tool,
-    get_available_tasks,
-    get_available_tags,
+from sktime_mcp.composition.validator import get_composition_validator
+from sktime_mcp.tools.codegen import export_code_tool
+from sktime_mcp.tools.data_tools import (
+    fit_predict_with_data_tool,
+    load_data_source_async_tool,
+    load_data_source_tool,
+    release_data_handle_tool,
 )
-from sktime_mcp.tools.describe_estimator import (
-    describe_estimator_tool,
-    search_estimators_tool,
+from sktime_mcp.tools.describe_estimator import describe_estimator_tool
+from sktime_mcp.tools.evaluate import evaluate_estimator_tool
+from sktime_mcp.tools.fit_predict import (
+    fit_predict_async_tool,
+    fit_predict_tool,
 )
+from sktime_mcp.tools.format_tools import format_time_series_tool
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
     instantiate_pipeline_tool,
-    release_handle_tool,
     list_handles_tool,
 )
 from sktime_mcp.tools.fit_predict import (
@@ -50,19 +56,28 @@ from sktime_mcp.tools.format_tools import (
     auto_format_on_load_tool,
 )
 from sktime_mcp.tools.job_tools import (
+    cancel_job_tool,
     check_job_status_tool,
     list_jobs_tool,
-    cancel_job_tool,
-    delete_job_tool,
-    cleanup_old_jobs_tool,
 )
-from sktime_mcp.composition.validator import get_composition_validator
+from sktime_mcp.tools.list_available_data import list_available_data_tool
+from sktime_mcp.tools.list_estimators import (
+    get_available_tags,
+    list_estimators_tool,
+)
+from sktime_mcp.tools.save_model import save_model_tool
+
+# ---------------------------------------------------------------------------
+# Server configuration via environment variables
+# ---------------------------------------------------------------------------
+JOB_MAX_AGE_HOURS = int(os.environ.get("SKTIME_MCP_JOB_MAX_AGE_HOURS", "24"))
+JOB_CLEANUP_INTERVAL_SECS = int(os.environ.get("SKTIME_MCP_JOB_CLEANUP_INTERVAL", "3600"))
 
 # Configure logging to stderr with detailed format
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
@@ -76,35 +91,71 @@ def sanitize_for_json(obj):
         return {str(k): sanitize_for_json(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return [sanitize_for_json(item) for item in obj]
-    elif hasattr(obj, '__dict__') and not isinstance(obj, (str, int, float, bool, type(None))):
+    elif hasattr(obj, "__dict__") and not isinstance(obj, (str, int, float, bool, type(None))):
         return str(obj)
     else:
         return obj
 
 
+# ===================================================================
+# Tool definitions
+# ===================================================================
+# Consolidation changes applied (see docs/TOOL_CONSOLIDATION_PLAN.md):
+#   1. list_data_sources   -> baked into load_data_source description
+#   2. auto_format_on_load -> env var SKTIME_MCP_AUTO_FORMAT (default true)
+#   3. cleanup_old_jobs    -> automatic periodic timer
+#   4. delete_job          -> merged into cancel_job(delete=True)
+#   5. search_estimators   -> merged into list_estimators(query=...)
+# ===================================================================
+
 
 @server.list_tools()
-async def list_tools() -> List[Tool]:
+async def list_tools() -> list[Tool]:
     """List all available MCP tools."""
     return [
+        # -- Discovery -------------------------------------------------------
         Tool(
             name="list_estimators",
-            description="Discover sktime estimators by task type and capability tags",
+            description=(
+                "Discover sktime estimators by task, capability tags, or name search. "
+                "Common tags you can filter by: "
+                "'capability:pred_int' (bool) - prediction intervals, "
+                "'capability:multivariate' (bool) - multivariate support, "
+                "'handles-missing-data' (bool) - NaN handling, "
+                "'scitype:y' (str) - target type ('univariate'/'multivariate'/'both'), "
+                "'requires-fh-in-fit' (bool) - needs forecast horizon at fit time. "
+                "Use get_available_tags for the full catalog."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "task": {
                         "type": "string",
-                        "description": "Task type filter: forecasting, classification, regression, transformation, clustering",
+                        "description": (
+                            "Task type filter: forecasting, classification, "
+                            "regression, transformation, clustering"
+                        ),
                     },
                     "tags": {
                         "type": "object",
                         "description": "Filter by capability tags, e.g. {'capability:pred_int': true}",
                     },
+                    "query": {
+                        "type": "string",
+                        "description": (
+                            "Search by name or description (substring, case-insensitive). "
+                            "Can be combined with task and tags filters."
+                        ),
+                    },
                     "limit": {
                         "type": "integer",
                         "description": "Maximum results (default: 50)",
                         "default": 50,
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "Skip this many results for pagination (default: 0)",
+                        "default": 0,
                     },
                 },
             },
@@ -123,6 +174,17 @@ async def list_tools() -> List[Tool]:
                 "required": ["estimator"],
             },
         ),
+        Tool(
+            name="get_available_tags",
+            description=(
+                "List all queryable capability tags with rich metadata. "
+                "Returns tag name, description, expected value type, and which "
+                "estimator types the tag applies to. Call this before "
+                "using tags in list_estimators to ensure correct tag names and values."
+            ),
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        # -- Instantiation ---------------------------------------------------
         Tool(
             name="instantiate_estimator",
             description="Create an estimator instance with given parameters",
@@ -162,49 +224,22 @@ async def list_tools() -> List[Tool]:
             },
         ),
         Tool(
-            name="fit_predict",
-            description="Fit an estimator on a dataset and generate predictions",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "estimator_handle": {
-                        "type": "string",
-                        "description": "Handle from instantiate_estimator",
-                    },
-                    "dataset": {
-                        "type": "string",
-                        "description": "Dataset name: airline, sunspots, lynx, etc.",
-                    },
-                    "horizon": {
-                        "type": "integer",
-                        "description": "Forecast horizon (default: 12)",
-                        "default": 12,
-                    },
-                },
-                "required": ["estimator_handle", "dataset"],
-            },
+            name="list_handles",
+            description="List all active estimator handles in memory",
+            inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
-            name="fit_predict_async",
-            description="Fit an estimator on a dataset and generate predictions (non-blocking background job)",
+            name="release_handle",
+            description="Release an estimator handle and free it from memory",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "estimator_handle": {
+                    "handle": {
                         "type": "string",
-                        "description": "Handle from instantiate_estimator",
-                    },
-                    "dataset": {
-                        "type": "string",
-                        "description": "Dataset name: airline, sunspots, lynx, etc.",
-                    },
-                    "horizon": {
-                        "type": "integer",
-                        "description": "Forecast horizon (default: 12)",
-                        "default": 12,
+                        "description": "Handle ID to release",
                     },
                 },
-                "required": ["estimator_handle", "dataset"],
+                "required": ["handle"],
             },
         ),
         Tool(
@@ -222,73 +257,136 @@ async def list_tools() -> List[Tool]:
                 "required": ["components"],
             },
         ),
+        # -- Execution -------------------------------------------------------
         Tool(
-            name="list_datasets",
-            description="List available demo datasets",
-            inputSchema={"type": "object", "properties": {}},
-        ),
-        Tool(
-            name="get_available_tags",
-            description="List all queryable capability tags",
-            inputSchema={"type": "object", "properties": {}},
-        ),
-        Tool(
-            name="search_estimators",
-            description="Search estimators by name or description",
+            name="fit_predict",
+            description=(
+                "Fit an estimator on a dataset and generate predictions. "
+                "Accepts either a demo dataset name or a data_handle from load_data_source."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "query": {
+                    "estimator_handle": {
                         "type": "string",
-                        "description": "Search query",
+                        "description": "Handle from instantiate_estimator",
                     },
-                    "limit": {
+                    "dataset": {
+                        "type": "string",
+                        "description": "Dataset name: airline, sunspots, lynx, etc.",
+                    },
+                    "data_handle": {
+                        "type": "string",
+                        "description": (
+                            "Handle from load_data_source (use this instead "
+                            "of dataset for custom data)"
+                        ),
+                    },
+                    "horizon": {
                         "type": "integer",
-                        "default": 20,
+                        "description": "Forecast horizon (default: 12)",
+                        "default": 12,
                     },
                 },
-                "required": ["query"],
+                "required": ["estimator_handle"],
             },
         ),
         Tool(
-            name="export_code",
-            description="Export an estimator or pipeline as executable Python code",
+            name="fit_predict_async",
+            description=(
+                "Fit an estimator on a dataset and generate predictions "
+                "(non-blocking background job). Returns a job_id."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "handle": {
+                    "estimator_handle": {
                         "type": "string",
-                        "description": "Handle ID of the estimator/pipeline to export",
+                        "description": "Handle from instantiate_estimator",
                     },
-                    "var_name": {
+                    "dataset": {
                         "type": "string",
-                        "description": "Variable name to use in generated code (default: 'model')",
-                        "default": "model",
+                        "description": "Dataset name: airline, sunspots, lynx, etc.",
                     },
-                    "include_fit_example": {
-                        "type": "boolean",
-                        "description": "Whether to include a fit/predict example (default: false)",
-                        "default": False,
+                    "horizon": {
+                        "type": "integer",
+                        "description": "Forecast horizon (default: 12)",
+                        "default": 12,
                     },
                 },
-                "required": ["handle"],
+                "required": ["estimator_handle", "dataset"],
+            },
+        ),
+        Tool(
+            name="evaluate_estimator",
+            description="Evaluate an estimator using cross-validation on a dataset",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle from instantiate_estimator",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Dataset name: airline, sunspots, lynx, etc.",
+                    },
+                    "cv_folds": {
+                        "type": "integer",
+                        "description": "Number of cross-validation folds (default: 3)",
+                        "default": 3,
+                    },
+                },
+                "required": ["estimator_handle", "dataset"],
+            },
+        ),
+        # -- Data ------------------------------------------------------------
+        Tool(
+            name="list_available_data",
+            description=(
+                "List all data available for use — system demo datasets and active "
+                "user-loaded data handles — in a single unified response. "
+                "Use is_demo=true for demos only, is_demo=false for handles only, "
+                "or omit is_demo to get both."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "is_demo": {
+                        "type": "boolean",
+                        "description": (
+                            "Optional filter: true = only system demos, "
+                            "false = only active data handles, omit = both."
+                        ),
+                    },
+                },
             },
         ),
         Tool(
             name="load_data_source",
             description=(
-                "Load data from various sources. GUIDELINES: "
-                "1. NEVER assume a column is a time index (like 'Month' or 'Date') unless the user explicitly tells you to use it as the index. "
-                "2. ALWAYS specify 'target_column' if the user mentions a specific variable to forecast (e.g., 'Use Sales as target'). "
-                "3. By default, sktime-mcp treats the first column as target; if the first column is 'Month', this is likely WRONG. "
-                "4. For non-standard date formats (e.g., '1-01'), omit 'time_column' to use an integer index unless you can handle the format."
+                "Load data from various sources into a data handle for forecasting. "
+                "Supported source types: "
+                "'pandas' - from a dict or inline data (keys: data, time_column, target_column). "
+                "'file' - from CSV, Excel (.xlsx), or Parquet (keys: path, time_column, target_column). "
+                "'sql' - from a SQL database (keys: connection_string, query, time_column, target_column). "
+                "'url' - from a web URL pointing to CSV/Excel/Parquet (keys: url, time_column, target_column). "
+                "GUIDELINES: "
+                "1. NEVER assume a column is a time index unless the user says so. "
+                "2. ALWAYS specify 'target_column' if the user mentions a specific variable. "
+                "3. The first column is used as target by default — if that's a date column, "
+                "specify target_column explicitly. "
+                "4. For non-standard date formats, omit 'time_column' to use an integer index."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "config": {
                         "type": "object",
-                        "description": "Data source configuration. Must include 'type' (pandas, sql, file, url).",
+                        "description": (
+                            "Data source configuration. Must include 'type' "
+                            "(pandas, sql, file, url)."
+                        ),
                     },
                 },
                 "required": ["config"],
@@ -322,35 +420,21 @@ async def list_tools() -> List[Tool]:
         Tool(
             name="fit_predict_with_data",
             description=(
-                "Fit an estimator and generate predictions using custom data. GUIDELINES: "
-                "1. BEFORE calling this, check 'list_data_handles' or 'load_data_source' output. "
-                "2. If the metadata contains warnings about default target columns or column ambiguity, "
-                "STOP and re-load the data with explicit 'target_column' and 'time_column' mapping."
+                "Load data from any source in the background "
+                "(non-blocking). Returns a job_id to track "
+                "progress. The data_handle is available in "
+                "the job result when completed."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "estimator_handle": {
-                        "type": "string",
-                        "description": "Handle from instantiate_estimator",
-                    },
-                    "data_handle": {
-                        "type": "string",
-                        "description": "Handle from load_data_source",
-                    },
-                    "horizon": {
-                        "type": "integer",
-                        "description": "Forecast horizon (default: 12)",
-                        "default": 12,
+                    "config": {
+                        "type": "object",
+                        "description": "Data source configuration. Same format as load_data_source.",
                     },
                 },
-                "required": ["estimator_handle", "data_handle"],
+                "required": ["config"],
             },
-        ),
-        Tool(
-            name="list_data_handles",
-            description="List all loaded data handles and their metadata",
-            inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
             name="release_data_handle",
@@ -395,21 +479,75 @@ async def list_tools() -> List[Tool]:
                 "required": ["data_handle"],
             },
         ),
+        # -- Export / Persistence --------------------------------------------
         Tool(
-            name="auto_format_on_load",
-            description="Enable/disable automatic formatting when loading data",
+            name="export_code",
+            description="Export an estimator or pipeline as executable Python code",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "enabled": {
+                    "handle": {
+                        "type": "string",
+                        "description": "Handle ID of the estimator/pipeline to export",
+                    },
+                    "var_name": {
+                        "type": "string",
+                        "description": "Variable name to use in generated code (default: 'model')",
+                        "default": "model",
+                    },
+                    "include_fit_example": {
                         "type": "boolean",
-                        "description": "Whether to enable auto-formatting (default: True)",
-                        "default": True,
+                        "description": "Whether to include a fit/predict example (default: false)",
+                        "default": False,
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": (
+                            "Optional dataset name for the fit example "
+                            "(e.g. 'airline', 'sunspots'). Defaults to 'airline' if omitted."
+                        ),
                     },
                 },
-                "required": ["enabled"],
+                "required": ["handle"],
             },
         ),
+        Tool(
+            name="save_model",
+            description="Save an estimator/pipeline handle using sktime MLflow integration",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle ID of the estimator to save",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Local directory or URI where the model will be saved",
+                    },
+                    "mlflow_params": {
+                        "type": "object",
+                        "description": "Optional extra parameters for sktime.utils.mlflow_sktime.save_model",
+                    },
+                },
+                "required": ["estimator_handle", "path"],
+            },
+        ),
+        Tool(
+            name="load_model",
+            description="Load a saved sktime model from a local path and register it for use",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the saved model directory",
+                    },
+                },
+                "required": ["path"],
+            },
+        ),
+        # -- Jobs ------------------------------------------------------------
         Tool(
             name="check_job_status",
             description="Check the status and progress of a background job",
@@ -444,7 +582,11 @@ async def list_tools() -> List[Tool]:
         ),
         Tool(
             name="cancel_job",
-            description="Cancel a running or pending background job",
+            description=(
+                "Cancel a running or pending background job. "
+                "Set delete=true to also remove the job record entirely "
+                "(useful for cleaning up completed/failed jobs)."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -452,92 +594,93 @@ async def list_tools() -> List[Tool]:
                         "type": "string",
                         "description": "Job ID to cancel",
                     },
-                },
-                "required": ["job_id"],
-            },
-        ),
-        Tool(
-            name="delete_job",
-            description="Delete a job from the job manager",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "job_id": {
-                        "type": "string",
-                        "description": "Job ID to delete",
+                    "delete": {
+                        "type": "boolean",
+                        "description": "Also remove the job record after cancelling (default: false)",
+                        "default": False,
                     },
                 },
                 "required": ["job_id"],
-            },
-        ),
-        Tool(
-            name="cleanup_old_jobs",
-            description="Remove jobs older than specified hours",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "max_age_hours": {
-                        "type": "integer",
-                        "description": "Maximum age in hours (default: 24)",
-                        "default": 24,
-                    },
-                },
             },
         ),
     ]
 
 
+# ===================================================================
+# Tool dispatcher
+# ===================================================================
+
+
 @server.call_tool()
-async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
+async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Handle tool calls."""
     logger.info(f"=== Tool Call: {name} ===")
     logger.info(f"Arguments: {json.dumps(arguments, indent=2)}")
-    
+
     try:
+        # -- Discovery -------------------------------------------------------
         if name == "list_estimators":
             result = list_estimators_tool(
                 task=arguments.get("task"),
                 tags=arguments.get("tags"),
+                query=arguments.get("query"),
                 limit=arguments.get("limit", 50),
+                offset=arguments.get("offset", 0),
             )
+
+        elif name == "search_estimators":
+            # Deprecated — kept for backward compatibility, routes to unified list_estimators
+            logger.warning("search_estimators is deprecated; use list_estimators(query=...)")
+            result = list_estimators_tool(
+                query=arguments["query"],
+                limit=arguments.get("limit", 20),
+            )
+
         elif name == "describe_estimator":
             result = describe_estimator_tool(arguments["estimator"])
+
+        elif name == "get_available_tags":
+            result = get_available_tags()
+
+        # -- Instantiation ---------------------------------------------------
         elif name == "instantiate_estimator":
             result = instantiate_estimator_tool(
                 arguments["estimator"],
                 arguments.get("params"),
             )
+
         elif name == "instantiate_pipeline":
             result = instantiate_pipeline_tool(
                 arguments["components"],
                 arguments.get("params_list"),
             )
-        elif name == "fit_predict":
-            result = fit_predict_tool(
-                arguments["estimator_handle"],
-                arguments["dataset"],
-                arguments.get("horizon", 12),
-            )
-            # Sanitize immediately to handle Period objects
-            result = sanitize_for_json(result)
+
+        elif name == "list_handles":
+            result = list_handles_tool()
+
+        elif name == "release_handle":
+            result = release_handle_tool(arguments["handle"])
+
         elif name == "validate_pipeline":
             validator = get_composition_validator()
             validation = validator.validate_pipeline(arguments["components"])
             result = validation.to_dict()
-        elif name == "list_datasets":
-            result = list_datasets_tool()
-        elif name == "get_available_tags":
-            result = get_available_tags()
-        elif name == "search_estimators":
-            result = search_estimators_tool(
-                arguments["query"],
-                arguments.get("limit", 20),
+
+        # -- Execution -------------------------------------------------------
+        elif name == "fit_predict":
+            result = fit_predict_tool(
+                arguments["estimator_handle"],
+                arguments.get("dataset", ""),
+                arguments.get("horizon", 12),
+                data_handle=arguments.get("data_handle"),
             )
-        elif name == "export_code":
-            result = export_code_tool(
-                arguments["handle"],
-                arguments.get("var_name", "model"),
-                arguments.get("include_fit_example", False),
+            result = sanitize_for_json(result)
+
+        elif name == "fit_predict_async":
+            result = fit_predict_async_tool(
+                arguments["estimator_handle"],
+                arguments["dataset"],
+                arguments.get("horizon", 12),
             )
         elif name == "load_data_source":
             result = load_data_source_tool(arguments["config"])
@@ -546,17 +689,42 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         elif name == "list_data_sources":
             result = list_data_sources_tool()
         elif name == "fit_predict_with_data":
+            # Deprecated — kept for backward compatibility
+            logger.warning("fit_predict_with_data is deprecated; use fit_predict(data_handle=...)")
             result = fit_predict_with_data_tool(
                 arguments["estimator_handle"],
                 arguments["data_handle"],
                 arguments.get("horizon", 12),
             )
-            # Sanitize immediately to handle Period objects
             result = sanitize_for_json(result)
-        elif name == "list_data_handles":
-            result = list_data_handles_tool()
+
+        elif name == "evaluate_estimator":
+            result = evaluate_estimator_tool(
+                arguments["estimator_handle"],
+                arguments["dataset"],
+                arguments.get("cv_folds", 3),
+            )
+            result = sanitize_for_json(result)
+
+        # -- Data ------------------------------------------------------------
+        elif name == "list_available_data":
+            result = list_available_data_tool(arguments.get("is_demo"))
+
+        elif name == "load_data_source":
+            result = load_data_source_tool(arguments["config"])
+
+        elif name == "load_data_source_async":
+            result = load_data_source_async_tool(arguments["config"])
+
+        elif name == "list_data_sources":
+            # Deprecated — info is now in load_data_source description
+            logger.warning("list_data_sources is deprecated; info is in load_data_source description")
+            from sktime_mcp.tools.data_tools import list_data_sources_tool
+            result = list_data_sources_tool()
+
         elif name == "release_data_handle":
             result = release_data_handle_tool(arguments["data_handle"])
+
         elif name == "format_time_series":
             result = format_time_series_tool(
                 arguments["data_handle"],
@@ -564,44 +732,99 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 arguments.get("fill_missing", True),
                 arguments.get("remove_duplicates", True),
             )
+
         elif name == "auto_format_on_load":
-            result = auto_format_on_load_tool(arguments["enabled"])
-        elif name == "fit_predict_async":
-            result = fit_predict_async_tool(
-                arguments["estimator_handle"],
-                arguments["dataset"],
-                arguments.get("horizon", 12),
+            # Deprecated — now controlled via SKTIME_MCP_AUTO_FORMAT env var
+            logger.warning(
+                "auto_format_on_load is deprecated; use env var SKTIME_MCP_AUTO_FORMAT=true/false"
             )
+            from sktime_mcp.tools.format_tools import auto_format_on_load_tool
+            result = auto_format_on_load_tool(arguments.get("enabled", True))
+
+        # -- Export / Persistence --------------------------------------------
+        elif name == "export_code":
+            result = export_code_tool(
+                arguments["handle"],
+                arguments.get("var_name", "model"),
+                arguments.get("include_fit_example", False),
+                arguments.get("dataset"),
+            )
+
+        elif name == "save_model":
+            result = save_model_tool(
+                arguments["estimator_handle"],
+                arguments["path"],
+                arguments.get("mlflow_params"),
+            )
+
+        elif name == "load_model":
+            result = load_model_tool(arguments["path"])
+
+        # -- Jobs ------------------------------------------------------------
         elif name == "check_job_status":
             result = check_job_status_tool(arguments["job_id"])
+
         elif name == "list_jobs":
             result = list_jobs_tool(
                 arguments.get("status"),
                 arguments.get("limit", 20),
             )
+
         elif name == "cancel_job":
-            result = cancel_job_tool(arguments["job_id"])
+            result = cancel_job_tool(
+                arguments["job_id"],
+                delete=arguments.get("delete", False),
+            )
+
         elif name == "delete_job":
-            result = delete_job_tool(arguments["job_id"])
+            # Deprecated — kept for backward compatibility
+            logger.warning("delete_job is deprecated; use cancel_job(delete=true)")
+            result = cancel_job_tool(arguments["job_id"], delete=True)
+
         elif name == "cleanup_old_jobs":
+            # Deprecated — now runs automatically on a periodic timer
+            logger.warning("cleanup_old_jobs is deprecated; jobs are cleaned up automatically")
+            from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
+
         else:
             result = {"error": f"Unknown tool: {name}"}
-        
+
         logger.info(f"=== Result for {name} ===")
-        
-        # Sanitize result for JSON serialization
+
         sanitized_result = sanitize_for_json(result)
         logger.info(f"{json.dumps(sanitized_result, indent=2, default=str)}")
-        
+
         return [TextContent(type="text", text=json.dumps(sanitized_result, indent=2, default=str))]
     except Exception as e:
         logger.exception(f"Error in tool {name}")
         return [TextContent(type="text", text=json.dumps({"error": str(e)}))]
 
 
+# ===================================================================
+# Server lifecycle
+# ===================================================================
+
+
+async def _periodic_job_cleanup():
+    """Automatically clean up old jobs on a timer."""
+    from sktime_mcp.runtime.jobs import get_job_manager
+
+    while True:
+        await asyncio.sleep(JOB_CLEANUP_INTERVAL_SECS)
+        try:
+            job_manager = get_job_manager()
+            removed = job_manager.cleanup_old_jobs(JOB_MAX_AGE_HOURS)
+            if removed:
+                logger.info(f"Periodic cleanup: removed {removed} old job(s)")
+        except Exception:
+            logger.exception("Error during periodic job cleanup")
+
+
 async def run_server():
     """Run the MCP server."""
+    asyncio.create_task(_periodic_job_cleanup())
+
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 

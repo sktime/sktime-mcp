@@ -1,0 +1,596 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Background Job Management &mdash; sktime-mcp 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/extra.css?v=e8756899" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.png"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Architecture Diagram" href="architecture.html" />
+    <link rel="prev" title="Data Source Support" href="data-sources.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            sktime-mcp
+              <img src="_static/favicon.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="intro.html">sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="use-cases.html">🎯 Use Cases &amp; Personas</a></li>
+<li class="toctree-l1"><a class="reference internal" href="user-guide.html">📘 User Guide</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="usage-examples.html">Usage Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data-sources.html">Data Source Support</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Background Job Management</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#architecture">Architecture</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#key-components">Key Components</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#how-it-works">How It Works</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#non-blocking-execution">1. Non-Blocking Execution</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#progress-tracking">2. Progress Tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#job-lifecycle">3. Job Lifecycle</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#available-tools">Available Tools</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#training-tools">Training Tools</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#fit-predict-async"><code class="docutils literal notranslate"><span class="pre">fit_predict_async</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#job-management-tools">Job Management Tools</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#check-job-status"><code class="docutils literal notranslate"><span class="pre">check_job_status</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#list-jobs"><code class="docutils literal notranslate"><span class="pre">list_jobs</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#cancel-job"><code class="docutils literal notranslate"><span class="pre">cancel_job</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#delete-job"><code class="docutils literal notranslate"><span class="pre">delete_job</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#cleanup-old-jobs"><code class="docutils literal notranslate"><span class="pre">cleanup_old_jobs</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#complete-workflow-example">Complete Workflow Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#technical-details">Technical Details</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#async-execution">Async Execution</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#thread-safety">Thread Safety</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#progress-updates">Progress Updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#memory-management">Memory Management</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#benefits">Benefits</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#comparison-blocking-vs-non-blocking">Comparison: Blocking vs Non-Blocking</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#traditional-blocking">Traditional (Blocking)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#async-non-blocking">Async (Non-Blocking)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#when-to-use-each">When to Use Each</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#use-fit-predict-blocking-when">Use <code class="docutils literal notranslate"><span class="pre">fit_predict</span></code> (blocking) when:</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#use-fit-predict-async-non-blocking-when">Use <code class="docutils literal notranslate"><span class="pre">fit_predict_async</span></code> (non-blocking) when:</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#future-enhancements">Future Enhancements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#troubleshooting">Troubleshooting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#job-stuck-in-running-status">Job stuck in “running” status</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#too-many-old-jobs">Too many old jobs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#job-failed">Job failed</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Development</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture Diagram</a></li>
+<li class="toctree-l1"><a class="reference internal" href="implementation.html">Complete Code Explanation: sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dev-guide.html">Developer Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">sktime-mcp</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Background Job Management</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/background-jobs.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="background-job-management">
+<h1>Background Job Management<a class="headerlink" href="#background-job-management" title="Link to this heading"></a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>The sktime-mcp server now supports <strong>non-blocking background jobs</strong> for long-running operations like model training. This architecture prevents the MCP server from becoming unresponsive when training large models.</p>
+</section>
+<section id="architecture">
+<h2>Architecture<a class="headerlink" href="#architecture" title="Link to this heading"></a></h2>
+<p>The system uses a multi-threaded, asynchronous architecture inspired by CodeGraphContext:</p>
+<section id="key-components">
+<h3>Key Components<a class="headerlink" href="#key-components" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>JobManager</strong> (<code class="docutils literal notranslate"><span class="pre">runtime/jobs.py</span></code>) - Thread-safe job tracking</p></li>
+<li><p><strong>Executor</strong> (<code class="docutils literal notranslate"><span class="pre">runtime/executor.py</span></code>) - Async execution with job tracking</p></li>
+<li><p><strong>MCP Server</strong> (<code class="docutils literal notranslate"><span class="pre">server.py</span></code>) - Event loop coordination</p></li>
+</ol>
+</section>
+</section>
+<section id="how-it-works">
+<h2>How It Works<a class="headerlink" href="#how-it-works" title="Link to this heading"></a></h2>
+<section id="non-blocking-execution">
+<h3>1. Non-Blocking Execution<a class="headerlink" href="#non-blocking-execution" title="Link to this heading"></a></h3>
+<p>When you call <code class="docutils literal notranslate"><span class="pre">fit_predict_async</span></code>, the server:</p>
+<ol class="arabic simple">
+<li><p>Creates a job with a unique ID</p></li>
+<li><p>Schedules the training as an async coroutine on the event loop</p></li>
+<li><p><strong>Returns immediately</strong> with the job ID</p></li>
+<li><p>Continues handling other requests while training runs in the background</p></li>
+</ol>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Traditional (blocking) - Server freezes during training</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">fit_predict</span><span class="p">(</span><span class="n">handle</span><span class="p">,</span> <span class="s2">&quot;airline&quot;</span><span class="p">,</span> <span class="n">horizon</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+
+<span class="c1"># Async (non-blocking) - Server stays responsive</span>
+<span class="n">job_info</span> <span class="o">=</span> <span class="n">fit_predict_async</span><span class="p">(</span><span class="n">handle</span><span class="p">,</span> <span class="s2">&quot;airline&quot;</span><span class="p">,</span> <span class="n">horizon</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="c1"># Returns: {&quot;success&quot;: True, &quot;job_id&quot;: &quot;abc-123-def&quot;}</span>
+
+<span class="c1"># Check progress</span>
+<span class="n">status</span> <span class="o">=</span> <span class="n">check_job_status</span><span class="p">(</span><span class="s2">&quot;abc-123-def&quot;</span><span class="p">)</span>
+<span class="c1"># Returns: {&quot;status&quot;: &quot;running&quot;, &quot;progress_percentage&quot;: 66.7, ...}</span>
+</pre></div>
+</div>
+</section>
+<section id="progress-tracking">
+<h3>2. Progress Tracking<a class="headerlink" href="#progress-tracking" title="Link to this heading"></a></h3>
+<p>Jobs track their progress through multiple steps:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+  <span class="s2">&quot;job_id&quot;</span><span class="p">:</span> <span class="s2">&quot;abc-123-def&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;running&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;total_steps&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
+  <span class="s2">&quot;completed_steps&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+  <span class="s2">&quot;current_step&quot;</span><span class="p">:</span> <span class="s2">&quot;Generating predictions (horizon=12)...&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;progress_percentage&quot;</span><span class="p">:</span> <span class="mf">66.7</span><span class="p">,</span>
+  <span class="s2">&quot;estimated_time_remaining&quot;</span><span class="p">:</span> <span class="mf">5.2</span><span class="p">,</span>
+  <span class="s2">&quot;estimated_time_remaining_human&quot;</span><span class="p">:</span> <span class="s2">&quot;5s&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="job-lifecycle">
+<h3>3. Job Lifecycle<a class="headerlink" href="#job-lifecycle" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>PENDING → RUNNING → COMPLETED
+                  ↘ FAILED
+                  ↘ CANCELLED
+</pre></div>
+</div>
+</section>
+</section>
+<section id="available-tools">
+<h2>Available Tools<a class="headerlink" href="#available-tools" title="Link to this heading"></a></h2>
+<section id="training-tools">
+<h3>Training Tools<a class="headerlink" href="#training-tools" title="Link to this heading"></a></h3>
+<section id="fit-predict-async">
+<h4><code class="docutils literal notranslate"><span class="pre">fit_predict_async</span></code><a class="headerlink" href="#fit-predict-async" title="Link to this heading"></a></h4>
+<p>Train a model in the background (non-blocking).</p>
+<p><strong>Arguments:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">estimator_handle</span></code>: Handle from <code class="docutils literal notranslate"><span class="pre">instantiate_estimator</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dataset</span></code>: Dataset name (e.g., “airline”, “sunspots”)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">horizon</span></code>: Forecast horizon (default: 12)</p></li>
+</ul>
+<p><strong>Returns:</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;job_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;abc-123-def-456&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Training job started for ARIMA on airline...&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;estimator&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ARIMA&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;dataset&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;airline&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;horizon&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Example:</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Instantiate model</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">instantiate_estimator</span><span class="p">(</span><span class="s2">&quot;ARIMA&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;order&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]})</span>
+<span class="c1"># Returns: {&quot;handle&quot;: &quot;est_abc123&quot;}</span>
+
+<span class="c1"># Start training (non-blocking!)</span>
+<span class="n">job</span> <span class="o">=</span> <span class="n">fit_predict_async</span><span class="p">(</span><span class="s2">&quot;est_abc123&quot;</span><span class="p">,</span> <span class="s2">&quot;airline&quot;</span><span class="p">,</span> <span class="n">horizon</span><span class="o">=</span><span class="mi">24</span><span class="p">)</span>
+<span class="c1"># Returns immediately with job_id</span>
+
+<span class="c1"># Server is still responsive - you can do other things!</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="job-management-tools">
+<h3>Job Management Tools<a class="headerlink" href="#job-management-tools" title="Link to this heading"></a></h3>
+<section id="check-job-status">
+<h4><code class="docutils literal notranslate"><span class="pre">check_job_status</span></code><a class="headerlink" href="#check-job-status" title="Link to this heading"></a></h4>
+<p>Check the status and progress of a background job.</p>
+<p><strong>Arguments:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">job_id</span></code>: Job ID to check</p></li>
+</ul>
+<p><strong>Returns:</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;job_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;abc-123-def&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;running&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;job_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;fit_predict&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;estimator_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ARIMA&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;dataset_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;airline&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;total_steps&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;completed_steps&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;current_step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Generating predictions...&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;progress_percentage&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">66.7</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;elapsed_time&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">10.5</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;estimated_time_remaining&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">5.2</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;estimated_time_remaining_human&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;5s&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;result&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>When completed:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;completed&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;result&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;predictions&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="err">...</span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;horizon&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="list-jobs">
+<h4><code class="docutils literal notranslate"><span class="pre">list_jobs</span></code><a class="headerlink" href="#list-jobs" title="Link to this heading"></a></h4>
+<p>List all background jobs with optional filtering.</p>
+<p><strong>Arguments:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">status</span></code> (optional): Filter by status (“pending”, “running”, “completed”, “failed”, “cancelled”)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">limit</span></code> (optional): Maximum number of jobs to return (default: 20)</p></li>
+</ul>
+<p><strong>Returns:</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;jobs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;job_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;abc-123&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;completed&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;estimator_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ARIMA&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="err">...</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;job_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;def-456&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;running&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;progress_percentage&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">50.0</span><span class="p">,</span>
+<span class="w">      </span><span class="err">...</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Example:</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># List all running jobs</span>
+<span class="n">running_jobs</span> <span class="o">=</span> <span class="n">list_jobs</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="s2">&quot;running&quot;</span><span class="p">)</span>
+
+<span class="c1"># List all jobs (any status)</span>
+<span class="n">all_jobs</span> <span class="o">=</span> <span class="n">list_jobs</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="cancel-job">
+<h4><code class="docutils literal notranslate"><span class="pre">cancel_job</span></code><a class="headerlink" href="#cancel-job" title="Link to this heading"></a></h4>
+<p>Cancel a running or pending job.</p>
+<p><strong>Arguments:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">job_id</span></code>: Job ID to cancel</p></li>
+</ul>
+<p><strong>Returns:</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Job &#39;abc-123-def&#39; cancelled&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Note:</strong> You can only cancel jobs in “pending” or “running” status.</p>
+</section>
+<section id="delete-job">
+<h4><code class="docutils literal notranslate"><span class="pre">delete_job</span></code><a class="headerlink" href="#delete-job" title="Link to this heading"></a></h4>
+<p>Delete a job from the job manager.</p>
+<p><strong>Arguments:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">job_id</span></code>: Job ID to delete</p></li>
+</ul>
+<p><strong>Returns:</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Job &#39;abc-123-def&#39; deleted&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="cleanup-old-jobs">
+<h4><code class="docutils literal notranslate"><span class="pre">cleanup_old_jobs</span></code><a class="headerlink" href="#cleanup-old-jobs" title="Link to this heading"></a></h4>
+<p>Remove jobs older than specified hours.</p>
+<p><strong>Arguments:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">max_age_hours</span></code> (optional): Maximum age in hours (default: 24)</p></li>
+</ul>
+<p><strong>Returns:</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Removed 5 old job(s)&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+<section id="complete-workflow-example">
+<h2>Complete Workflow Example<a class="headerlink" href="#complete-workflow-example" title="Link to this heading"></a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># 1. Instantiate a model</span>
+<span class="n">model_result</span> <span class="o">=</span> <span class="n">instantiate_estimator</span><span class="p">(</span><span class="s2">&quot;AutoARIMA&quot;</span><span class="p">)</span>
+<span class="n">handle</span> <span class="o">=</span> <span class="n">model_result</span><span class="p">[</span><span class="s2">&quot;handle&quot;</span><span class="p">]</span>
+
+<span class="c1"># 2. Start training in background</span>
+<span class="n">job_result</span> <span class="o">=</span> <span class="n">fit_predict_async</span><span class="p">(</span><span class="n">handle</span><span class="p">,</span> <span class="s2">&quot;airline&quot;</span><span class="p">,</span> <span class="n">horizon</span><span class="o">=</span><span class="mi">24</span><span class="p">)</span>
+<span class="n">job_id</span> <span class="o">=</span> <span class="n">job_result</span><span class="p">[</span><span class="s2">&quot;job_id&quot;</span><span class="p">]</span>
+
+<span class="c1"># 3. Server is responsive - you can do other things!</span>
+<span class="c1"># Check available demo datasets</span>
+<span class="n">datasets</span> <span class="o">=</span> <span class="n">list_available_data</span><span class="p">(</span><span class="n">is_demo</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># Search for other estimators</span>
+<span class="n">estimators</span> <span class="o">=</span> <span class="n">search_estimators</span><span class="p">(</span><span class="s2">&quot;prophet&quot;</span><span class="p">)</span>
+
+<span class="c1"># 4. Check training progress</span>
+<span class="n">status</span> <span class="o">=</span> <span class="n">check_job_status</span><span class="p">(</span><span class="n">job_id</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Progress: </span><span class="si">{</span><span class="n">status</span><span class="p">[</span><span class="s1">&#39;progress_percentage&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">%&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Current step: </span><span class="si">{</span><span class="n">status</span><span class="p">[</span><span class="s1">&#39;current_step&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time remaining: </span><span class="si">{</span><span class="n">status</span><span class="p">[</span><span class="s1">&#39;estimated_time_remaining_human&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># 5. Wait for completion (or poll periodically)</span>
+<span class="k">while</span> <span class="n">status</span><span class="p">[</span><span class="s2">&quot;status&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;running&quot;</span><span class="p">:</span>
+    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">status</span> <span class="o">=</span> <span class="n">check_job_status</span><span class="p">(</span><span class="n">job_id</span><span class="p">)</span>
+
+<span class="c1"># 6. Get results</span>
+<span class="k">if</span> <span class="n">status</span><span class="p">[</span><span class="s2">&quot;status&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;completed&quot;</span><span class="p">:</span>
+    <span class="n">predictions</span> <span class="o">=</span> <span class="n">status</span><span class="p">[</span><span class="s2">&quot;result&quot;</span><span class="p">][</span><span class="s2">&quot;predictions&quot;</span><span class="p">]</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Predictions: </span><span class="si">{</span><span class="n">predictions</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Job failed: </span><span class="si">{</span><span class="n">status</span><span class="p">[</span><span class="s1">&#39;errors&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># 7. Clean up</span>
+<span class="n">delete_job</span><span class="p">(</span><span class="n">job_id</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="technical-details">
+<h2>Technical Details<a class="headerlink" href="#technical-details" title="Link to this heading"></a></h2>
+<section id="async-execution">
+<h3>Async Execution<a class="headerlink" href="#async-execution" title="Link to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">fit_predict_async</span></code> method uses:</p>
+<ol class="arabic simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">asyncio.run_in_executor()</span></code></strong> - Runs synchronous sktime operations in a thread pool</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">asyncio.sleep(0.01)</span></code></strong> - Yields control to the event loop every 10ms</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">asyncio.run_coroutine_threadsafe()</span></code></strong> - Schedules coroutines on the main event loop</p></li>
+</ol>
+<p>This prevents blocking the MCP server’s event loop.</p>
+</section>
+<section id="thread-safety">
+<h3>Thread Safety<a class="headerlink" href="#thread-safety" title="Link to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">JobManager</span></code> uses <code class="docutils literal notranslate"><span class="pre">threading.Lock()</span></code> to ensure thread-safe access to job data:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">lock</span><span class="p">:</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">jobs</span><span class="p">[</span><span class="n">job_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">JobInfo</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="progress-updates">
+<h3>Progress Updates<a class="headerlink" href="#progress-updates" title="Link to this heading"></a></h3>
+<p>Jobs update their status in real-time:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Step 1: Load data</span>
+<span class="n">job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span><span class="n">job_id</span><span class="p">,</span> 
+    <span class="n">completed_steps</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">current_step</span><span class="o">=</span><span class="s2">&quot;Loading dataset &#39;airline&#39;...&quot;</span>
+<span class="p">)</span>
+
+<span class="c1"># Step 2: Fit model</span>
+<span class="n">job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span><span class="n">job_id</span><span class="p">,</span>
+    <span class="n">completed_steps</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">current_step</span><span class="o">=</span><span class="s2">&quot;Fitting ARIMA on airline...&quot;</span>
+<span class="p">)</span>
+
+<span class="c1"># Step 3: Predict</span>
+<span class="n">job_manager</span><span class="o">.</span><span class="n">update_job</span><span class="p">(</span><span class="n">job_id</span><span class="p">,</span>
+    <span class="n">completed_steps</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">current_step</span><span class="o">=</span><span class="s2">&quot;Generating predictions...&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="memory-management">
+<h3>Memory Management<a class="headerlink" href="#memory-management" title="Link to this heading"></a></h3>
+<p>Jobs are automatically cleaned up after 24 hours (configurable):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Manual cleanup</span>
+<span class="n">cleanup_old_jobs</span><span class="p">(</span><span class="n">max_age_hours</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+
+<span class="c1"># Or delete specific job</span>
+<span class="n">delete_job</span><span class="p">(</span><span class="n">job_id</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="benefits">
+<h2>Benefits<a class="headerlink" href="#benefits" title="Link to this heading"></a></h2>
+<p>✅ <strong>Non-blocking</strong> - Server stays responsive during long operations<br />
+✅ <strong>Progress tracking</strong> - Real-time updates on training progress<br />
+✅ <strong>Time estimation</strong> - Estimated time remaining<br />
+✅ <strong>Error handling</strong> - Graceful failure with error messages<br />
+✅ <strong>Cancellation</strong> - Ability to cancel long-running jobs<br />
+✅ <strong>Memory efficient</strong> - Automatic cleanup of old jobs</p>
+</section>
+<section id="comparison-blocking-vs-non-blocking">
+<h2>Comparison: Blocking vs Non-Blocking<a class="headerlink" href="#comparison-blocking-vs-non-blocking" title="Link to this heading"></a></h2>
+<section id="traditional-blocking">
+<h3>Traditional (Blocking)<a class="headerlink" href="#traditional-blocking" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># ❌ Server freezes for 30 seconds</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">fit_predict</span><span class="p">(</span><span class="n">handle</span><span class="p">,</span> <span class="s2">&quot;large_dataset&quot;</span><span class="p">,</span> <span class="n">horizon</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+<span class="c1"># Server cannot handle any other requests during this time</span>
+</pre></div>
+</div>
+</section>
+<section id="async-non-blocking">
+<h3>Async (Non-Blocking)<a class="headerlink" href="#async-non-blocking" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># ✅ Server returns immediately</span>
+<span class="n">job</span> <span class="o">=</span> <span class="n">fit_predict_async</span><span class="p">(</span><span class="n">handle</span><span class="p">,</span> <span class="s2">&quot;large_dataset&quot;</span><span class="p">,</span> <span class="n">horizon</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+<span class="c1"># Server continues handling other requests</span>
+
+<span class="c1"># Check progress whenever you want</span>
+<span class="n">status</span> <span class="o">=</span> <span class="n">check_job_status</span><span class="p">(</span><span class="n">job</span><span class="p">[</span><span class="s2">&quot;job_id&quot;</span><span class="p">])</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="when-to-use-each">
+<h2>When to Use Each<a class="headerlink" href="#when-to-use-each" title="Link to this heading"></a></h2>
+<section id="use-fit-predict-blocking-when">
+<h3>Use <code class="docutils literal notranslate"><span class="pre">fit_predict</span></code> (blocking) when:<a class="headerlink" href="#use-fit-predict-blocking-when" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Training on small datasets (&lt; 1 second)</p></li>
+<li><p>You need results immediately</p></li>
+<li><p>Running in a script/notebook (not via MCP)</p></li>
+</ul>
+</section>
+<section id="use-fit-predict-async-non-blocking-when">
+<h3>Use <code class="docutils literal notranslate"><span class="pre">fit_predict_async</span></code> (non-blocking) when:<a class="headerlink" href="#use-fit-predict-async-non-blocking-when" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Training large models</p></li>
+<li><p>Working with big datasets</p></li>
+<li><p>Server responsiveness is critical</p></li>
+<li><p>You want progress updates</p></li>
+<li><p>Training might take &gt; 5 seconds</p></li>
+</ul>
+</section>
+</section>
+<section id="future-enhancements">
+<h2>Future Enhancements<a class="headerlink" href="#future-enhancements" title="Link to this heading"></a></h2>
+<p>Potential improvements:</p>
+<ul class="simple">
+<li><p>[ ] Support for custom progress callbacks</p></li>
+<li><p>[ ] Job persistence across server restarts</p></li>
+<li><p>[ ] Job priority queue</p></li>
+<li><p>[ ] Parallel job execution limits</p></li>
+<li><p>[ ] Streaming progress updates via WebSocket</p></li>
+<li><p>[ ] Job result caching</p></li>
+</ul>
+</section>
+<section id="troubleshooting">
+<h2>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h2>
+<section id="job-stuck-in-running-status">
+<h3>Job stuck in “running” status<a class="headerlink" href="#job-stuck-in-running-status" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Cancel and restart</span>
+<span class="n">cancel_job</span><span class="p">(</span><span class="n">job_id</span><span class="p">)</span>
+<span class="n">new_job</span> <span class="o">=</span> <span class="n">fit_predict_async</span><span class="p">(</span><span class="n">handle</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">horizon</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="too-many-old-jobs">
+<h3>Too many old jobs<a class="headerlink" href="#too-many-old-jobs" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Clean up jobs older than 1 hour</span>
+<span class="n">cleanup_old_jobs</span><span class="p">(</span><span class="n">max_age_hours</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="job-failed">
+<h3>Job failed<a class="headerlink" href="#job-failed" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">status</span> <span class="o">=</span> <span class="n">check_job_status</span><span class="p">(</span><span class="n">job_id</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">status</span><span class="p">[</span><span class="s2">&quot;status&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;failed&quot;</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Errors: </span><span class="si">{</span><span class="n">status</span><span class="p">[</span><span class="s1">&#39;errors&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="data-sources.html" class="btn btn-neutral float-left" title="Data Source Support" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="architecture.html" class="btn btn-neutral float-right" title="Architecture Diagram" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, sktime-mcp contributors.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

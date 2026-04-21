@@ -1,0 +1,280 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architecture Diagram &mdash; sktime-mcp 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/extra.css?v=e8756899" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.png"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Complete Code Explanation: sktime-mcp" href="implementation.html" />
+    <link rel="prev" title="Background Job Management" href="background-jobs.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            sktime-mcp
+              <img src="_static/favicon.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="intro.html">sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="use-cases.html">🎯 Use Cases &amp; Personas</a></li>
+<li class="toctree-l1"><a class="reference internal" href="user-guide.html">📘 User Guide</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Features</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="usage-examples.html">Usage Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data-sources.html">Data Source Support</a></li>
+<li class="toctree-l1"><a class="reference internal" href="background-jobs.html">Background Job Management</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Development</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Architecture Diagram</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#new-data-flow">New Data Flow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#component-interaction">Component Interaction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#data-adapter-pattern">Data Adapter Pattern</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#data-validation-flow">Data Validation Flow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#handle-management">Handle Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#complete-workflow-example">Complete Workflow Example</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="implementation.html">Complete Code Explanation: sktime-mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dev-guide.html">Developer Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">sktime-mcp</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Architecture Diagram</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/architecture.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="architecture-diagram">
+<h1>Architecture Diagram<a class="headerlink" href="#architecture-diagram" title="Link to this heading"></a></h1>
+<section id="new-data-flow">
+<h2>New Data Flow<a class="headerlink" href="#new-data-flow" title="Link to this heading"></a></h2>
+<p><img alt="New Data Flow" src="assets/mcp_data_flow.png" /></p>
+</section>
+<section id="component-interaction">
+<h2>Component Interaction<a class="headerlink" href="#component-interaction" title="Link to this heading"></a></h2>
+<p><img alt="Component Interaction Sequence" src="assets/component_interaction.png" /></p>
+</section>
+<section id="data-adapter-pattern">
+<h2>Data Adapter Pattern<a class="headerlink" href="#data-adapter-pattern" title="Link to this heading"></a></h2>
+<p><img alt="Data Adapter Pattern" src="assets/data_adapter_pattern.png" /></p>
+</section>
+<section id="data-validation-flow">
+<h2>Data Validation Flow<a class="headerlink" href="#data-validation-flow" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Data Source
+    │
+    ▼
+adapter.load()
+    │
+    ├─&gt; Set time index
+    ├─&gt; Sort by time
+    ├─&gt; Infer/set frequency
+    │
+    ▼
+adapter.validate()
+    │
+    ├─&gt; Check DatetimeIndex ✓
+    ├─&gt; Check for duplicates ✓
+    ├─&gt; Check missing values ⚠
+    ├─&gt; Check monotonic ⚠
+    ├─&gt; Check frequency ⚠
+    ├─&gt; Check data size ⚠
+    │
+    ▼
+Validation Report
+    {
+      &quot;valid&quot;: true/false,
+      &quot;errors&quot;: [...],      # Critical issues
+      &quot;warnings&quot;: [...]     # Non-critical issues
+    }
+    │
+    ▼
+adapter.to_sktime_format()
+    │
+    ├─&gt; Extract target (y)
+    ├─&gt; Extract exogenous (X)
+    │
+    ▼
+(y, X) ready for sktime
+</pre></div>
+</div>
+</section>
+<section id="handle-management">
+<h2>Handle Management<a class="headerlink" href="#handle-management" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>┌─────────────────────────────────────────────────────────────────┐
+│                    Executor._data_handles                       │
+│  {                                                              │
+│    &quot;data_abc123&quot;: {                                             │
+│      &quot;y&quot;: Series(...),                                          │
+│      &quot;X&quot;: DataFrame(...),                                       │
+│      &quot;metadata&quot;: {...},                                         │
+│      &quot;validation&quot;: {...},                                       │
+│      &quot;config&quot;: {...}                                            │
+│    },                                                           │
+│    &quot;data_xyz789&quot;: {...}                                         │
+│  }                                                              │
+└─────────────────────────────────────────────────────────────────┘
+         │                                    │
+         │ fit_predict_with_data()            │ release_data_handle()
+         │                                    │
+         ▼                                    ▼
+    Retrieve data                        Delete handle
+    Fit estimator                        Free memory
+    Generate predictions
+</pre></div>
+</div>
+</section>
+<section id="complete-workflow-example">
+<h2>Complete Workflow Example<a class="headerlink" href="#complete-workflow-example" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>1. Load Data
+   ┌──────────────────────────────────────────────────────────┐
+   │ load_data_source({                                       │
+   │   &quot;type&quot;: &quot;sql&quot;,                                         │
+   │   &quot;connection_string&quot;: &quot;postgresql://...&quot;,               │
+   │   &quot;query&quot;: &quot;SELECT * FROM sales&quot;,                        │
+   │   &quot;time_column&quot;: &quot;date&quot;,                                 │
+   │   &quot;target_column&quot;: &quot;revenue&quot;                             │
+   │ })                                                       │
+   └────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+   ┌──────────────────────────────────────────────────────────┐
+   │ Returns:                                                 │
+   │ {                                                        │
+   │   &quot;success&quot;: true,                                       │
+   │   &quot;data_handle&quot;: &quot;data_abc123&quot;,                          │
+   │   &quot;metadata&quot;: {                                          │
+   │     &quot;rows&quot;: 1000,                                        │
+   │     &quot;columns&quot;: [&quot;revenue&quot;, &quot;temperature&quot;],               │
+   │     &quot;frequency&quot;: &quot;D&quot;,                                    │
+   │     &quot;start_date&quot;: &quot;2020-01-01&quot;,                          │
+   │     &quot;end_date&quot;: &quot;2022-09-27&quot;                             │
+   │   },                                                     │
+   │   &quot;validation&quot;: {                                        │
+   │     &quot;valid&quot;: true,                                       │
+   │     &quot;warnings&quot;: []                                       │
+   │   }                                                      │
+   │ }                                                        │
+   └────────────────────┬─────────────────────────────────────┘
+                        │
+2. Instantiate Model    │
+   ┌──────────────────────────────────────────────────────────┐
+   │ instantiate_estimator(&quot;ARIMA&quot;, {&quot;order&quot;: [1,1,1]})       │
+   └────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+   ┌──────────────────────────────────────────────────────────┐
+   │ Returns: {&quot;handle&quot;: &quot;est_xyz789&quot;}                        │
+   └────────────────────┬─────────────────────────────────────┘
+                        │
+3. Fit &amp; Predict        │
+   ┌──────────────────────────────────────────────────────────┐
+   │ fit_predict_with_data(                                   │
+   │   estimator_handle=&quot;est_xyz789&quot;,                         │
+   │   data_handle=&quot;data_abc123&quot;,                             │
+   │   horizon=7                                              │
+   │ )                                                        │
+   └────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+   ┌──────────────────────────────────────────────────────────┐
+   │ Returns:                                                 │
+   │ {                                                        │
+   │   &quot;success&quot;: true,                                       │
+   │   &quot;predictions&quot;: {                                       │
+   │     &quot;2022-09-28&quot;: 1250.5,                                │
+   │     &quot;2022-09-29&quot;: 1255.2,                                │
+   │     ...                                                  │
+   │   },                                                     │
+   │   &quot;horizon&quot;: 7                                           │
+   │ }                                                        │
+   └──────────────────────────────────────────────────────────┘
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="background-jobs.html" class="btn btn-neutral float-left" title="Background Job Management" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="implementation.html" class="btn btn-neutral float-right" title="Complete Code Explanation: sktime-mcp" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, sktime-mcp contributors.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

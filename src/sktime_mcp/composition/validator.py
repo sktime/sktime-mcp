@@ -14,10 +14,10 @@ This module enforces:
 This prevents invalid pipelines at planning time.
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
-from enum import Enum
 import logging
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Optional
 
 from sktime_mcp.registry.interface import EstimatorNode, get_registry
 
@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 class CompositionType(Enum):
     """Types of composition in sktime."""
+
     PIPELINE = "pipeline"
     TRANSFORMER_PIPELINE = "transformer_pipeline"
     FORECASTING_PIPELINE = "forecasting_pipeline"
@@ -38,7 +39,7 @@ class CompositionType(Enum):
 class CompositionRule:
     """
     A rule describing valid compositions for an estimator type.
-    
+
     Attributes:
         source_task: The task type that can be composed
         target_task: The task type it can compose with
@@ -46,6 +47,7 @@ class CompositionRule:
         position: Where in the pipeline (before, after, any)
         description: Human-readable description
     """
+
     source_task: str
     target_task: str
     composition_type: CompositionType
@@ -57,19 +59,20 @@ class CompositionRule:
 class ValidationResult:
     """
     Result of a composition validation.
-    
+
     Attributes:
         valid: Whether the composition is valid
         errors: List of validation errors
         warnings: List of warnings (valid but potentially problematic)
         suggestions: Suggested fixes for invalid compositions
     """
+
     valid: bool
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
-    suggestions: List[str] = field(default_factory=list)
-    
-    def to_dict(self) -> Dict[str, Any]:
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    suggestions: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "valid": self.valid,
@@ -82,14 +85,14 @@ class ValidationResult:
 class CompositionValidator:
     """
     Validator for sktime estimator compositions.
-    
+
     This class encodes the rules for valid estimator compositions
     in sktime, allowing validation at planning time rather than
     runtime.
     """
-    
+
     # Valid composition rules
-    COMPOSITION_RULES: List[CompositionRule] = [
+    COMPOSITION_RULES: list[CompositionRule] = [
         # Transformers can precede forecasters
         CompositionRule(
             source_task="transformation",
@@ -139,7 +142,7 @@ class CompositionValidator:
             description="Transformers can be applied before regressors",
         ),
     ]
-    
+
     # Known transformer categories
     TRANSFORMER_CATEGORIES = {
         "Imputer": "missing_value_handler",
@@ -153,21 +156,21 @@ class CompositionValidator:
         "WindowSummarizer": "feature_creator",
         "DateTimeFeatures": "feature_creator",
     }
-    
+
     def __init__(self):
         """Initialize the validator."""
         self._registry = get_registry()
-    
+
     def validate_pipeline(
         self,
-        components: List[str],
+        components: list[str],
     ) -> ValidationResult:
         """
         Validate a proposed pipeline composition.
-        
+
         Args:
             components: List of estimator names in pipeline order
-        
+
         Returns:
             ValidationResult with validity status and any issues
         """
@@ -176,7 +179,7 @@ class CompositionValidator:
                 valid=False,
                 errors=["Pipeline cannot be empty"],
             )
-        
+
         if len(components) == 1:
             # Single component is always valid if it exists
             estimator = self._registry.get_estimator_by_name(components[0])
@@ -186,39 +189,39 @@ class CompositionValidator:
                     errors=[f"Unknown estimator: {components[0]}"],
                 )
             return ValidationResult(valid=True)
-        
+
         errors = []
         warnings = []
         suggestions = []
-        
+
         # Get all estimator nodes
-        nodes: List[Tuple[str, Optional[EstimatorNode]]] = []
+        nodes: list[tuple[str, Optional[EstimatorNode]]] = []
         for name in components:
             node = self._registry.get_estimator_by_name(name)
             nodes.append((name, node))
             if node is None:
                 errors.append(f"Unknown estimator: {name}")
-        
+
         if errors:
             return ValidationResult(
                 valid=False,
                 errors=errors,
             )
-        
+
         # Check pairwise compatibility
         for i in range(len(nodes) - 1):
             current_name, current_node = nodes[i]
             next_name, next_node = nodes[i + 1]
-            
+
             # Check if this composition is valid
             valid_pair, pair_errors, pair_warnings = self._check_pair_compatibility(
                 current_node, next_node
             )
-            
+
             if not valid_pair:
                 errors.extend(pair_errors)
             warnings.extend(pair_warnings)
-        
+
         # Check final component is executable (forecaster, classifier, etc.)
         final_name, final_node = nodes[-1]
         if final_node.task == "transformation":
@@ -226,46 +229,47 @@ class CompositionValidator:
                 f"Pipeline ends with transformer '{final_name}'. "
                 "The final component should be a forecaster, classifier, or regressor."
             )
-            suggestions.append(
-                "Add a forecaster like 'ARIMA' or 'ExponentialSmoothing' at the end"
-            )
-        
+            suggestions.append("Add a forecaster like 'ARIMA' or 'ExponentialSmoothing' at the end")
+
         # Check for duplicate consecutive components
         for i in range(len(components) - 1):
             if components[i] == components[i + 1]:
                 warnings.append(
-                    f"Duplicate consecutive component: '{components[i]}' at positions {i+1} and {i+2}"
+                    f"Duplicate consecutive component: '{components[i]}' at positions {i + 1} and {i + 2}"
                 )
-        
+
         return ValidationResult(
             valid=len(errors) == 0,
             errors=errors,
             warnings=warnings,
             suggestions=suggestions,
         )
-    
+
     def _check_pair_compatibility(
         self,
         first: EstimatorNode,
         second: EstimatorNode,
-    ) -> Tuple[bool, List[str], List[str]]:
+    ) -> tuple[bool, list[str], list[str]]:
         """
         Check if two estimators can be composed in sequence.
-        
+
         Returns:
             (is_valid, errors, warnings)
         """
         errors = []
         warnings = []
-        
+
         # Find applicable rule
         applicable_rule = None
         for rule in self.COMPOSITION_RULES:
-            if rule.source_task == first.task and rule.target_task == second.task:
-                if rule.position in ("before", "any"):
-                    applicable_rule = rule
-                    break
-        
+            if (
+                rule.source_task == first.task
+                and rule.target_task == second.task
+                and rule.position in ("before", "any")
+            ):
+                applicable_rule = rule
+                break
+
         if applicable_rule is None:
             # No rule found - check if it's an obvious error
             if first.task == second.task == "forecasting":
@@ -281,112 +285,116 @@ class CompositionValidator:
                 warnings.append(
                     f"Unusual composition: {first.task} '{first.name}' → {second.task} '{second.name}'"
                 )
-        
+
         # Check tag compatibility
         tag_errors, tag_warnings = self._check_tag_compatibility(first, second)
         errors.extend(tag_errors)
         warnings.extend(tag_warnings)
-        
+
         return len(errors) == 0, errors, warnings
-    
+
     def _check_tag_compatibility(
         self,
         first: EstimatorNode,
         second: EstimatorNode,
-    ) -> Tuple[List[str], List[str]]:
+    ) -> tuple[list[str], list[str]]:
         """Check tag-based compatibility between estimators."""
         errors = []
         warnings = []
-        
+
         # Check univariate vs multivariate
         first_univariate = first.tags.get("univariate-only", False)
         second_multivariate = second.tags.get("capability:multivariate", False)
-        
+
         if first_univariate and second_multivariate:
             warnings.append(
                 f"'{first.name}' is univariate-only but placed before "
                 f"multivariate-capable '{second.name}'"
             )
-        
+
         # Check if transformer output is compatible with next component's input
         # This is a simplified check - full check would need mtype resolution
-        
+
         return errors, warnings
-    
+
     def get_valid_compositions(
         self,
         estimator_name: str,
-    ) -> Dict[str, List[str]]:
+    ) -> dict[str, list[str]]:
         """
         Get valid compositions for an estimator.
-        
+
         Args:
             estimator_name: Name of the estimator
-        
+
         Returns:
             Dictionary with "can_precede" and "can_follow" lists
         """
         estimator = self._registry.get_estimator_by_name(estimator_name)
         if estimator is None:
-            return {"can_precede": [], "can_follow": [], "error": f"Unknown estimator: {estimator_name}"}
-        
+            return {
+                "can_precede": [],
+                "can_follow": [],
+                "error": f"Unknown estimator: {estimator_name}",
+            }
+
         can_precede = []
         can_follow = []
-        
+
         for rule in self.COMPOSITION_RULES:
             if rule.source_task == estimator.task and rule.position in ("before", "any"):
                 # This estimator can precede things of target_task
                 can_precede.append(rule.target_task)
-            
+
             if rule.target_task == estimator.task and rule.position in ("before", "any"):
                 # Things of source_task can precede this estimator
                 can_follow.append(rule.source_task)
-        
+
         return {
             "can_precede": list(set(can_precede)),
             "can_follow": list(set(can_follow)),
         }
-    
+
     def suggest_pipeline(
         self,
         task: str,
-        requirements: Optional[Dict[str, Any]] = None,
-    ) -> List[str]:
+        requirements: Optional[dict[str, Any]] = None,
+    ) -> list[str]:
         """
         Suggest a valid pipeline for a given task.
-        
+
         Args:
             task: Target task (e.g., "forecasting")
             requirements: Optional requirements (e.g., {"handles_missing": True})
-        
+
         Returns:
             List of suggested estimator names forming a valid pipeline
         """
         suggestions = []
-        
+
         if task == "forecasting":
             # Suggest common preprocessing → forecaster pipeline
             if requirements and requirements.get("handles_missing"):
                 suggestions.append("Imputer")
-            
+
             # Get a suitable forecaster
             forecasters = self._registry.get_all_estimators(
                 task="forecasting",
                 tags=requirements if requirements else None,
             )
-            
+
             if forecasters:
                 # Pick first match
                 suggestions.append(forecasters[0].name)
             else:
                 suggestions.append("NaiveForecaster")  # Fallback
-        
+
         elif task == "classification":
             # Suggest transformer → classifier
             classifiers = self._registry.get_all_estimators(task="classification")
             if classifiers:
                 suggestions.append(classifiers[0].name)
-        
+
         return suggestions
 
 

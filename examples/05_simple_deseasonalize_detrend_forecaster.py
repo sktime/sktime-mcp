@@ -1,24 +1,27 @@
+from sktime.datasets import load_airline
 from sktime.forecasting.compose import TransformedTargetForecaster
 from sktime.forecasting.naive._naive import NaiveForecaster
 from sktime.transformations.compose import TransformerPipeline
 from sktime.transformations.series.detrend._deseasonalize import Deseasonalizer
 from sktime.transformations.series.detrend._detrend import Detrender
 
+# Define the components
 step_0 = Deseasonalizer()
 step_1 = Detrender()
 step_2 = NaiveForecaster()
 
-transformer_chain = TransformerPipeline([
-    ("step_0", step_0), ("step_1", step_1)
-])
-forecaster = TransformedTargetForecaster([
-    ("transformers", transformer_chain),
-    ("forecaster", step_2),
-])
+# Build the pipeline
+transformer_chain = TransformerPipeline([("step_0", step_0), ("step_1", step_1)])
+forecaster = TransformedTargetForecaster(
+    [
+        ("transformers", transformer_chain),
+        ("forecaster", step_2),
+    ]
+)
 
 # Example usage:
 # Load data
-from sktime.datasets import load_airline
+
 y = load_airline()
 
 # Fit the model

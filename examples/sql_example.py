@@ -5,36 +5,39 @@ This example demonstrates how to use the sktime-mcp data loading
 functionality with SQL databases (SQLite in this example).
 """
 
-import pandas as pd
 import sqlite3
 from pathlib import Path
-from sktime_mcp.data import DataSourceRegistry
+
+import pandas as pd
+
 from sktime_mcp.runtime.executor import get_executor
 
 # Create a sample SQLite database
 db_path = Path("/tmp/sample_sales.db")
 
 # Create sample data
-sample_data = pd.DataFrame({
-    'date': pd.date_range(start='2020-01-01', periods=200, freq='D'),
-    'sales': [100 + i + (i % 7) * 5 for i in range(200)],
-    'temperature': [20 + (i % 10) for i in range(200)],
-    'region': ['North' if i % 2 == 0 else 'South' for i in range(200)],
-})
+sample_data = pd.DataFrame(
+    {
+        "date": pd.date_range(start="2020-01-01", periods=200, freq="D"),
+        "sales": [100 + i + (i % 7) * 5 for i in range(200)],
+        "temperature": [20 + (i % 10) for i in range(200)],
+        "region": ["North" if i % 2 == 0 else "South" for i in range(200)],
+    }
+)
 
 # Write to SQLite
 conn = sqlite3.connect(db_path)
-sample_data.to_sql('sales', conn, if_exists='replace', index=False)
+sample_data.to_sql("sales", conn, if_exists="replace", index=False)
 conn.close()
 
 print(f"Created sample SQLite database: {db_path}")
-print(f"Table: sales")
+print("Table: sales")
 print(f"Rows: {len(sample_data)}")
 
 # Example 1: Load all data with SQL query
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("Example 1: Load with SQL query")
-print("="*60)
+print("=" * 60)
 
 config = {
     "type": "sql",
@@ -50,35 +53,35 @@ executor = get_executor()
 result = executor.load_data_source(config)
 print(f"\nLoad result: {result['success']}")
 
-if result['success']:
-    metadata = result['metadata']
-    print(f"\nMetadata:")
+if result["success"]:
+    metadata = result["metadata"]
+    print("\nMetadata:")
     print(f"  Source: {metadata['source']}")
     print(f"  Rows: {metadata['rows']}")
     print(f"  Columns: {metadata['columns']}")
     print(f"  Date range: {metadata['start_date']} to {metadata['end_date']}")
-    
+
     # Fit and predict
     estimator_result = executor.instantiate("ARIMA", {"order": (1, 1, 1)})
-    
-    if estimator_result['success']:
+
+    if estimator_result["success"]:
         predictions = executor.fit_predict_with_data(
-            estimator_handle=estimator_result['handle'],
-            data_handle=result['data_handle'],
+            estimator_handle=estimator_result["handle"],
+            data_handle=result["data_handle"],
             horizon=7,
         )
-        
-        if predictions['success']:
-            print(f"\nForecast for next 7 days (North region):")
-            for step, value in list(predictions['predictions'].items())[:7]:
+
+        if predictions["success"]:
+            print("\nForecast for next 7 days (North region):")
+            for step, value in list(predictions["predictions"].items())[:7]:
                 print(f"  Day {step}: {value:.2f}")
-    
-    executor.release_data_handle(result['data_handle'])
+
+    executor.release_data_handle(result["data_handle"])
 
 # Example 2: Load with table name and filters
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("Example 2: Load with table name and filters")
-print("="*60)
+print("=" * 60)
 
 config2 = {
     "type": "sql",
@@ -95,14 +98,14 @@ config2 = {
 result2 = executor.load_data_source(config2)
 print(f"\nLoad result: {result2['success']}")
 
-if result2['success']:
+if result2["success"]:
     print(f"Rows loaded: {result2['metadata']['rows']}")
-    executor.release_data_handle(result2['data_handle'])
+    executor.release_data_handle(result2["data_handle"])
 
 # Example 3: PostgreSQL connection (commented out - requires PostgreSQL)
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("Example 3: PostgreSQL connection (template)")
-print("="*60)
+print("=" * 60)
 
 print("""
 # PostgreSQL example (requires psycopg2-binary):
@@ -116,7 +119,7 @@ config_postgres = {
     "database": "mydb",
     "username": "user",
     "password": "password",
-    
+
     "query": "SELECT date, value FROM time_series WHERE date >= '2020-01-01'",
     "time_column": "date",
     "target_column": "value",
@@ -126,9 +129,9 @@ result = executor.load_data_source(config_postgres)
 """)
 
 # Example 4: MySQL connection (commented out - requires MySQL)
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("Example 4: MySQL connection (template)")
-print("="*60)
+print("=" * 60)
 
 print("""
 # MySQL example (requires pymysql):
@@ -142,7 +145,7 @@ config_mysql = {
     "database": "mydb",
     "username": "user",
     "password": "password",
-    
+
     "query": "SELECT date, value FROM sales",
     "time_column": "date",
     "target_column": "value",
