@@ -96,6 +96,39 @@ class PandasAdapter(DataSourceAdapter):
         }
         
         return df
+        
+    async def load_async(
+        self,
+        progress_callback=None,
+    ) -> pd.DataFrame:
+        """Asynchronously load from in-memory DataFrame or dict.
+        Because in-memory objects are already loaded, this focuses on non-blocking data transformations
+        if the frame is very large."""
+        import asyncio
+        loop = asyncio.get_event_loop()
+        
+        async def cb(pct, msg):
+            if progress_callback:
+                if asyncio.iscoroutinefunction(progress_callback):
+                    await progress_callback(pct, msg)
+                else:
+                    progress_callback(pct, msg)
+
+        # Notify start of transform
+        await cb(0.0, "Starting pandas processing...")
+        
+        # We can just delegate to the synchronous load() via an executor to prevent large indexing or copy 
+        # operations from blocking the asyncio loops natively.
+        def _load():
+            return self.load()
+            
+        await cb(50.0, "Formatting and indexing dataframe...")
+        
+        df = await loop.run_in_executor(None, _load)
+        
+        await cb(100.0, "Pandas data formatted successfully!")
+        
+        return df
     
     def _detect_time_column(self, df: pd.DataFrame) -> str:
         """

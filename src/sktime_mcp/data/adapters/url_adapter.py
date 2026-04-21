@@ -5,11 +5,13 @@ Supports downloading and loading CSV, Excel, and Parquet files from URLs.
 """
 
 import os
+import asyncio
+import aiohttp
 import tempfile
 import urllib.request
 from urllib.parse import urlparse
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 import pandas as pd
 
 from ..base import DataSourceAdapter
@@ -85,6 +87,83 @@ class UrlAdapter(DataSourceAdapter):
             
         finally:
             # Clean up the temporary directory
+            temp_dir.cleanup()
+            
+    async def load_async(
+        self,
+        progress_callback: Optional[Callable[[float, str], None]] = None,
+    ) -> pd.DataFrame:
+        """Asynchronously stream data from a URL using aiohttp."""
+        url = self.config.get("url")
+        if not url:
+            raise ValueError("Config must contain 'url' key")
+        
+        parsed_url = urlparse(url)
+        path = parsed_url.path
+        filename = os.path.basename(path)
+        if not filename:
+            filename = "downloaded_data"
+            
+        temp_dir = tempfile.TemporaryDirectory()
+        temp_file_path = Path(temp_dir.name) / filename
+        
+        try:
+            if progress_callback:
+                async def cb(pct, msg):
+                    if asyncio.iscoroutinefunction(progress_callback):
+                        await progress_callback(pct, msg)
+                    else:
+                        progress_callback(pct, msg)
+                await cb(0.0, f"Connecting to {url}...")
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    response.raise_for_status()
+                    total_size = response.headers.get("Content-Length")
+                    total_size = int(total_size) if total_size else None
+                    
+                    downloaded = 0
+                    chunk_size = 8192
+                    
+                    with open(temp_file_path, "wb") as f:
+                        async for chunk in response.content.iter_chunked(chunk_size):
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if progress_callback:
+                                if total_size:
+                                    percentage = (downloaded / total_size) * 100
+                                    await cb(percentage, f"Downloading: {percentage:.1f}%")
+                                else:
+                                    await cb(0.0, f"Downloading: {downloaded} bytes")
+            
+            if progress_callback:
+                await cb(100.0, "Download complete. Processing...")
+                
+            # Parse async-ly just to not block the main thread
+            loop = asyncio.get_event_loop()
+            
+            def parse_file():
+                file_config = dict(self.config)
+                file_config["type"] = "file"
+                file_config["path"] = str(temp_file_path)
+                file_adapter = FileAdapter(file_config)
+                df = file_adapter.load()
+                
+                self._data = df
+                self._metadata = file_adapter.get_metadata()
+                self._metadata["source"] = "url"
+                self._metadata["url"] = url
+                
+                if "path" in self._metadata:
+                    del self._metadata["path"]
+                return df
+                
+            return await loop.run_in_executor(None, parse_file)
+
+        except Exception as e:
+            raise ValueError(f"Error downloading or loading data from URL {url} async: {e}")
+            
+        finally:
             temp_dir.cleanup()
             
     def validate(self, data: pd.DataFrame) -> Tuple[bool, Dict[str, Any]]:

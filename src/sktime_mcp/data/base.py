@@ -4,8 +4,9 @@ Base adapter for data sources.
 Defines the interface that all data source adapters must implement.
 """
 
+import asyncio
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 import pandas as pd
 
 
@@ -39,6 +40,39 @@ class DataSourceAdapter(ABC):
             DataFrame with time index
         """
         pass
+    
+    async def load_async(
+        self,
+        progress_callback: Optional[Callable[[float, str], None]] = None,
+    ) -> pd.DataFrame:
+        """
+        Asynchronously load data from the source.
+        
+        Default implementation wraps the synchronous load() via run_in_executor.
+        Subclasses can override for native async IO (e.g., aiohttp streaming).
+        
+        Args:
+            progress_callback: Optional callback(percentage, message) for progress
+                reporting. percentage is 0-100, message is a human-readable status.
+        
+        Returns:
+            DataFrame with time index
+        """
+        loop = asyncio.get_event_loop()
+        if progress_callback:
+            if asyncio.iscoroutinefunction(progress_callback):
+                await progress_callback(0.0, "Starting data load...")
+            else:
+                progress_callback(0.0, "Starting data load...")
+        
+        result = await loop.run_in_executor(None, self.load)
+        
+        if progress_callback:
+            if asyncio.iscoroutinefunction(progress_callback):
+                await progress_callback(100.0, "Data loaded successfully")
+            else:
+                progress_callback(100.0, "Data loaded successfully")
+        return result
     
     @abstractmethod
     def validate(self, data: pd.DataFrame) -> Tuple[bool, Dict[str, Any]]:
