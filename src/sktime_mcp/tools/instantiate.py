@@ -192,8 +192,17 @@ def instantiate_pipeline_tool(
                 ),
             }
 
+        if len(params_list) != len(components):
+            return {
+                "success": False,
+                "error": (
+                    f"'params_list' length ({len(params_list)}) must match "
+                    f"'components' length ({len(components)})"
+                ),
+            }
+
         for i, params in enumerate(params_list):
-            comp_name = components[i] if i < len(components) else None
+            comp_name = components[i]
             validation = _validate_params(params, estimator_name=comp_name)
 
             if not validation["valid"]:
