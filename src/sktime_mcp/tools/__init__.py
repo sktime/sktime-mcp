@@ -2,6 +2,7 @@
 
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.describe_estimator import describe_estimator_tool
+from sktime_mcp.tools.analyze_data import analyze_data_tool
 from sktime_mcp.tools.fit_predict import fit_predict_tool
 from sktime_mcp.tools.format_tools import (
     auto_format_on_load_tool,
@@ -20,4 +21,5 @@ __all__ = [
     "save_model_tool",
     "format_time_series_tool",
     "auto_format_on_load_tool",
+    "analyze_data_tool",
 ]
