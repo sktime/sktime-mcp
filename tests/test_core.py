@@ -215,5 +215,102 @@ class TestTools:
         assert calls["serialization_format"] == "pickle"
 
 
+class TestDataHandleLimits:
+    """Tests for data handle accumulation limits (#191)."""
+
+    def _make_executor(self, max_handles: int = 5):
+        from sktime_mcp.runtime.executor import Executor
+
+        ex = Executor()
+        ex._max_data_handles = max_handles
+        return ex
+
+    def _dummy_data(self):
+        return {"y": object(), "X": None, "metadata": {}, "validation": {}, "config": {}}
+
+    def test_handles_evicted_when_limit_reached(self):
+        """Oldest handles are evicted once _max_data_handles is exceeded."""
+        ex = self._make_executor(max_handles=5)
+
+        handles = []
+        for i in range(6):
+            hid = f"data_{i:08x}"
+            ex._register_data_handle(hid, self._dummy_data())
+            handles.append(hid)
+
+        # Limit is 5; registering the 6th should have evicted at least 1 oldest
+        assert len(ex._data_handles) <= 5
+        # The very first handle should have been evicted
+        assert handles[0] not in ex._data_handles
+
+    def test_recent_handles_survive_eviction(self):
+        """Handles added after eviction are retained."""
+        ex = self._make_executor(max_handles=5)
+
+        for i in range(6):
+            hid = f"data_{i:08x}"
+            ex._register_data_handle(hid, self._dummy_data())
+
+        # The most recently added handle must still be accessible
+        assert f"data_{5:08x}" in ex._data_handles
+
+    def test_format_releases_original_handle(self):
+        """format_data_handle releases the source handle after creating the formatted copy."""
+        import pandas as pd
+
+        ex = self._make_executor(max_handles=50)
+
+        # Create a minimal data handle manually
+        idx = pd.date_range("2020-01-01", periods=10, freq="D")
+        y = pd.Series(range(10), index=idx, name="value")
+        original_id = "data_orig0001"
+        ex._data_handles[original_id] = {
+            "y": y,
+            "X": None,
+            "metadata": {"rows": 10},
+            "validation": {},
+            "config": {},
+        }
+
+        result = ex.format_data_handle(
+            original_id,
+            auto_infer_freq=True,
+            fill_missing=False,
+            remove_duplicates=False,
+        )
+
+        assert result["success"]
+        new_id = result["data_handle"]
+        assert new_id != original_id
+        # Original must be gone
+        assert original_id not in ex._data_handles
+        # Formatted handle must exist
+        assert new_id in ex._data_handles
+
+    def test_max_data_handles_default(self):
+        """Default _max_data_handles is 50."""
+        from sktime_mcp.runtime.executor import Executor
+
+        ex = Executor()
+        assert ex._max_data_handles == 50
+
+    def test_cleanup_oldest_removes_correct_count(self):
+        """_cleanup_oldest_data removes the expected number of oldest handles."""
+        ex = self._make_executor(max_handles=50)
+
+        for i in range(10):
+            ex._data_handles[f"data_{i:08x}"] = self._dummy_data()
+
+        ex._cleanup_oldest_data(count=3)
+
+        assert len(ex._data_handles) == 7
+        # First 3 (oldest) should be gone
+        for i in range(3):
+            assert f"data_{i:08x}" not in ex._data_handles
+        # Rest survive
+        for i in range(3, 10):
+            assert f"data_{i:08x}" in ex._data_handles
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
