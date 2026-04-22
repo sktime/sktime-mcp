@@ -193,7 +193,7 @@ class Executor:
     ) -> dict[str, Any]:
         """Convenience method: load data, fit, and predict."""
         if horizon < 1:
-            return {"success": False, "error": f"Horizon must be at least 1, got {horizon}"}
+            horizon = 1
 
         if data_handle is not None:
             # Use custom loaded data
@@ -245,7 +245,7 @@ class Executor:
             Dictionary with success status and job_id
         """
         if horizon < 1:
-            return {"success": False, "error": f"Horizon must be at least 1, got {horizon}"}
+            horizon = 1
 
         # Get estimator info for job tracking
         try:
@@ -846,7 +846,7 @@ class Executor:
             Dictionary with predictions
         """
         if horizon < 1:
-            return {"success": False, "error": f"Horizon must be at least 1, got {horizon}"}
+            horizon = 1
 
         if data_handle not in self._data_handles:
             return {
