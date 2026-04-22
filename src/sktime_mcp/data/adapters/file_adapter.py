@@ -5,12 +5,28 @@ Supports loading data from local files with automatic format detection.
 """
 
 import contextlib
+import logging
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
 from ..base import DataSourceAdapter
+
+logger = logging.getLogger(__name__)
+
+# Sensitive paths that should never be accessed regardless of allowed_directories
+_SENSITIVE_PATHS_UNIX = {
+    "/etc/passwd",
+    "/etc/shadow",
+    "/etc/hosts",
+    "/proc",
+    "/sys",
+    "/dev",
+}
+_SENSITIVE_PATHS_WIN = {
+    r"C:\Windows\System32\config",
+}
 
 
 class FileAdapter(DataSourceAdapter):
@@ -27,6 +43,10 @@ class FileAdapter(DataSourceAdapter):
         "time_column": "date",
         "target_column": "value",
         "exog_columns": ["feature1", "feature2"],
+
+        # Security: restrict file access to specific directories
+        # If not set, defaults to the current working directory
+        "allowed_directories": ["/data", "/home/user/datasets"],
 
         # CSV-specific options
         "csv_options": {
@@ -47,6 +67,54 @@ class FileAdapter(DataSourceAdapter):
     }
     """
 
+    @staticmethod
+    def _validate_path(
+        path: Path,
+        allowed_directories: list[str] | None = None,
+    ) -> None:
+        """Validate that the file path is within allowed directories.
+
+        Resolves symlinks before checking to prevent directory-traversal attacks.
+
+        Args:
+            path: The file path to validate.
+            allowed_directories: Explicit list of allowed directory prefixes.
+                If ``None``, defaults to the current working directory.
+
+        Raises:
+            ValueError: If the path is outside allowed directories or targets
+                a known sensitive location.
+        """
+        # Resolve to a real, absolute path (resolves symlinks and ".." segments)
+        resolved = path.resolve()
+
+        # Block known sensitive paths
+        resolved_str = str(resolved)
+        for sensitive in _SENSITIVE_PATHS_UNIX | _SENSITIVE_PATHS_WIN:
+            if resolved_str.startswith(sensitive):
+                raise ValueError(f"Access to '{resolved}' is blocked: sensitive system path.")
+
+        # Determine allowed roots
+        if allowed_directories:
+            allowed_roots = [Path(d).resolve() for d in allowed_directories]
+        else:
+            allowed_roots = [Path.cwd().resolve()]
+
+        # Check that resolved path falls under at least one allowed root
+        for root in allowed_roots:
+            try:
+                resolved.relative_to(root)
+                return  # Path is within this allowed root
+            except ValueError:
+                continue
+
+        allowed_list = ", ".join(str(r) for r in allowed_roots)
+        raise ValueError(
+            f"Access denied: '{resolved}' is outside the allowed directories "
+            f"({allowed_list}). Configure 'allowed_directories' in the adapter "
+            "config to grant access."
+        )
+
     def load(self) -> pd.DataFrame:
         """Load from file."""
         path_str = self.config.get("path")
@@ -54,6 +122,10 @@ class FileAdapter(DataSourceAdapter):
             raise ValueError("Config must contain 'path' key")
 
         path = Path(path_str)
+
+        # Validate path is within allowed directories
+        allowed_dirs = self.config.get("allowed_directories")
+        self._validate_path(path, allowed_dirs)
 
         if not path.exists():
             raise FileNotFoundError(f"File not found: {path}")

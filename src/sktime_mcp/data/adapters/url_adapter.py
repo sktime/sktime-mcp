@@ -4,6 +4,9 @@ URL adapter for downloading files directly from the web.
 Supports downloading and loading CSV, Excel, and Parquet files from URLs.
 """
 
+import ipaddress
+import logging
+import socket
 import tempfile
 import urllib.request
 from pathlib import Path
@@ -14,6 +17,10 @@ import pandas as pd
 
 from ..base import DataSourceAdapter
 from .file_adapter import FileAdapter
+
+logger = logging.getLogger(__name__)
+
+_ALLOWED_SCHEMES = {"http", "https"}
 
 
 class UrlAdapter(DataSourceAdapter):
@@ -38,10 +45,47 @@ class UrlAdapter(DataSourceAdapter):
     }
     """
 
+    @staticmethod
+    def _validate_url(url: str) -> None:
+        """Validate URL scheme and ensure it does not target internal resources.
+
+        Raises ``ValueError`` for disallowed schemes or private/internal IPs.
+        """
+        parsed = urlparse(url)
+
+        # 1. Scheme check
+        if parsed.scheme.lower() not in _ALLOWED_SCHEMES:
+            raise ValueError(
+                f"URL scheme '{parsed.scheme}' is not allowed. "
+                f"Only {_ALLOWED_SCHEMES} are permitted."
+            )
+
+        # 2. Hostname must be present
+        hostname = parsed.hostname
+        if not hostname:
+            raise ValueError("URL must contain a valid hostname.")
+
+        # 3. Resolve hostname and block private / reserved IP ranges
+        try:
+            addr_infos = socket.getaddrinfo(hostname, None)
+        except socket.gaierror as e:
+            raise ValueError(f"Could not resolve hostname '{hostname}': {e}") from e
+
+        for _family, _type, _proto, _canon, sockaddr in addr_infos:
+            ip = ipaddress.ip_address(sockaddr[0])
+            if ip.is_private or ip.is_reserved or ip.is_loopback or ip.is_link_local:
+                raise ValueError(
+                    f"URL resolves to a private/internal address ({ip}). "
+                    "Requests to internal networks are blocked for security."
+                )
+
     def load(self) -> pd.DataFrame:
         url = self.config.get("url")
         if not url:
             raise ValueError("Config must contain 'url' key")
+
+        # Validate URL before making any network request
+        self._validate_url(url)
 
         # Determine a filename / extension from the URL if possible
         parsed_url = urlparse(url)
@@ -63,6 +107,8 @@ class UrlAdapter(DataSourceAdapter):
             file_config = dict(self.config)
             file_config["type"] = "file"
             file_config["path"] = str(temp_file_path)
+            # Allow FileAdapter to read from the temp directory
+            file_config["allowed_directories"] = [temp_dir.name]
 
             # Use FileAdapter to load the data
             file_adapter = FileAdapter(file_config)
