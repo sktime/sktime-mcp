@@ -23,7 +23,9 @@ from sktime_mcp.tools.data_tools import (
     load_data_source_tool,
     release_data_handle_tool,
 )
-from sktime_mcp.tools.describe_estimator import describe_estimator_tool
+from sktime_mcp.tools.describe_estimator import (
+    describe_estimator_tool,
+)
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
@@ -49,12 +51,6 @@ from sktime_mcp.tools.list_estimators import (
 )
 from sktime_mcp.tools.save_model import save_model_tool
 
-# ---------------------------------------------------------------------------
-# Server configuration via environment variables
-# ---------------------------------------------------------------------------
-JOB_MAX_AGE_HOURS = int(os.environ.get("SKTIME_MCP_JOB_MAX_AGE_HOURS", "24"))
-JOB_CLEANUP_INTERVAL_SECS = int(os.environ.get("SKTIME_MCP_JOB_CLEANUP_INTERVAL", "3600"))
-
 # Configure logging to stderr with detailed format
 logging.basicConfig(
     level=logging.DEBUG,
@@ -62,6 +58,10 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
+
+# Periodic job cleanup configuration (overridable via environment variables).
+JOB_MAX_AGE_HOURS = int(os.environ.get("SKTIME_MCP_JOB_MAX_AGE_HOURS", "24"))
+JOB_CLEANUP_INTERVAL_SECS = int(os.environ.get("SKTIME_MCP_JOB_CLEANUP_INTERVAL", "3600"))
 
 # Create MCP server instance
 server = Server("sktime-mcp")
@@ -659,7 +659,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = validation.to_dict()
             result["success"] = result["valid"]
 
-
         # -- Data ------------------------------------------------------------
         elif name == "list_available_data":
             result = list_available_data_tool(arguments.get("is_demo"))
@@ -672,8 +671,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         elif name == "list_data_sources":
             # Deprecated — info is now in load_data_source description
-            logger.warning("list_data_sources is deprecated; info is in load_data_source description")
+            logger.warning(
+                "list_data_sources is deprecated; info is in load_data_source description"
+            )
             from sktime_mcp.tools.data_tools import list_data_sources_tool
+
             result = list_data_sources_tool()
 
         elif name == "release_data_handle":
@@ -693,6 +695,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 "auto_format_on_load is deprecated; use env var SKTIME_MCP_AUTO_FORMAT=true/false"
             )
             from sktime_mcp.tools.format_tools import auto_format_on_load_tool
+
             result = auto_format_on_load_tool(arguments.get("enabled", True))
 
         # -- Export / Persistence --------------------------------------------
@@ -739,6 +742,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             # Deprecated — now runs automatically on a periodic timer
             logger.warning("cleanup_old_jobs is deprecated; jobs are cleaned up automatically")
             from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
+
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
 
         else:
