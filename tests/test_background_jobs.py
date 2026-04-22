@@ -9,6 +9,7 @@ import pytest
 
 from sktime_mcp.runtime.executor import get_executor
 from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
+from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
 
 
 def test_job_creation():
@@ -202,6 +203,27 @@ def test_cleanup_old_jobs():
     # Job should be gone
     job = job_manager.get_job(job_id)
     assert job is None
+
+
+def test_cleanup_old_jobs_tool_rejects_zero():
+    """cleanup_old_jobs_tool must reject max_age_hours=0 to prevent silent mass-deletion."""
+    result = cleanup_old_jobs_tool(max_age_hours=0)
+    assert result["success"] is False
+    assert "max_age_hours" in result["error"]
+
+
+def test_cleanup_old_jobs_tool_rejects_negative():
+    """cleanup_old_jobs_tool must reject negative max_age_hours."""
+    result = cleanup_old_jobs_tool(max_age_hours=-5)
+    assert result["success"] is False
+    assert "max_age_hours" in result["error"]
+
+
+def test_cleanup_old_jobs_tool_accepts_positive():
+    """cleanup_old_jobs_tool should accept a positive max_age_hours."""
+    result = cleanup_old_jobs_tool(max_age_hours=1)
+    assert result["success"] is True
+    assert "count" in result
 
 
 def run_all_tests():
