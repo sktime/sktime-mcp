@@ -159,17 +159,10 @@ def fit_predict_async_tool(
         total_steps=3,
     )
 
-    # Schedule the async coroutine on the event loop
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        # No event loop in current thread, create one
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+    from sktime_mcp.runtime._background_loop import submit_async
 
-    # Schedule the coroutine (non-blocking!)
     coro = executor.fit_predict_async(estimator_handle, dataset, horizon, job_id)
-    asyncio.run_coroutine_threadsafe(coro, loop)
+    submit_async(coro)
 
     return {
         "success": True,
