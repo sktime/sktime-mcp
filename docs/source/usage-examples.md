@@ -6,6 +6,8 @@ This page provides common usage patterns and example flows for interacting with 
 
 These flows show how an LLM would chain multiple tool calls to achieve a high-level goal.
 
+Each tool call returns information or a handle that the next step depends on, so the workflow is built step by step.
+
 ### Flow 1: Simple Forecasting
 
 **User Prompt:** "Forecast monthly airline passengers using a probabilistic model."
@@ -17,11 +19,11 @@ First, the agent searches for forecasting models that support prediction interva
 
 ```json
 {
-  "name": "list_estimators",
+  "name": "list_estimators",   // Step 1: discover forecasting models
   "arguments": {
     "task": "forecasting",
     "tags": {
-      "capability:pred_int": true
+      "capability:pred_int": true   // filter for probabilistic forecasters
     }
   }
 }
@@ -34,9 +36,9 @@ The agent inspects a specific estimator (e.g., ARIMA) to understand its paramete
 
 ```json
 {
-  "name": "describe_estimator",
+  "name": "describe_estimator",   // Inspect the chosen estimator in detail
   "arguments": {
-    "estimator": "ARIMA"
+    "estimator": "ARIMA"   // The estimator we want more information about
   }
 }
 ```
@@ -48,27 +50,29 @@ The agent instantiates the estimator with specific parameters.
 
 ```json
 {
-  "name": "instantiate_estimator",
+  "name": "instantiate_estimator",   // Create a concrete model instance
   "arguments": {
-    "estimator": "ARIMA",
+    "estimator": "ARIMA",   // The estimator we want to instantiate
     "params": {
-      "order": [1, 1, 1]
+      "order": [1, 1, 1]   // ARIMA(p, d, q) configuration
     }
   }
 }
 ```
 *Returns:* `{"handle": "est_abc123"}`
 
+Handles like `est_abc123` represent live estimator objects stored in the MCP runtime and reused across tool calls.
+
 **4. Execute**
 Finally, the agent fits the model on the airline dataset and generates a forecast.
 
 ```json
 {
-  "name": "fit_predict",
+  "name": "fit_predict",   // Fit the model and generate a forecast
   "arguments": {
-    "estimator_handle": "est_abc123",
-    "dataset": "airline",
-    "horizon": 12
+    "estimator_handle": "est_abc123",   // handle returned from instantiate_estimator
+    "dataset": "airline",   // built‑in demo dataset
+    "horizon": 12   // forecast 12 future periods
   }
 }
 ```
@@ -85,9 +89,9 @@ Before creating the pipeline, the agent checks if the components can work togeth
 
 ```json
 {
-  "name": "validate_pipeline",
+  "name": "validate_pipeline",   // Check if these components can be chained together
   "arguments": {
-    "components": ["ConditionalDeseasonalizer", "Detrender", "ARIMA"]
+    "components": ["ConditionalDeseasonalizer", "Detrender", "ARIMA"]   // Order of components in the pipeline
   }
 }
 ```
@@ -98,10 +102,10 @@ The agent instantiates the entire pipeline in a single call.
 
 ```json
 {
-  "name": "instantiate_pipeline",
+  "name": "instantiate_pipeline",   // Build the full preprocessing + model pipeline
   "arguments": {
-    "components": ["ConditionalDeseasonalizer", "Detrender", "ARIMA"],
-    "params_list": [{}, {}, {"order": [1, 1, 1]}]
+    "components": ["ConditionalDeseasonalizer", "Detrender", "ARIMA"],   // Pipeline steps in order
+    "params_list": [{}, {}, {"order": [1, 1, 1]}]   // Parameters for each component (aligned by index)
   }
 }
 ```
@@ -112,11 +116,11 @@ The pipeline is executed just like a single estimator.
 
 ```json
 {
-  "name": "fit_predict",
+  "name": "fit_predict",   // Fit the full pipeline and generate a forecast
   "arguments": {
-    "estimator_handle": "est_xyz789",
-    "dataset": "airline",
-    "horizon": 12
+    "estimator_handle": "est_xyz789",   // handle returned from instantiate_pipeline
+    "dataset": "airline",   // built‑in demo dataset
+    "horizon": 12   // forecast 12 future periods
   }
 }
 ```
@@ -130,13 +134,13 @@ Here are some standalone examples of using specific tools.
 **List Estimators**
 ```json
 {
-  "name": "list_estimators",
+  "name": "list_estimators",   // List estimators matching a task and optional tags
   "arguments": {
-    "task": "forecasting",
+    "task": "forecasting",   // Type of task we are interested in
     "tags": {
-      "capability:pred_int": true
+      "capability:pred_int": true   // Only return models that support prediction intervals
     },
-    "limit": 10
+    "limit": 10   // Maximum number of results to return
   }
 }
 ```
@@ -144,10 +148,10 @@ Here are some standalone examples of using specific tools.
 **Search by Name**
 ```json
 {
-  "name": "search_estimators",
+  "name": "search_estimators",   // Search estimators by name or keyword
   "arguments": {
-    "query": "ARIMA",
-    "limit": 5
+    "query": "ARIMA",   // Search term to match estimator names/descriptions
+    "limit": 5   // Maximum number of results to return
   }
 }
 ```
@@ -159,9 +163,9 @@ When you are done with an estimator, it's good practice to release it to free up
 
 ```json
 {
-  "name": "release_handle",
+  "name": "release_handle",   // Free the estimator handle from the MCP runtime
   "arguments": {
-    "handle": "est_abc123"
+    "handle": "est_abc123"   // The handle we previously created and no longer need
   }
 }
 ```
@@ -173,15 +177,15 @@ Use `save_model` after fitting an estimator or pipeline handle. The underlying `
 
 ```json
 {
-  "name": "save_model",
+  "name": "save_model",   // Persist a fitted estimator or pipeline to disk
   "arguments": {
-    "estimator_handle": "est_abc123",
-    "path": "/absolute/path/to/model_dir",
+    "estimator_handle": "est_abc123",   // Handle of the fitted estimator or pipeline
+    "path": "/absolute/path/to/model_dir",   // Local directory where the model will be saved
     "mlflow_params": {
-      "serialization_format": "pickle"
+      "serialization_format": "pickle"   // Serialization format used by MLflow
     }
   }
 }
 ```
 
-*Returns:* `{"success": true, "saved_path": "/absolute/path/to/model_dir", "message": "Model saved successfully to '/absolute/path/to/model_dir'"}`
+*Returns:* `{"success": true, "saved_path": "/absolute/path/to/model_dir", "message": "Model saved successfully to '/absolute/path/to/model_dir'"}`   // Confirmation that the model was persisted
