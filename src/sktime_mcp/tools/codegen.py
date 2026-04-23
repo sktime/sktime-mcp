@@ -241,14 +241,19 @@ def export_code_tool(
 
     # Optionally add fit/predict example
     if include_fit_example:
+        # Priority: explicit argument > dataset used during fit_predict > "airline" fallback
+        effective_dataset = (
+            dataset
+            or handle_info.metadata.get("training_dataset")
+            or "airline"
+        )
         # Resolve the dataset loader from DEMO_DATASETS
-        if dataset and dataset in DEMO_DATASETS:
-            module_path = DEMO_DATASETS[dataset]
+        if effective_dataset in DEMO_DATASETS:
+            module_path = DEMO_DATASETS[effective_dataset]
             module_parts = module_path.rsplit(".", 1)
             loader_module = module_parts[0]
             loader_func = module_parts[1]
         else:
-            # Default to airline for backward compatibility
             loader_module = "sktime.datasets"
             loader_func = "load_airline"
 
