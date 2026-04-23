@@ -34,8 +34,26 @@ from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
     instantiate_pipeline_tool,
     list_handles_tool,
-    load_model_tool,
-    release_handle_tool,
+)
+from sktime_mcp.tools.fit_predict import (
+    fit_predict_tool,
+    fit_predict_async_tool,
+    fit_tool,
+    predict_tool,
+    list_datasets_tool,
+)
+from sktime_mcp.tools.codegen import export_code_tool
+from sktime_mcp.tools.data_tools import (
+    load_data_source_tool,
+    load_data_source_async_tool,
+    list_data_sources_tool,
+    fit_predict_with_data_tool,
+    list_data_handles_tool,
+    release_data_handle_tool,
+)
+from sktime_mcp.tools.format_tools import (
+    format_time_series_tool,
+    auto_format_on_load_tool,
 )
 from sktime_mcp.tools.job_tools import (
     cancel_job_tool,
@@ -377,6 +395,31 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="load_data_source_async",
             description=(
+                "Non-blocking async version of load_data_source. Starts a background job. GUIDELINES: "
+                "1. NEVER assume a column is a time index (like 'Month' or 'Date') unless the user explicitly tells you to use it as the index. "
+                "2. ALWAYS specify 'target_column' if the user mentions a specific variable to forecast (e.g., 'Use Sales as target'). "
+                "3. By default, sktime-mcp treats the first column as target; if the first column is 'Month', this is likely WRONG. "
+                "4. For non-standard date formats (e.g., '1-01'), omit 'time_column' to use an integer index unless you can handle the format."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "config": {
+                        "type": "object",
+                        "description": "Data source configuration. Must include 'type' (pandas, sql, file, url).",
+                    },
+                },
+                "required": ["config"],
+            },
+        ),
+        Tool(
+            name="list_data_sources",
+            description="List all available data source types and their descriptions",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="fit_predict_with_data",
+            description=(
                 "Load data from any source in the background "
                 "(non-blocking). Returns a job_id to track "
                 "progress. The data_handle is available in "
@@ -634,7 +677,12 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["dataset"],
                 arguments.get("horizon", 12),
             )
-
+        elif name == "load_data_source":
+            result = load_data_source_tool(arguments["config"])
+        elif name == "load_data_source_async":
+            result = await load_data_source_async_tool(arguments["config"])
+        elif name == "list_data_sources":
+            result = list_data_sources_tool()
         elif name == "fit_predict_with_data":
             # Deprecated — kept for backward compatibility
             logger.warning("fit_predict_with_data is deprecated; use fit_predict(data_handle=...)")

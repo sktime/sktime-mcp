@@ -26,6 +26,7 @@ Usage:
 from .adapters import FileAdapter, PandasAdapter, SQLAdapter
 from .base import DataSourceAdapter
 from .registry import DataSourceRegistry
+from .adapters import PandasAdapter, SQLAdapter, FileAdapter, UrlAdapter
 
 __all__ = [
     "DataSourceAdapter",
@@ -33,4 +34,5 @@ __all__ = [
     "PandasAdapter",
     "SQLAdapter",
     "FileAdapter",
+    "UrlAdapter",
 ]

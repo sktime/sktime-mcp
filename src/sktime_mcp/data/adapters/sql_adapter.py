@@ -110,7 +110,135 @@ class SQLAdapter(DataSourceAdapter):
         }
 
         return df
+        
+    async def load_async(
+        self,
+        progress_callback=None,
+    ) -> pd.DataFrame:
+        """Asynchronously load from SQL database."""
+        dialect = self.config.get("dialect")
+        conn_string = self._get_connection_string()
+        
+        # Async callback helper
+        import asyncio
+        async def cb(pct, msg):
+            if progress_callback:
+                if asyncio.iscoroutinefunction(progress_callback):
+                    await progress_callback(pct, msg)
+                else:
+                    progress_callback(pct, msg)
 
+        # For sqlite, we can use aiosqlite natively for non-blocking IO
+        if dialect == "sqlite" or conn_string.startswith("sqlite://"):
+            try:
+                import aiosqlite
+            except ImportError:
+                raise ImportError(
+                    "aiosqlite is required for async SQLite fetching. "
+                    "Install with: pip install aiosqlite"
+                )
+            
+            await cb(0.0, "Connecting to SQLite (async)...")
+            
+            # Extract database path from connection string
+            # sqlite:///path/to/db -> path/to/db
+            db_path = conn_string.replace("sqlite:///", "")
+            if not db_path:
+                db_path = ":memory:"
+                
+            query = self._get_query()
+            
+            async with aiosqlite.connect(db_path) as db:
+                await cb(5.0, "Executing query...")
+                
+                async with db.execute(query) as cursor:
+                    # Get column names
+                    columns = [description[0] for description in cursor.description]
+                    
+                    rows = []
+                    total_fetched = 0
+                    chunk_size = 1000
+                    
+                    while True:
+                        chunk = await cursor.fetchmany(chunk_size)
+                        if not chunk:
+                            break
+                        rows.extend(chunk)
+                        total_fetched += len(chunk)
+                        await cb(0.0, f"Fetched {total_fetched} rows...")
+                        
+            await cb(95.0, "Parsing results into DataFrame...")
+            df = pd.DataFrame(rows, columns=columns)
+            
+        else:
+            # Fallback to run_in_executor for other dialects 
+            # (they could be converted to SQLAlchemy 2.0 AsyncEngine later)
+            await cb(0.0, f"Connecting to {dialect or 'SQL'} via standard engine...")
+            
+            loop = asyncio.get_event_loop()
+            def fetch_data():
+                return self.load()
+                
+            # If we fallback, the base `load()` does all formatting and metadata assignment implicitly.
+            return await loop.run_in_executor(None, fetch_data)
+
+        # For the native async path (e.g. SQLite), apply standard sktime formatting
+        time_col = self.config.get("time_column")
+        parse_dates = self.config.get("parse_dates", [])
+        if not parse_dates and time_col:
+            parse_dates = [time_col]
+            
+        if parse_dates:
+            for date_col in parse_dates:
+                if date_col in df.columns:
+                    df[date_col] = pd.to_datetime(df[date_col])
+
+        if time_col and time_col in df.columns:
+            df = df.set_index(time_col)
+        
+        # Ensure datetime index
+        if not isinstance(df.index, pd.DatetimeIndex) and len(df) > 0:
+            try:
+                df.index = pd.to_datetime(df.index)
+            except Exception as e:
+                raise ValueError(f"Could not convert index to datetime: {e}")
+        
+        # Sort by time
+        df = df.sort_index()
+        
+        # Set frequency if specified
+        freq = self.config.get("frequency")
+        if freq:
+            try:
+                df = df.asfreq(freq)
+            except Exception:
+                pass
+        
+        self._data = df
+        
+        # Calculate freq for empty / 1-row dataframes cleanly
+        freq_str = str(df.index.freq) if getattr(df.index, 'freq', None) else None
+        if not freq_str and isinstance(df.index, pd.DatetimeIndex) and len(df) > 2:
+            freq_str = str(pd.infer_freq(df.index))
+        freq_str = freq_str or "None"
+
+        # Safe min/max for empty dfs
+        min_date = str(df.index.min()) if len(df) > 0 else "None"
+        max_date = str(df.index.max()) if len(df) > 0 else "None"
+            
+        self._metadata = {
+            "source": "sql",
+            "connection": self._sanitize_connection_string(conn_string),
+            "rows": len(df),
+            "columns": list(df.columns),
+            "frequency": freq_str,
+            "start_date": min_date,
+            "end_date": max_date,
+        }
+        
+        await cb(100.0, "Data loaded successfully!")
+        return df
+    
     def _get_connection_string(self) -> str:
         """Build connection string from config."""
         # Check if connection string is provided directly

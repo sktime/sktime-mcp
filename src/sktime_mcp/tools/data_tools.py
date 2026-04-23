@@ -60,7 +60,21 @@ def load_data_source_tool(config: dict[str, Any]) -> dict[str, Any]:
     return executor.load_data_source(config)
 
 
-def list_data_sources_tool() -> dict[str, Any]:
+async def load_data_source_async_tool(config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Asynchronously load data from any source (pandas, SQL, file, URL, etc.).
+    
+    Args:
+        config: Data source configuration
+    
+    Returns:
+        Dictionary with job_id for tracking progress.
+    """
+    executor = get_executor()
+    return await executor.load_data_source_async(config)
+
+
+def list_data_sources_tool() -> Dict[str, Any]:
     """
     List all available data source types.
 

@@ -577,83 +577,104 @@ class Executor:
                 "error": str(e),
                 "error_type": type(e).__name__,
             }
-
+            
     async def load_data_source_async(
         self,
-        config: dict[str, Any],
-        job_id: Optional[str] = None,
-    ) -> dict[str, Any]:
+        config: Dict[str, Any],
+        job_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
-        Async version of load_data_source with job tracking.
-
-        Runs data loading in the background without blocking the
-        MCP server. Progress is tracked via the JobManager.
-
+        Asynchronously load data from any source.
+        
         Args:
-            config: Data source configuration
-            job_id: Optional job ID (created if not provided)
-
+            config: Data source configuration with 'type' key
+            job_id: Optional job ID for tracking
+            
         Returns:
-            Dictionary with data_handle and metadata
+            Dictionary with success status and job_id
         """
-        source_type = config.get("type", "unknown")
-
-        if job_id is None:
-            job_id = self._job_manager.create_job(
-                job_type="data_loading",
-                estimator_handle="",
-                dataset_name=source_type,
-                total_steps=3,
-            )
-
         try:
+            from sktime_mcp.data import DataSourceRegistry
+            # We don't have an estimator name for data load, so use source type
+            source_type = config.get("type", "unknown")
+            
+            if job_id is None:
+                job_id = self._job_manager.create_job(
+                    job_type="data_load",
+                    estimator_handle="DATA_LOAD",
+                    dataset_name=config.get("url", config.get("path", source_type)),
+                    total_steps=3,  # load, validate, format
+                )
+            
             self._job_manager.update_job(job_id, status=JobStatus.RUNNING)
-
-            # Step 1: Load raw data
+            
+            # Step 1: Load dataset
             self._job_manager.update_job(
-                job_id, completed_steps=0, current_step=f"Loading data from '{source_type}'..."
+                job_id,
+                completed_steps=0,
+                current_step=f"Starting data load from {source_type}..."
             )
             await asyncio.sleep(0.01)
-
-            from sktime_mcp.data import DataSourceRegistry
-
-            loop = asyncio.get_event_loop()
+            
             adapter = DataSourceRegistry.create_adapter(config)
-            data = await loop.run_in_executor(None, adapter.load)
-
+            
+            async def progress_cb(pct: float, msg: str):
+                # Update current_step with the download message
+                self._job_manager.update_job(
+                    job_id,
+                    current_step=msg
+                )
+                await asyncio.sleep(0)  # non-blocking yield
+                
+            try:
+                data = await adapter.load_async(progress_callback=progress_cb)
+            except Exception as e:
+                self._job_manager.update_job(
+                    job_id,
+                    status=JobStatus.FAILED,
+                    errors=[f"Failed to load data: {str(e)}"]
+                )
+                return {"success": False, "error": str(e), "job_id": job_id}
+            
             # Step 2: Validate
             self._job_manager.update_job(
-                job_id, completed_steps=1, current_step="Validating data..."
+                job_id,
+                completed_steps=1,
+                current_step="Validating data format..."
             )
             await asyncio.sleep(0.01)
-
+            
             is_valid, validation_report = adapter.validate(data)
             if not is_valid:
                 self._job_manager.update_job(
-                    job_id, status=JobStatus.FAILED, errors=["Data validation failed"]
+                    job_id,
+                    status=JobStatus.FAILED,
+                    errors=["Data validation failed", str(validation_report)]
                 )
                 return {
                     "success": False,
                     "error": "Data validation failed",
                     "validation": validation_report,
+                    "job_id": job_id
                 }
-
-            # Step 3: Convert, store, and format
+            
+            # Step 3: Format and Store
             self._job_manager.update_job(
-                job_id, completed_steps=2, current_step="Converting to sktime format..."
+                job_id,
+                completed_steps=2,
+                current_step="Formatting to sktime structure..."
             )
             await asyncio.sleep(0.01)
-
+            
             y, X = adapter.to_sktime_format(data)
-
+            
             metadata = adapter.get_metadata().copy()
-            metadata["columns"] = [y.name if hasattr(y, "name") and y.name else "target"]
+            metadata["columns"] = [y.name if hasattr(y, 'name') and y.name else "target"]
             if X is not None:
                 metadata["exog_columns"] = list(X.columns)
-            # Inject column dtypes so LLMs can distinguish time index vs target
-            metadata["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
+            
             data_handle = f"data_{uuid.uuid4().hex[:8]}"
-
+            
             self._data_handles[data_handle] = {
                 "y": y,
                 "X": X,
@@ -661,46 +682,54 @@ class Executor:
                 "validation": validation_report,
                 "config": config,
             }
-
-            # auto-format if enabled
+            
+            final_result = {
+                "success": True,
+                "data_handle": data_handle,
+                "metadata": adapter.get_metadata(),
+                "validation": validation_report,
+            }
+            
             if getattr(self, "_auto_format_enabled", True):
                 try:
                     format_result = self.format_data_handle(
-                        data_handle, auto_infer_freq=True, fill_missing=True, remove_duplicates=True
+                        data_handle,
+                        auto_infer_freq=True,
+                        fill_missing=True,
+                        remove_duplicates=True
                     )
                     if format_result["success"]:
-                        data_handle = format_result["data_handle"]
-                        metadata = format_result["metadata"]
+                        final_result = {
+                            "success": True,
+                            "data_handle": format_result["data_handle"],
+                            "original_handle": data_handle,
+                            "metadata": format_result["metadata"],
+                            "validation": validation_report,
+                            "formatted": True,
+                            "changes_made": format_result["changes_made"],
+                        }
                 except Exception as e:
                     logger.warning(f"Auto-formatting failed: {e}")
-
-            result = {
-                "success": True,
-                "data_handle": data_handle,
-                "metadata": metadata,
-                "validation": validation_report,
-            }
-
-            # mark completed with the data_handle in the result
+                    
             self._job_manager.update_job(
                 job_id,
                 status=JobStatus.COMPLETED,
                 completed_steps=3,
                 current_step="Completed",
-                result=result,
+                result=final_result
             )
-
-            return result
-
+            
+            return {**final_result, "job_id": job_id}
+            
         except Exception as e:
-            logger.exception(f"Error in async data loading for job {job_id}")
-            self._job_manager.update_job(job_id, status=JobStatus.FAILED, errors=[str(e)])
-            return {
-                "success": False,
-                "error": str(e),
-                "job_id": job_id,
-            }
-
+            logger.exception(f"Error in async data load for job {job_id}")
+            self._job_manager.update_job(
+                job_id,
+                status=JobStatus.FAILED,
+                errors=[str(e)]
+            )
+            return {"success": False, "error": str(e), "error_type": type(e).__name__, "job_id": job_id}
+    
     def format_data_handle(
         self,
         data_handle: str,
