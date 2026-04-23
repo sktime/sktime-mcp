@@ -48,7 +48,7 @@ def evaluate_estimator_tool(
     try:
         n = len(y)
         # Handle small datasets gracefully
-        initial_window = max(int(n * 0.5), n - cv_folds * 2)
+        initial_window = n - cv_folds
         if initial_window < 1:
             initial_window = 1
 
