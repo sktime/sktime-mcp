@@ -4,7 +4,7 @@ Example: Loading data from a CSV file.
 This example demonstrates how to use the sktime-mcp data loading
 functionality with CSV files.
 """
-
+import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -19,8 +19,9 @@ sample_data = pd.DataFrame(
         "temperature": [20 + (i % 10) for i in range(100)],
     }
 )
+tmp_dir = Path(tempfile.gettempdir())
 
-csv_path = Path("/tmp/sample_sales_data.csv")
+csv_path = tmp_dir / "sample_sales_data.csv"
 sample_data.to_csv(csv_path, index=False)
 print(f"Created sample CSV file: {csv_path}")
 print(f"File size: {csv_path.stat().st_size} bytes")
@@ -90,7 +91,8 @@ print("\n" + "=" * 60)
 print("Loading data from TSV file")
 print("=" * 60)
 
-tsv_path = Path("/tmp/sample_sales_data.tsv")
+tmp_dir = Path(tempfile.gettempdir())
+tsv_path = tmp_dir / "sample_sales_data.tsv"
 sample_data.to_csv(tsv_path, sep="\t", index=False)
 print(f"Created sample TSV file: {tsv_path}")
 
