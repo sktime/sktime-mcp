@@ -214,6 +214,28 @@ class TestTools:
         assert calls["path"] == str(tmp_path / "model_dir")
         assert calls["serialization_format"] == "pickle"
 
+    @pytest.mark.parametrize("horizon", [0, -3])
+    def test_fit_predict_tool_rejects_invalid_horizon(self, horizon):
+        """fit_predict_tool should validate horizon before calling sktime internals."""
+        from sktime_mcp.tools.fit_predict import fit_predict_tool
+        from sktime_mcp.tools.instantiate import instantiate_estimator_tool, release_handle_tool
+
+        inst = instantiate_estimator_tool("NaiveForecaster", {"strategy": "last"})
+        assert inst["success"]
+        handle = inst["handle"]
+
+        try:
+            result = fit_predict_tool(
+                estimator_handle=handle,
+                dataset="airline",
+                horizon=horizon,
+            )
+        finally:
+            release_handle_tool(handle)
+
+        assert result["success"] is False
+        assert "must be a positive integer" in result["error"]
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -13,6 +13,16 @@ from sktime_mcp.runtime.executor import get_executor
 logger = logging.getLogger(__name__)
 
 
+def _validate_horizon(horizon: Any) -> dict[str, Any]:
+    """Validate forecasting horizon argument for tool boundary checks."""
+    if isinstance(horizon, bool) or not isinstance(horizon, int) or horizon <= 0:
+        return {
+            "valid": False,
+            "error": f"Invalid fh={horizon!r}. fh must be a positive integer.",
+        }
+    return {"valid": True}
+
+
 def fit_predict_tool(
     estimator_handle: str,
     dataset: str,
@@ -42,6 +52,10 @@ def fit_predict_tool(
             "horizon": 12
         }
     """
+    validation = _validate_horizon(horizon)
+    if not validation["valid"]:
+        return {"success": False, "error": validation["error"]}
+
     executor = get_executor()
     return executor.fit_predict(estimator_handle, dataset, horizon, data_handle=data_handle)
 
@@ -86,6 +100,10 @@ def predict_tool(
     Returns:
         Dictionary with predictions
     """
+    validation = _validate_horizon(horizon)
+    if not validation["valid"]:
+        return {"success": False, "error": validation["error"]}
+
     executor = get_executor()
     fh = list(range(1, horizon + 1))
     return executor.predict(estimator_handle, fh=fh)
@@ -135,6 +153,10 @@ def fit_predict_async_tool(
             "message": "Training job started. Use check_job_status to monitor progress."
         }
     """
+
+    validation = _validate_horizon(horizon)
+    if not validation["valid"]:
+        return {"success": False, "error": validation["error"]}
 
     from sktime_mcp.runtime.jobs import get_job_manager
 

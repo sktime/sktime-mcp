@@ -21,6 +21,13 @@ from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 logger = logging.getLogger(__name__)
 
 
+def _validate_horizon(horizon: Any) -> Optional[str]:
+    """Return error message if horizon is invalid, else None."""
+    if isinstance(horizon, bool) or not isinstance(horizon, int) or horizon <= 0:
+        return f"Invalid fh={horizon!r}. fh must be a positive integer."
+    return None
+
+
 # Dynamically discover all available sktime demo datasets at import time.
 # This replaces the old hardcoded dictionary and automatically exposes every
 # load_* function in sktime.datasets to the MCP server.
@@ -192,6 +199,10 @@ class Executor:
         data_handle: Optional[str] = None,
     ) -> dict[str, Any]:
         """Convenience method: load data, fit, and predict."""
+        horizon_error = _validate_horizon(horizon)
+        if horizon_error:
+            return {"success": False, "error": horizon_error}
+
         if data_handle is not None:
             # Use custom loaded data
             if data_handle not in self._data_handles:
@@ -241,6 +252,10 @@ class Executor:
         Returns:
             Dictionary with success status and job_id
         """
+        horizon_error = _validate_horizon(horizon)
+        if horizon_error:
+            return {"success": False, "error": horizon_error}
+
         # Get estimator info for job tracking
         try:
             handle_info = self._handle_manager.get_info(handle_id)
@@ -839,6 +854,10 @@ class Executor:
         Returns:
             Dictionary with predictions
         """
+        horizon_error = _validate_horizon(horizon)
+        if horizon_error:
+            return {"success": False, "error": horizon_error}
+
         if data_handle not in self._data_handles:
             return {
                 "success": False,
