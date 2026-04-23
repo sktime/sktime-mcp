@@ -190,8 +190,21 @@ class Executor:
         dataset: str,
         horizon: int = 12,
         data_handle: Optional[str] = None,
+        coverage: Optional[float] = None,
     ) -> dict[str, Any]:
-        """Convenience method: load data, fit, and predict."""
+        """Convenience method: load data, fit, and predict.
+
+        Args:
+            handle_id: Estimator handle.
+            dataset: Demo dataset name (ignored when data_handle is given).
+            horizon: Forecast horizon.
+            data_handle: Custom data handle from load_data_source.
+            coverage: When provided (0 < coverage < 1), also return prediction
+                intervals at this confidence level using predict_interval().
+                If the estimator does not support prediction intervals the
+                point forecast is still returned together with an explanatory
+                ``interval_warning`` key.
+        """
         if data_handle is not None:
             # Use custom loaded data
             if data_handle not in self._data_handles:
@@ -217,7 +230,40 @@ class Executor:
         if not fit_result["success"]:
             return fit_result
 
-        return self.predict(handle_id, fh=fh, X=X)
+        point_result = self.predict(handle_id, fh=fh, X=X)
+        if not point_result["success"] or coverage is None:
+            return point_result
+
+        # Attempt to add prediction intervals
+        try:
+            instance = self._handle_manager.get_instance(handle_id)
+            intervals = instance.predict_interval(fh=fh, coverage=[coverage])
+            # intervals is a DataFrame with MultiIndex columns (variable, coverage, bound)
+            # Flatten to a simple {lower: {...}, upper: {...}} structure
+            lower: dict = {}
+            upper: dict = {}
+            for col in intervals.columns:
+                # col is (variable, coverage_level, "lower"/"upper")
+                _var, _cov, bound = col
+                series = intervals[col]
+                series.index = series.index.astype(str)
+                if bound == "lower":
+                    lower.update(series.to_dict())
+                elif bound == "upper":
+                    upper.update(series.to_dict())
+
+            point_result["prediction_intervals"] = {
+                "coverage": coverage,
+                "lower": lower,
+                "upper": upper,
+            }
+        except Exception as exc:
+            point_result["interval_warning"] = (
+                f"Prediction intervals could not be computed: {exc}. "
+                "Ensure the estimator is tagged with capability:pred_int."
+            )
+
+        return point_result
 
     async def fit_predict_async(
         self,
