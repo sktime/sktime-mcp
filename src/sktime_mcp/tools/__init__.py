@@ -1,5 +1,5 @@
 """Tools module for sktime MCP."""
-
+from .profile_time_series import profile_time_series
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.describe_estimator import describe_estimator_tool
 from sktime_mcp.tools.fit_predict import fit_predict_tool
