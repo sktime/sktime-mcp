@@ -8,7 +8,7 @@ import logging
 from typing import Any
 
 from sktime.forecasting.model_evaluation import evaluate
-from sktime.forecasting.model_selection import ExpandingWindowSplitter
+from sktime.split import ExpandingWindowSplitter
 
 from sktime_mcp.runtime.executor import get_executor
 
