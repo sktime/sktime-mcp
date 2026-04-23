@@ -188,20 +188,73 @@ def test_cancel_job():
 
 
 def test_cleanup_old_jobs():
-    """Test cleaning up old jobs."""
+    """Test cleaning up old jobs with a valid max_age_hours."""
+    from datetime import datetime, timedelta
+
     job_manager = get_job_manager()
 
     # Create a job
     job_id = job_manager.create_job("fit_predict", "handle", "ARIMA")
 
-    # Cleanup jobs older than 0 hours (should remove all)
-    count = job_manager.cleanup_old_jobs(max_age_hours=0)
+    # Manually backdating creation time to simulate an old job (25 hours ago)
+    with job_manager.lock:
+        job_manager.jobs[job_id].created_at = datetime.now() - timedelta(hours=25)
 
-    print(f"✓ Cleaned up {count} old job(s)")
+    # Cleanup jobs older than 24 hours — should remove our backdated job
+    count = job_manager.cleanup_old_jobs(max_age_hours=24)
+    assert count >= 1
+
+    print(f"\u2713 Cleaned up {count} old job(s)")
 
     # Job should be gone
     job = job_manager.get_job(job_id)
     assert job is None
+
+
+def test_cleanup_old_jobs_tool_zero_age_rejected():
+    """Test that cleanup_old_jobs_tool rejects max_age_hours=0.
+
+    Passing 0 would make the cutoff == datetime.now(), causing every job
+    to appear 'old' and be silently deleted.  The tool must refuse.
+    """
+    from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
+
+    result = cleanup_old_jobs_tool(max_age_hours=0)
+    assert result["success"] is False
+    assert "error" in result
+    assert ">= 1" in result["error"]
+
+    print("\u2713 max_age_hours=0 correctly rejected")
+
+
+def test_cleanup_old_jobs_tool_negative_age_rejected():
+    """Test that cleanup_old_jobs_tool rejects negative max_age_hours.
+
+    A negative value makes timedelta subtract a negative delta, shifting
+    the cutoff into the future so ALL jobs match and get deleted.
+    """
+    from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
+
+    for bad_value in [-1, -10, -100]:
+        result = cleanup_old_jobs_tool(max_age_hours=bad_value)
+        assert result["success"] is False, f"Expected failure for max_age_hours={bad_value}"
+        assert "error" in result
+        assert "max_age_hours" in result["error"]
+
+    print("\u2713 Negative max_age_hours values correctly rejected")
+
+
+def test_cleanup_old_jobs_tool_valid_age():
+    """Test that cleanup_old_jobs_tool succeeds with a valid max_age_hours."""
+    from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
+
+    result = cleanup_old_jobs_tool(max_age_hours=24)
+    assert result["success"] is True
+    assert "count" in result
+    assert "message" in result
+
+    print(f"\u2713 Valid max_age_hours=24 accepted, removed {result['count']} job(s)")
+
 
 
 def run_all_tests():
@@ -227,6 +280,15 @@ def run_all_tests():
 
     print("\n6. Testing cleanup old jobs...")
     test_cleanup_old_jobs()
+
+    print("\n7. Testing cleanup tool validation (zero age)...")
+    test_cleanup_old_jobs_tool_zero_age_rejected()
+
+    print("\n8. Testing cleanup tool validation (negative age)...")
+    test_cleanup_old_jobs_tool_negative_age_rejected()
+
+    print("\n9. Testing cleanup tool validation (valid age)...")
+    test_cleanup_old_jobs_tool_valid_age()
 
     print("\n" + "=" * 60)
     print("✅ All tests passed!")
