@@ -244,7 +244,8 @@ async def list_tools() -> list[Tool]:
             name="fit_predict",
             description=(
                 "Fit an estimator on a dataset and generate predictions. "
-                "Accepts either a demo dataset name or a data_handle from load_data_source."
+                "Accepts either a demo dataset name or a data_handle from load_data_source. "
+                "Use the coverage parameter to get prediction intervals."
             ),
             inputSchema={
                 "type": "object",
@@ -269,6 +270,16 @@ async def list_tools() -> list[Tool]:
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
                     },
+                    "coverage": {
+                        "type": ["number", "array"],
+                        "description": (
+                            "Confidence level(s) for prediction intervals. "
+                            "Use a single number (e.g., 0.9 for 90% intervals) or "
+                            "a list of numbers for multiple intervals (e.g., [0.5, 0.9, 0.95]). "
+                            "Only works with estimators that support prediction intervals "
+                            "(check capability:pred_int tag)."
+                        ),
+                    },
                 },
                 "required": ["estimator_handle"],
             },
@@ -277,7 +288,8 @@ async def list_tools() -> list[Tool]:
             name="fit_predict_async",
             description=(
                 "Fit an estimator on a dataset and generate predictions "
-                "(non-blocking background job). Returns a job_id."
+                "(non-blocking background job). Returns a job_id. "
+                "Use the coverage parameter to get prediction intervals."
             ),
             inputSchema={
                 "type": "object",
@@ -294,6 +306,16 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
+                    },
+                    "coverage": {
+                        "type": ["number", "array"],
+                        "description": (
+                            "Confidence level(s) for prediction intervals. "
+                            "Use a single number (e.g., 0.9 for 90% intervals) or "
+                            "a list of numbers for multiple intervals (e.g., [0.5, 0.9, 0.95]). "
+                            "Only works with estimators that support prediction intervals "
+                            "(check capability:pred_int tag)."
+                        ),
                     },
                 },
                 "required": ["estimator_handle", "dataset"],
@@ -625,6 +647,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("dataset", ""),
                 arguments.get("horizon", 12),
                 data_handle=arguments.get("data_handle"),
+                coverage=arguments.get("coverage"),
             )
             result = sanitize_for_json(result)
 
@@ -633,6 +656,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["estimator_handle"],
                 arguments["dataset"],
                 arguments.get("horizon", 12),
+                coverage=arguments.get("coverage"),
             )
 
         elif name == "fit_predict_with_data":
