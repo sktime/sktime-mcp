@@ -67,16 +67,79 @@ logger = logging.getLogger(__name__)
 server = Server("sktime-mcp")
 
 
-def sanitize_for_json(obj):
-    """Recursively convert objects to JSON-serializable format."""
-    if isinstance(obj, dict):
-        return {str(k): sanitize_for_json(v) for k, v in obj.items()}
-    elif isinstance(obj, (list, tuple)):
-        return [sanitize_for_json(item) for item in obj]
-    elif hasattr(obj, "__dict__") and not isinstance(obj, (str, int, float, bool, type(None))):
-        return str(obj)
-    else:
+def sanitize_for_json(obj: object, _seen: set[int] | None = None) -> object:
+    """Recursively convert objects to JSON-serializable format.
+
+    Handles NumPy scalars/arrays and Pandas types in addition to plain Python
+    containers. Cycle detection is applied to containers only to avoid false
+    positives with CPython's small-int caching.
+    """
+    # --- NumPy types ---
+    try:
+        import numpy as np
+
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            f = float(obj)
+            if not (f == f):  # NaN check
+                return None
+            if f == float("inf") or f == float("-inf"):
+                return None
+            return f
+        if isinstance(obj, np.ndarray):
+            return [sanitize_for_json(item, _seen) for item in obj.tolist()]
+        if isinstance(obj, np.complexfloating):
+            return str(obj)
+    except ImportError:
+        pass
+
+    # --- Pandas types ---
+    try:
+        import pandas as pd
+
+        if obj is pd.NaT or obj is pd.NA:
+            return None
+        if isinstance(obj, pd.Timestamp):
+            return obj.isoformat()
+        if isinstance(obj, pd.Series):
+            return [sanitize_for_json(item, _seen) for item in obj.tolist()]
+        if isinstance(obj, pd.DataFrame):
+            return [
+                {str(k): sanitize_for_json(v, _seen) for k, v in row.items()}
+                for row in obj.to_dict(orient="records")
+            ]
+    except ImportError:
+        pass
+
+    # --- Native scalars (fast path) ---
+    if isinstance(obj, (bool, int, float, str, type(None))):
         return obj
+
+    # --- Containers with cycle detection ---
+    if _seen is None:
+        _seen = set()
+    obj_id = id(obj)
+    if obj_id in _seen:
+        return "<circular reference>"
+    _seen.add(obj_id)
+
+    if isinstance(obj, dict):
+        result = {str(k): sanitize_for_json(v, _seen) for k, v in obj.items()}
+        _seen.discard(obj_id)
+        return result
+    if isinstance(obj, (list, tuple)):
+        result = [sanitize_for_json(item, _seen) for item in obj]
+        _seen.discard(obj_id)
+        return result
+
+    # --- Fallback: objects with __dict__ ---
+    if hasattr(obj, "__dict__"):
+        return str(obj)
+
+    return obj
 
 
 # ===================================================================
