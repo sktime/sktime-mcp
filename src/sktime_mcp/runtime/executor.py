@@ -548,11 +548,12 @@ class Executor:
                         data_handle, auto_infer_freq=True, fill_missing=True, remove_duplicates=True
                     )
                     if format_result["success"]:
-                        # Return the NEW handle (formatted)
+                        # Release the intermediate (unformatted) handle — it is superseded by
+                        # the formatted one and must not accumulate in memory across calls.
+                        del self._data_handles[data_handle]
                         return {
                             "success": True,
                             "data_handle": format_result["data_handle"],
-                            "original_handle": data_handle,
                             "metadata": format_result["metadata"],
                             "validation": validation_report,
                             "formatted": True,
@@ -669,6 +670,8 @@ class Executor:
                         data_handle, auto_infer_freq=True, fill_missing=True, remove_duplicates=True
                     )
                     if format_result["success"]:
+                        # Release the intermediate (unformatted) handle before reassigning.
+                        del self._data_handles[data_handle]
                         data_handle = format_result["data_handle"]
                         metadata = format_result["metadata"]
                 except Exception as e:
