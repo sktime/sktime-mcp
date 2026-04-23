@@ -18,6 +18,7 @@ def fit_predict_tool(
     dataset: str,
     horizon: int = 12,
     data_handle: Optional[str] = None,
+    coverage: Optional[float] = None,
 ) -> dict[str, Any]:
     """
     Execute a complete fit-predict workflow.
@@ -27,12 +28,19 @@ def fit_predict_tool(
         dataset: Name of demo dataset (e.g., "airline", "sunspots")
         horizon: Forecast horizon (default: 12)
         data_handle: Optional handle from load_data_source for custom data
+        coverage: Confidence level for prediction intervals, e.g. 0.9 for
+            90% intervals. Only used when the estimator supports
+            ``capability:pred_int``. Omit for point forecasts only.
 
     Returns:
         Dictionary with:
         - success: bool
         - predictions: Forecast values
         - horizon: Number of steps predicted
+        - prediction_intervals: (optional) lower/upper bounds when coverage
+            is requested and the estimator supports predict_interval()
+        - interval_warning: (optional) message when coverage was requested
+            but the estimator does not support prediction intervals
 
     Example:
         >>> fit_predict_tool("est_abc123", "airline", horizon=12)
@@ -43,7 +51,13 @@ def fit_predict_tool(
         }
     """
     executor = get_executor()
-    return executor.fit_predict(estimator_handle, dataset, horizon, data_handle=data_handle)
+    return executor.fit_predict(
+        estimator_handle,
+        dataset,
+        horizon,
+        data_handle=data_handle,
+        coverage=coverage,
+    )
 
 
 def fit_tool(

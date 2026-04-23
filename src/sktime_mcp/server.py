@@ -244,7 +244,9 @@ async def list_tools() -> list[Tool]:
             name="fit_predict",
             description=(
                 "Fit an estimator on a dataset and generate predictions. "
-                "Accepts either a demo dataset name or a data_handle from load_data_source."
+                "Accepts either a demo dataset name or a data_handle from load_data_source. "
+                "Set coverage (e.g. 0.9) to also return 90% prediction intervals for "
+                "estimators tagged with capability:pred_int."
             ),
             inputSchema={
                 "type": "object",
@@ -268,6 +270,16 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
+                    },
+                    "coverage": {
+                        "type": "number",
+                        "description": (
+                            "Confidence level for prediction intervals, e.g. 0.9 for 90% intervals. "
+                            "Only used when the estimator supports capability:pred_int. "
+                            "Omit for point forecasts only."
+                        ),
+                        "minimum": 0.0,
+                        "maximum": 1.0,
                     },
                 },
                 "required": ["estimator_handle"],
@@ -625,6 +637,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("dataset", ""),
                 arguments.get("horizon", 12),
                 data_handle=arguments.get("data_handle"),
+                coverage=arguments.get("coverage"),
             )
             result = sanitize_for_json(result)
 
