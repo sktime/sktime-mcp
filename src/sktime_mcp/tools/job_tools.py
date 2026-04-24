@@ -118,11 +118,18 @@ def cleanup_old_jobs_tool(max_age_hours: int = 24) -> dict[str, Any]:
     Clean up old jobs.
 
     Args:
-        max_age_hours: Maximum age in hours (default: 24)
+        max_age_hours: Maximum age in hours for a job to be considered old (default: 24).
+            Must be a positive integer (>= 1).
 
     Returns:
         Dictionary with number of jobs removed
     """
+    if max_age_hours < 1:
+        return {
+            "success": False,
+            "error": "max_age_hours must be a positive integer (>= 1).",
+        }
+
     job_manager = get_job_manager()
 
     count = job_manager.cleanup_old_jobs(max_age_hours)
