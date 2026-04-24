@@ -47,10 +47,9 @@ def evaluate_estimator_tool(
 
     try:
         n = len(y)
-        # Handle small datasets gracefully
-        initial_window = max(int(n * 0.5), n - cv_folds * 2)
-        if initial_window < 1:
-            initial_window = 1
+        # Leave exactly cv_folds tail observations for evaluation;
+        # with step_length=1 the splitter produces one fold per remaining point.
+        initial_window = max(2, n - cv_folds)
 
         cv = ExpandingWindowSplitter(initial_window=initial_window, step_length=1, fh=[1])
 
