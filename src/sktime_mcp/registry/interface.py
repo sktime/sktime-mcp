@@ -83,6 +83,7 @@ class RegistryInterface:
         "splitter": "splitting",
         # "alignment": "alignment", L-2: It is failing, but I will investigate it later
         "network": "network",
+        "detector": "detection",
     }
 
     def __init__(self):
