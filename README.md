@@ -50,6 +50,18 @@ python3 -m pip install -e .
 
 # With all optional dependencies
 python3 -m pip install -e ".[all]"
+### ⚠️ Windows + Python 3.14 note
+
+On Windows with Python 3.14, installing with:
+    pip install -e ".[all]"
+may fail when building `scipy` from source due to unsupported compiler flags (C17).
+
+This happens because pre-built wheels for `scipy` may not yet be available for Python 3.14 on Windows.
+
+**Workaround:**
+    pip install scipy --only-binary=:all:
+    pip install -e "."
+This forces pip to use pre-built binaries and avoids the compilation issue.
 
 # Development installation
 python3 -m pip install -e ".[dev]"
