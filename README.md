@@ -36,8 +36,8 @@ This MCP is **not** just documentation or static code analysis. It is a **semant
 It is recommended to use a virtual environment:
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
 
 ### Package Installation
@@ -67,6 +67,9 @@ pip install -e ".[all]"
 # Development installation
 pip install -e ".[dev]"
 ```
+
+For a more detailed first-time setup flow, including MCP server verification and troubleshooting, see [Beginner Setup](#-beginner-setup-firsttime-users).
+
 ## 🧭 Beginner Setup (First‑Time Users)
 
 If you are new to sktime‑mcp or to MCP‑based workflows, this section provides a minimal starting point to help you verify that your setup is working correctly.
@@ -79,19 +82,45 @@ The Model Context Protocol (MCP) allows Large Language Models (LLMs) to discover
 - A working Python virtual environment (recommended)
 - `pip` installed
 
-### Minimal Setup Check
-After installing the package, you can verify that the MCP server starts correctly by running:
+### macOS / Unix-like first-time setup
+
+For macOS or Unix-like shells, create an isolated virtual environment before installing the package:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+```
+
+**Verify that the MCP server starts:**
 
 ```bash
 sktime-mcp
 ```
 
+If the `sktime-mcp` console command is not found (e.g. the script was not placed on your `PATH`), use the module fallback instead — this is also the recommended form when an MCP client needs to target a specific Python environment:
+
+```bash
+python -m sktime_mcp.server
+```
+
+**Common first-time issues:**
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| `command not found: sktime-mcp` | Scripts directory not on `PATH` | Run `python -m sktime_mcp.server` or add `.venv/bin` to your `PATH` |
+| `ModuleNotFoundError: sktime_mcp` | Package not installed in the active environment | Confirm `.venv` is active (`which python`) and re-run `pip install -e ".[dev]"` |
+| `pip: command not found` | System `pip` not available | Use `python -m pip` instead of bare `pip` |
+| Wrong Python version selected | Multiple Python installations | Invoke `python3 -m venv .venv` explicitly and always use `python` inside the activated environment |
+
+### Minimal Setup Check
+
+After completing the steps above, confirm the server starts with `sktime-mcp`. See the [macOS / Unix-like first-time setup](#macos--unix-like-first-time-setup) section for the fallback command and common error solutions.
 
 > **Note:** On Windows, the `sktime-mcp` command may be installed to a directory
 > not on your `PATH` (e.g., `%APPDATA%\Python\Python3xx\Scripts`). Either add
 > that directory to your `PATH` or use `python -m sktime_mcp.server` instead.
-
-**Note:** On some systems (like macOS), `pip` may not be available in the path. In such cases, use `python3 -m pip` to ensure the command runs with the intended Python version.
 
 
 ## 🚀 Quick Start
@@ -99,12 +128,10 @@ sktime-mcp
 ### Running the MCP Server
 
 ```bash
-# Start the MCP server
 sktime-mcp
-
-# Or run directly
-python -m sktime_mcp.server
 ```
+
+If `sktime-mcp` is not on your `PATH`, use `python -m sktime_mcp.server` instead (see [Beginner Setup](#-beginner-setup-firsttime-users) for details).
 
 ### Connecting from an LLM Client
 
@@ -128,21 +155,18 @@ The server uses stdio transport by default, compatible with Claude Desktop, Clau
 }
 ```
 
-If you are using a virtual environment, specify the full path to the environment's Python executable in the `command` field, and run the server with `-m sktime_mcp.server`.
+If you are using a virtual environment, or if `sktime-mcp` is not on your `PATH`, point the client directly at the environment's Python executable — this ensures the correct packages are used:
 
 ```json
 {
   "mcpServers": {
     "sktime": {
-      "command": "<project-root>/venv/bin/python",
+      "command": "<project-root>/.venv/bin/python",
       "args": ["-m", "sktime_mcp.server"]
     }
   }
 }
 ```
-
-If `sktime-mcp` is not on your `PATH`, use the full path to the executable or
-use `python -m sktime_mcp.server` as the command instead.
 
 ## 📚 Available Tools
 
