@@ -45,6 +45,55 @@ def _get_estimator_module(estimator_name: str) -> Optional[str]:
     return None
 
 
+def _is_estimator_like(value: Any) -> bool:
+    """Check whether a value looks like an estimator object."""
+    return hasattr(value, "get_params") and callable(value.get_params)
+
+
+def _collect_imports_from_value(
+    value: Any,
+    imports: set[str],
+    visited: set[int],
+) -> None:
+    """Recursively collect class imports from nested values.
+
+    Handles composite estimators where parameters include lists/tuples of
+    estimator instances (e.g., ``steps=[('diff', Differencer()), ...]``).
+    """
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return
+
+    if isinstance(value, dict):
+        for sub_value in value.values():
+            _collect_imports_from_value(sub_value, imports, visited)
+        return
+
+    if isinstance(value, (list, tuple, set)):
+        for item in value:
+            _collect_imports_from_value(item, imports, visited)
+        return
+
+    if not _is_estimator_like(value):
+        return
+
+    value_id = id(value)
+    if value_id in visited:
+        return
+    visited.add(value_id)
+
+    cls = value.__class__
+    imports.add(f"from {cls.__module__} import {cls.__name__}")
+
+    try:
+        shallow_params = value.get_params(deep=False)
+    except Exception:
+        return
+
+    if isinstance(shallow_params, dict):
+        for sub_value in shallow_params.values():
+            _collect_imports_from_value(sub_value, imports, visited)
+
+
 def _generate_single_estimator_code(
     estimator_name: str, params: dict[str, Any], var_name: str = "model"
 ) -> dict[str, Any]:
@@ -54,8 +103,9 @@ def _generate_single_estimator_code(
     if not module:
         return {"success": False, "error": f"Could not find module for estimator: {estimator_name}"}
 
-    # Build import statement
-    imports = [f"from {module} import {estimator_name}"]
+    # Build import statements (outer estimator + nested step estimators)
+    imports = {f"from {module} import {estimator_name}"}
+    _collect_imports_from_value(params, imports, visited=set())
 
     # Build instantiation code
     if params:
@@ -68,13 +118,14 @@ def _generate_single_estimator_code(
         instantiation = f"{var_name} = {estimator_name}()"
 
     # Combine into full code
-    code_lines = imports + ["", instantiation]
+    sorted_imports = sorted(imports)
+    code_lines = sorted_imports + ["", instantiation]
     code = "\n".join(code_lines)
 
     return {
         "success": True,
         "code": code,
-        "imports": imports,
+        "imports": sorted_imports,
         "instantiation": instantiation,
     }
 

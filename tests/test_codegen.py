@@ -110,6 +110,27 @@ class TestSingleEstimatorCodeGen:
         assert not result["success"]
         assert "error" in result
 
+    def test_composite_params_include_step_imports(self):
+        """Composite estimator params should include imports for nested step classes."""
+        from sktime.forecasting.naive import NaiveForecaster
+        from sktime.transformations.series.difference import Differencer
+
+        result = _generate_single_estimator_code(
+            "ForecastingPipeline",
+            {
+                "steps": [
+                    ("differencer", Differencer()),
+                    ("forecaster", NaiveForecaster()),
+                ]
+            },
+            var_name="pipeline",
+        )
+
+        assert result["success"]
+        assert "import ForecastingPipeline" in result["code"]
+        assert "import Differencer" in result["code"]
+        assert "import NaiveForecaster" in result["code"]
+
 
 class TestPipelineCodeGen:
     """Tests for _generate_pipeline_code."""
