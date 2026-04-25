@@ -7,13 +7,15 @@ functionality with SQL databases (SQLite in this example).
 
 import sqlite3
 from pathlib import Path
+import tempfile
 
 import pandas as pd
 
 from sktime_mcp.runtime.executor import get_executor
 
 # Create a sample SQLite database
-db_path = Path("/tmp/sample_sales.db")
+temp_dir = Path(tempfile.gettempdir()) / "sktime_mcp_examples"
+db_path = temp_dir / "sample_sales.db"
 
 # Create sample data
 sample_data = pd.DataFrame(

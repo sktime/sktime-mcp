@@ -6,6 +6,7 @@ functionality with CSV files.
 """
 
 from pathlib import Path
+import tempfile
 
 import pandas as pd
 
@@ -20,7 +21,8 @@ sample_data = pd.DataFrame(
     }
 )
 
-csv_path = Path("/tmp/sample_sales_data.csv")
+temp_dir = Path(tempfile.gettempdir()) / "sktime_mcp_examples"
+csv_path = temp_dir / "sample_sales_data.csv"
 sample_data.to_csv(csv_path, index=False)
 print(f"Created sample CSV file: {csv_path}")
 print(f"File size: {csv_path.stat().st_size} bytes")
@@ -91,7 +93,7 @@ print("\n" + "=" * 60)
 print("Loading data from TSV file")
 print("=" * 60)
 
-tsv_path = Path("/tmp/sample_sales_data.tsv")
+tsv_path = temp_dir / "sample_sales_data.tsv"
 sample_data.to_csv(tsv_path, sep="\t", index=False)
 print(f"Created sample TSV file: {tsv_path}")
 
