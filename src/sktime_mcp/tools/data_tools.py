@@ -7,10 +7,10 @@ Provides tools for loading data from various sources.
 import logging
 from typing import Any
 
+from sktime_mcp.runtime._background_loop import BG_LOOP
 from sktime_mcp.runtime.executor import get_executor
 
 logger = logging.getLogger(__name__)
-
 
 def load_data_source_tool(config: dict[str, Any]) -> dict[str, Any]:
     """
@@ -136,8 +136,6 @@ def load_data_source_async_tool(
             "message": "Data loading job started..."
         }
     """
-    import asyncio
-
     from sktime_mcp.runtime.jobs import get_job_manager
 
     executor = get_executor()
@@ -153,15 +151,8 @@ def load_data_source_async_tool(
         total_steps=3,  # load, validate, format
     )
 
-    # schedule on event loop
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
     coro = executor.load_data_source_async(config, job_id)
-    asyncio.run_coroutine_threadsafe(coro, loop)
+    BG_LOOP.submit(coro)
 
     return {
         "success": True,
