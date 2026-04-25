@@ -18,9 +18,16 @@ def fit_predict_tool(
     dataset: str,
     horizon: int = 12,
     data_handle: Optional[str] = None,
+    coverage: Optional[float] = None,
 ) -> dict[str, Any]:
     """
     Execute a complete fit-predict workflow.
+    if coverage is not None:
+    if not isinstance(coverage, (int, float)):
+        raise ValueError("coverage must be a number between 0 and 1")
+
+    if not (0.0 < coverage < 1.0):
+        raise ValueError("coverage must be between 0 and 1 (exclusive)")
 
     Args:
         estimator_handle: Handle from instantiate_estimator
