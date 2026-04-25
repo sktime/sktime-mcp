@@ -174,7 +174,8 @@ def fit_predict_async_tool(
 
     # Schedule the coroutine (non-blocking!)
     coro = executor.fit_predict_async(estimator_handle, dataset, horizon, job_id)
-    asyncio.run_coroutine_threadsafe(coro, loop)
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    job_manager.register_future(job_id, future)
 
     return {
         "success": True,

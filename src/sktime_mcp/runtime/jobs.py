@@ -4,6 +4,7 @@ Job management for long-running operations in sktime MCP.
 Handles background training jobs with progress tracking and status updates.
 """
 
+import concurrent.futures
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -127,6 +128,7 @@ class JobManager:
 
     def __init__(self):
         self.jobs: dict[str, JobInfo] = {}
+        self._futures: dict[str, concurrent.futures.Future] = {}
         self.lock = threading.Lock()
 
     def create_job(
@@ -198,6 +200,10 @@ class JobManager:
 
             # Update status
             if status is not None:
+                # Guard: do not allow overwriting a CANCELLED job
+                if job.status == JobStatus.CANCELLED and status != JobStatus.CANCELLED:
+                    return False
+
                 old_status = job.status
                 job.status = status
 
@@ -268,9 +274,25 @@ class JobManager:
 
             return jobs
 
+    def register_future(self, job_id: str, future: concurrent.futures.Future) -> None:
+        """
+        Store the Future returned by asyncio.run_coroutine_threadsafe.
+
+        This allows cancel_job() to actually cancel the running coroutine.
+
+        Args:
+            job_id: Job ID
+            future: The concurrent.futures.Future for the background coroutine
+        """
+        with self.lock:
+            self._futures[job_id] = future
+
     def cancel_job(self, job_id: str) -> bool:
         """
         Cancel a job.
+
+        If a Future was registered for this job, it will be cancelled to
+        stop the actual background coroutine.
 
         Args:
             job_id: Job ID to cancel
@@ -288,6 +310,12 @@ class JobManager:
             if job.status in (JobStatus.PENDING, JobStatus.RUNNING):
                 job.status = JobStatus.CANCELLED
                 job.end_time = datetime.now()
+
+                # Cancel the actual coroutine if a future was stored
+                future = self._futures.pop(job_id, None)
+                if future is not None:
+                    future.cancel()
+
                 return True
 
             return False

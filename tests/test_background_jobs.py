@@ -207,6 +207,114 @@ def test_cleanup_old_jobs():
     assert job is None
 
 
+def test_cancel_prevents_overwrite():
+    """Test that a CANCELLED job cannot be overwritten to COMPLETED."""
+    job_manager = get_job_manager()
+
+    job_id = job_manager.create_job(
+        job_type="fit_predict",
+        estimator_handle="test_handle",
+        estimator_name="ARIMA",
+        dataset_name="airline",
+        total_steps=3,
+    )
+
+    # Move to RUNNING, then cancel
+    job_manager.update_job(job_id, status=JobStatus.RUNNING)
+    success = job_manager.cancel_job(job_id)
+    assert success
+
+    job = job_manager.get_job(job_id)
+    assert job.status == JobStatus.CANCELLED
+
+    # Simulate the background coroutine trying to overwrite status
+    result = job_manager.update_job(
+        job_id,
+        status=JobStatus.COMPLETED,
+        completed_steps=3,
+        current_step="Completed",
+        result={"predictions": {1: 450.2, 2: 460.5}},
+    )
+    assert result is False
+
+    # Status must still be CANCELLED
+    job = job_manager.get_job(job_id)
+    assert job.status == JobStatus.CANCELLED
+
+    print("✓ Cancelled status cannot be overwritten to completed")
+
+    # Cleanup
+    job_manager.delete_job(job_id)
+
+
+def test_cancel_job_stores_and_cancels_future():
+    """Test that register_future stores a future and cancel_job cancels it."""
+    from unittest.mock import MagicMock
+
+    job_manager = get_job_manager()
+
+    job_id = job_manager.create_job(
+        job_type="fit_predict",
+        estimator_handle="test_handle",
+        estimator_name="ARIMA",
+        total_steps=3,
+    )
+    job_manager.update_job(job_id, status=JobStatus.RUNNING)
+
+    # Register a mock future
+    mock_future = MagicMock()
+    job_manager.register_future(job_id, mock_future)
+
+    # Cancel the job — should call future.cancel()
+    success = job_manager.cancel_job(job_id)
+    assert success
+    mock_future.cancel.assert_called_once()
+
+    print("✓ cancel_job() calls future.cancel()")
+
+    # Cleanup
+    job_manager.delete_job(job_id)
+
+
+@pytest.mark.asyncio
+async def test_async_fit_predict_respects_cancellation():
+    """Test that fit_predict_async exits early when the job is cancelled."""
+    executor = get_executor()
+    job_manager = get_job_manager()
+
+    # Instantiate a simple forecaster
+    result = executor.instantiate("NaiveForecaster")
+    assert result["success"]
+    handle = result["handle"]
+
+    # Create and immediately cancel the job
+    job_id = job_manager.create_job(
+        job_type="fit_predict",
+        estimator_handle=handle,
+        estimator_name="NaiveForecaster",
+        dataset_name="airline",
+        horizon=12,
+        total_steps=3,
+    )
+    job_manager.update_job(job_id, status=JobStatus.RUNNING)
+    job_manager.cancel_job(job_id)
+
+    # Run the async coroutine — it should detect the cancellation and exit early
+    result = await executor.fit_predict_async(handle, "airline", 12, job_id)
+
+    assert result["success"] is False
+    assert "cancelled" in result["error"].lower()
+
+    # Status must remain CANCELLED
+    job = job_manager.get_job(job_id)
+    assert job.status == JobStatus.CANCELLED
+
+    print("✓ Async fit_predict respects cancellation")
+
+    # Cleanup
+    job_manager.delete_job(job_id)
+
+
 def run_all_tests():
     """Run all tests."""
     print("=" * 60)

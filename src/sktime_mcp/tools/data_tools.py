@@ -161,7 +161,8 @@ def load_data_source_async_tool(
         asyncio.set_event_loop(loop)
 
     coro = executor.load_data_source_async(config, job_id)
-    asyncio.run_coroutine_threadsafe(coro, loop)
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    job_manager.register_future(job_id, future)
 
     return {
         "success": True,
