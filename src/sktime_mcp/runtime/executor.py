@@ -884,6 +884,152 @@ class Executor:
                 "error": f"Data handle '{data_handle}' not found",
             }
 
+    def tune_forecaster(
+        self,
+        estimator_handle: str,
+        data_handle: str,
+        param_grid: dict,
+        method: str = "grid",
+        fh: int = 12,
+        window_length: Optional[int] = None,
+        n_iter: int = 10,
+        scoring=None,
+    ) -> dict[str, Any]:
+        """
+        Tune a forecaster's hyperparameters using single-split evaluation search.
+
+        Args:
+            estimator_handle: Handle of the instantiated forecaster to tune
+            data_handle: Handle of the loaded dataset
+            param_grid: Parameter grid to search, e.g. {"strategy": ["mean", "last"]}
+            method: Search method — "grid", "random", or "optuna"
+            fh: Forecasting horizon for CV evaluation
+            window_length: Training window length for CV splitter (None = use full history)
+            n_iter: Number of parameter combinations to try. Used as n_iter for
+                random search and n_evals for optuna. Ignored for grid search.
+            scoring: Metric to optimise (None = use sktime's default scoring metric)
+
+        Returns:
+            Dictionary with best_params, best_score, and a new handle for the best forecaster
+        """
+        # Retrieve estimator
+        try:
+            forecaster = self._handle_manager.get_instance(estimator_handle)
+        except KeyError:
+            return {
+                "success": False,
+                "error": f"Estimator handle not found: '{estimator_handle}'",
+            }
+
+        # Retrieve data
+        if data_handle not in self._data_handles:
+            return {
+                "success": False,
+                "error": f"Data handle not found: '{data_handle}'",
+            }
+        data = self._data_handles[data_handle]
+        y = data["y"]
+        X = data.get("X")
+
+        # Build single-split evaluation splitter
+        try:
+            from sktime.split import SingleWindowSplitter
+
+            cv = SingleWindowSplitter(fh=fh, window_length=window_length)
+        except Exception as e:
+            return {"success": False, "error": f"Failed to build CV splitter: {e}"}
+
+        # Build scoring metric
+        if scoring is not None:
+            try:
+                import sktime.performance_metrics.forecasting as pmf
+            except Exception as e:
+                return {"success": False, "error": f"Failed to load forecasting metrics: {e}"}
+
+            metric_name = scoring
+            metric_cls = getattr(pmf, metric_name, None)
+            if metric_cls is None:
+                return {
+                    "success": False,
+                    "error": f"Unknown metric: '{metric_name}'. Use list_metrics to see available metrics.",
+                }
+            try:
+                scoring = metric_cls()
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": f"Failed to instantiate scoring metric '{metric_name}': {e}",
+                }
+
+        # Instantiate and fit tuning estimator
+        try:
+            if method == "grid":
+                from sktime.forecasting.model_selection import ForecastingGridSearchCV
+
+                tuner = ForecastingGridSearchCV(
+                    forecaster=forecaster,
+                    cv=cv,
+                    param_grid=param_grid,
+                    scoring=scoring,
+                )
+            elif method == "random":
+                from sktime.forecasting.model_selection import (
+                    ForecastingRandomizedSearchCV,
+                )
+
+                tuner = ForecastingRandomizedSearchCV(
+                    forecaster=forecaster,
+                    cv=cv,
+                    param_distributions=param_grid,
+                    n_iter=n_iter,
+                    scoring=scoring,
+                )
+            elif method == "optuna":
+                try:
+                    from sktime.forecasting.model_selection import (
+                        ForecastingOptunaSearchCV,
+                    )
+                except ImportError:
+                    return {
+                        "success": False,
+                        "error": "optuna is not installed. Run: pip install optuna",
+                    }
+                tuner = ForecastingOptunaSearchCV(
+                    forecaster=forecaster,
+                    cv=cv,
+                    param_grid=param_grid,
+                    scoring=scoring,
+                    n_evals=n_iter,
+                )
+            else:
+                return {
+                    "success": False,
+                    "error": f"Unknown method: '{method}'. Choose from: grid, random, optuna",
+                }
+
+            tuner.fit(y, X=X)
+        except Exception as e:
+            return {"success": False, "error": f"Tuning failed: {e}"}
+
+        # Store best forecaster as a new handle
+        estimator_info = self._handle_manager.get_info(estimator_handle)
+        estimator_name = estimator_info.estimator_name if estimator_info else "tuned_forecaster"
+        new_handle = self._handle_manager.create_handle(
+            estimator_name=f"{estimator_name}_tuned",
+            instance=tuner.best_forecaster_,
+            params=tuner.best_params_,
+        )
+        self._handle_manager.mark_fitted(new_handle)
+
+        return {
+            "success": True,
+            "method": method,
+            "best_params": tuner.best_params_,
+            "best_score": float(tuner.best_score_),
+            "new_handle": new_handle,
+            "message": f"Tuning complete. Best forecaster stored as handle '{new_handle}'.",
+        }
+
 
 _executor_instance: Optional[Executor] = None
 

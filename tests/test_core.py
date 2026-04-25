@@ -215,5 +215,224 @@ class TestTools:
         assert calls["serialization_format"] == "pickle"
 
 
+class TestTuningTools:
+    """Tests for hyperparameter tuning tools."""
+
+    def _make_data_handle(self, executor):
+        """Create an airline data handle via the public load_data_source API."""
+        from sktime.datasets import load_airline
+
+        y = load_airline()
+        result = executor.load_data_source(
+            {
+                "type": "pandas",
+                "data": y.to_frame(),
+                "target_column": y.name,
+            }
+        )
+        assert result["success"], f"Failed to create data handle: {result.get('error')}"
+        return result["data_handle"]
+
+    def test_get_param_grid_suggestions_known_estimator(self):
+        """get_param_grid_suggestions returns a dict for a known estimator."""
+        from sktime_mcp.tools.tuning_tools import get_param_grid_suggestions_tool
+
+        result = get_param_grid_suggestions_tool("NaiveForecaster")
+
+        assert result["success"]
+        assert result["estimator"] == "NaiveForecaster"
+        assert isinstance(result["suggested_param_grid"], dict)
+
+    def test_get_param_grid_suggestions_unknown_estimator(self):
+        """get_param_grid_suggestions returns an error for an unknown estimator."""
+        from sktime_mcp.tools.tuning_tools import get_param_grid_suggestions_tool
+
+        result = get_param_grid_suggestions_tool("NotARealEstimator99999")
+
+        assert not result["success"]
+        assert "error" in result
+
+    def test_tune_forecaster_grid_search(self):
+        """tune_forecaster with grid search returns best_params and a new handle."""
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+        h = executor.instantiate("NaiveForecaster", {})
+        assert h["success"]
+
+        data_handle = self._make_data_handle(executor)
+
+        result = executor.tune_forecaster(
+            estimator_handle=h["handle"],
+            data_handle=data_handle,
+            param_grid={"strategy": ["mean", "last", "drift"]},
+            method="grid",
+            fh=12,
+        )
+
+        assert result["success"]
+        assert "best_params" in result
+        assert result["best_params"]["strategy"] in ["mean", "last", "drift"]
+        assert isinstance(result["best_score"], float)
+        assert result["new_handle"].startswith("est_")
+
+    def test_tune_forecaster_random_search(self):
+        """tune_forecaster with random search returns best_params and a new handle."""
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+        h = executor.instantiate("NaiveForecaster", {})
+        data_handle = self._make_data_handle(executor)
+
+        result = executor.tune_forecaster(
+            estimator_handle=h["handle"],
+            data_handle=data_handle,
+            param_grid={"strategy": ["mean", "last", "drift"]},
+            method="random",
+            fh=12,
+            n_iter=2,
+        )
+
+        assert result["success"]
+        assert "best_params" in result
+        assert result["new_handle"].startswith("est_")
+
+    def test_tune_forecaster_invalid_estimator_handle(self):
+        """tune_forecaster returns an error for a non-existent estimator handle."""
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+        data_handle = self._make_data_handle(executor)
+
+        result = executor.tune_forecaster(
+            estimator_handle="est_doesnotexist",
+            data_handle=data_handle,
+            param_grid={"strategy": ["mean"]},
+        )
+
+        assert not result["success"]
+        assert "error" in result
+
+    def test_tune_forecaster_invalid_data_handle(self):
+        """tune_forecaster returns an error for a non-existent data handle."""
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+        h = executor.instantiate("NaiveForecaster", {})
+
+        result = executor.tune_forecaster(
+            estimator_handle=h["handle"],
+            data_handle="data_doesnotexist",
+            param_grid={"strategy": ["mean"]},
+        )
+
+        assert not result["success"]
+        assert "error" in result
+
+    def test_tune_forecaster_valid_scoring_metric(self):
+        """tune_forecaster accepts a valid metric name and runs successfully."""
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+        h = executor.instantiate("NaiveForecaster", {})
+        data_handle = self._make_data_handle(executor)
+
+        result = executor.tune_forecaster(
+            estimator_handle=h["handle"],
+            data_handle=data_handle,
+            param_grid={"strategy": ["mean", "last"]},
+            method="grid",
+            fh=12,
+            scoring="MeanAbsolutePercentageError",
+        )
+
+        assert result["success"]
+        assert "best_params" in result
+
+    def test_tune_forecaster_invalid_scoring_metric(self):
+        """tune_forecaster returns a structured error for an unknown metric name."""
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+        h = executor.instantiate("NaiveForecaster", {})
+        data_handle = self._make_data_handle(executor)
+
+        result = executor.tune_forecaster(
+            estimator_handle=h["handle"],
+            data_handle=data_handle,
+            param_grid={"strategy": ["mean"]},
+            method="grid",
+            fh=12,
+            scoring="NotARealMetric",
+        )
+
+        assert not result["success"]
+        assert "NotARealMetric" in result["error"]
+
+    def test_tune_forecaster_invalid_method(self):
+        """tune_forecaster returns an error for an unsupported search method."""
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+        h = executor.instantiate("NaiveForecaster", {})
+        data_handle = self._make_data_handle(executor)
+
+        result = executor.tune_forecaster(
+            estimator_handle=h["handle"],
+            data_handle=data_handle,
+            param_grid={"strategy": ["mean"]},
+            method="unsupported_method",
+        )
+
+        assert not result["success"]
+        assert "error" in result
+
+    def test_tune_forecaster_optuna(self):
+        """tune_forecaster with optuna runs if optuna is installed, errors clearly if not."""
+        import importlib
+
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+        h = executor.instantiate("NaiveForecaster", {})
+        data_handle = self._make_data_handle(executor)
+
+        result = executor.tune_forecaster(
+            estimator_handle=h["handle"],
+            data_handle=data_handle,
+            param_grid={"strategy": ["mean", "last"]},
+            method="optuna",
+            fh=12,
+        )
+
+        if importlib.util.find_spec("optuna") is None:
+            assert not result["success"]
+            assert "optuna" in result["error"].lower()
+        else:
+            assert result["success"]
+            assert "best_params" in result
+
+    def test_tune_forecaster_best_handle_is_fitted(self):
+        """The new handle returned by tune_forecaster is marked as fitted."""
+        from sktime_mcp.runtime.executor import Executor
+        from sktime_mcp.runtime.handles import get_handle_manager
+
+        executor = Executor()
+        h = executor.instantiate("NaiveForecaster", {})
+        data_handle = self._make_data_handle(executor)
+
+        result = executor.tune_forecaster(
+            estimator_handle=h["handle"],
+            data_handle=data_handle,
+            param_grid={"strategy": ["mean", "last"]},
+            method="grid",
+            fh=12,
+        )
+
+        assert result["success"]
+        handle_manager = get_handle_manager()
+        assert handle_manager.is_fitted(result["new_handle"])
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
