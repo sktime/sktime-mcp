@@ -11,9 +11,9 @@ sys.path.insert(0, "src")
 
 def test_evaluate_estimator_tool():
     """Test evaluate_estimator_tool with a simple estimator."""
-    from sktime_mcp.tools.evaluate import evaluate_estimator_tool
-    from sktime_mcp.runtime.executor import get_executor
     from sktime.forecasting.naive import NaiveForecaster
+    from sktime_mcp.runtime.executor import get_executor
+    from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 
     executor = get_executor()
 
@@ -27,9 +27,9 @@ def test_evaluate_estimator_tool():
         assert "results" in result
         assert result["cv_folds_run"] == 2
         assert len(result["results"]) == 2
-        
+
         # Verify result contains common metrics like test_MeanAbsolutePercentageError
-        metric_columns = [k for k in result["results"][0].keys() if "test_" in k]
+        metric_columns = [k for k in result["results"][0] if "test_" in k]
         assert len(metric_columns) > 0
 
     finally:
