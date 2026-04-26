@@ -42,6 +42,26 @@ class TestRegistryInterface:
             assert node.name == "NaiveForecaster"
             assert node.task == "forecasting"
 
+    def test_search_prioritizes_exact_estimator_name(self):
+        """Exact estimator name matches should rank before broad matches."""
+        from sktime_mcp.registry.interface import get_registry
+
+        registry = get_registry()
+        matches = registry.search_estimators("NaiveForecaster")
+
+        assert len(matches) > 0
+        assert matches[0].name == "NaiveForecaster"
+
+    def test_search_prioritizes_case_insensitive_exact_name(self):
+        """Exact estimator ranking should be case-insensitive."""
+        from sktime_mcp.registry.interface import get_registry
+
+        registry = get_registry()
+        matches = registry.search_estimators("naiveforecaster")
+
+        assert len(matches) > 0
+        assert matches[0].name == "NaiveForecaster"
+
 
 class TestHandleManager:
     """Tests for the Handle Manager."""
@@ -136,6 +156,19 @@ class TestTools:
         assert result["success"]
         assert "estimators" in result
         assert len(result["estimators"]) <= 5
+
+    def test_list_estimators_query_prioritizes_exact_name(self):
+        """Exact-name query should keep the intended estimator in small pages."""
+        from sktime_mcp.tools.list_estimators import list_estimators_tool
+
+        result = list_estimators_tool(
+            task="forecasting",
+            query="NaiveForecaster",
+            limit=5,
+        )
+
+        assert result["success"]
+        assert result["estimators"][0]["name"] == "NaiveForecaster"
 
     def test_describe_unknown_estimator(self):
         """Test describing an unknown estimator."""

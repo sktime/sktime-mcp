@@ -306,7 +306,7 @@ class RegistryInterface:
 
     def search_estimators(self, query: str) -> list[EstimatorNode]:
         """
-        Search estimators by name or docstring.
+        Search estimators by name, module, or docstring.
 
         Args:
             query: Search string (case-insensitive)
@@ -315,20 +315,31 @@ class RegistryInterface:
             List of matching EstimatorNode objects
         """
         self._ensure_loaded()
-        query_lower = query.lower()
+        query_lower = query.strip().lower()
 
         results = []
         for node in self._cache.values():
-            # Search in name
-            if query_lower in node.name.lower():
-                results.append(node)
+            name_lower = node.name.lower()
+            module_lower = node.module.lower()
+            docstring_lower = node.docstring.lower() if node.docstring else ""
+
+            if name_lower == query_lower:
+                score = 0
+            elif name_lower.startswith(query_lower):
+                score = 1
+            elif query_lower in name_lower:
+                score = 2
+            elif query_lower in module_lower:
+                score = 3
+            elif query_lower in docstring_lower:
+                score = 4
+            else:
                 continue
 
-            # Search in docstring
-            if node.docstring and query_lower in node.docstring.lower():
-                results.append(node)
+            results.append((score, node.name.lower(), node))
 
-        return results
+        results.sort(key=lambda item: (item[0], item[1]))
+        return [node for _, _, node in results]
 
 
 # Singleton instance for shared use
