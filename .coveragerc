@@ -1,0 +1,10 @@
+[run]
+source = src/sktime_mcp
+omit =
+    */site-packages/*
+    */distutils/*
+    */lib/python*/*
+
+[report]
+include = src/sktime_mcp/registry/interface.py
+show_missing = True
