@@ -12,6 +12,8 @@ sys.path.insert(0, "src")
 def test_evaluate_estimator_tool():
     """Test evaluate_estimator_tool with a simple estimator."""
     from sktime.forecasting.naive import NaiveForecaster
+    from sktime_mcp.runtime.executor import get_executor
+    from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 
     from sktime_mcp.runtime.executor import get_executor
     from sktime_mcp.tools.evaluate import evaluate_estimator_tool

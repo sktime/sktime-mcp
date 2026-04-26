@@ -47,6 +47,7 @@ from sktime_mcp.tools.list_estimators import (
     list_estimators_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
+from sktime_mcp.tools.transform_tools import fit_transform_tool, transform_tool
 
 # ---------------------------------------------------------------------------
 # Server configuration via environment variables
@@ -561,6 +562,62 @@ async def list_tools() -> list[Tool]:
                 "required": ["job_id"],
             },
         ),
+        Tool(
+            name="fit_transform",
+            description=(
+                "Fit a sktime transformer on data and return the transformed result in one step. "
+                "Use for preprocessing workflows (detrending, differencing, log-scaling, etc.) "
+                "that do not require a downstream forecaster. "
+                "The estimator handle is marked as fitted after success. "
+                "Provide either 'dataset' (demo name) or 'data_handle' — not both."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle from instantiate_estimator pointing to a transformer",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Demo dataset name: airline, sunspots, lynx, etc. (optional)",
+                    },
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Handle from load_data_source (optional)",
+                    },
+                },
+                "required": ["estimator_handle"],
+            },
+        ),
+        Tool(
+            name="transform",
+            description=(
+                "Apply an already-fitted sktime transformer to data. "
+                "The transformer must have been fitted first via fit_transform. "
+                "Use this to apply the same fitted transformation to new or held-out data "
+                "without re-fitting. "
+                "Provide either 'dataset' (demo name) or 'data_handle' — not both."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle of a fitted transformer",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Demo dataset name: airline, sunspots, lynx, etc. (optional)",
+                    },
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Handle from load_data_source (optional)",
+                    },
+                },
+                "required": ["estimator_handle"],
+            },
+        ),
     ]
 
 
@@ -737,6 +794,21 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
 
+        # -- Transformers ----------------------------------------------------
+        elif name == "fit_transform":
+            result = fit_transform_tool(
+                arguments["estimator_handle"],
+                dataset=arguments.get("dataset"),
+                data_handle=arguments.get("data_handle"),
+            )
+            result = sanitize_for_json(result)
+        elif name == "transform":
+            result = transform_tool(
+                arguments["estimator_handle"],
+                dataset=arguments.get("dataset"),
+                data_handle=arguments.get("data_handle"),
+            )
+            result = sanitize_for_json(result)
         else:
             result = {"error": f"Unknown tool: {name}"}
 
