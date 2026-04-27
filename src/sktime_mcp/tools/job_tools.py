@@ -64,6 +64,12 @@ def list_jobs_tool(
                 "error": f"Invalid status '{status}'. Valid values: pending, running, completed, failed, cancelled",
             }
 
+    if limit < 1:
+        return {
+            "success": False,
+            "error": "limit must be a positive integer.",
+        }
+
     jobs = job_manager.list_jobs(status=status_filter, limit=limit)
 
     return {
