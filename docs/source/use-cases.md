@@ -1,70 +1,130 @@
 # 🎯 Use Cases & Personas
 
-This page provides clear, step-by-step workflows for both coders and business users, covering all major use-cases for sktime-mcp.
+This page describes **who** uses sktime-mcp, **what** they want to accomplish, and **how** a typical session looks. For step-by-step walkthroughs, see the [User Guide](user-guide.md). For concrete prompt examples, see [Usage Examples](usage-examples.md).
 
 ---
 
 ## 👤 User Personas
 
 ### 1. Coder
-- **Goal:** Wants code files as outputs.
+
+**Goal:** Build, benchmark, and iterate on time-series models — and get reproducible Python code as output.
 
 #### Use-Case 1: Benchmarking Time Series Models
-- **Task:** Use a model (e.g., ARIMA) and benchmark it on a dataset (local or web).
-- **What happens:**
-    - Your dataset is automatically loaded (see [Loading Data](#loading-data)).
-    - The selected model (e.g., ARIMA, Prophet) is instantiated and fitted.
-    - Benchmarking is performed behind the scenes.
-    - Forecast results and code files are generated for you. You just need to submit your query and wait for the results/status.
 
-#### Use-Case 2: Composing Pipelines
-- **Task:** Build and benchmark a pipeline (e.g., Deseasonalizer → Detrender → Estimator).
-- **What happens:**
-    - The pipeline components you specify are validated and composed automatically.
-    - The pipeline is run on your dataset in the background.
-    - Code files and benchmark results are produced for you. You only need to submit your pipeline query and monitor the status.
+**Scenario:** You want to compare several forecasting models (e.g., ARIMA, ExponentialSmoothing, Theta) on a dataset and pick the best one.
 
-- **Designing Custom Pipelines:**
-    - You can specify any sequence (e.g., deseasonalizer → detrender → estimator).
-    - If unsure, see [pipeline design guide](usage-examples.md).
+**What you do:**
+
+1. Tell your AI assistant which dataset to use (a built-in demo or your own CSV/SQL data).
+2. Ask it to compare several models using cross-validation.
+3. Review the comparison table of metrics (MAE, RMSE, etc.).
+4. Ask for the Python code that reproduces the best result.
+
+**Example prompt:**
+
+> *"Compare ARIMA, ExponentialSmoothing, and ThetaForecaster on the airline dataset with 5-fold cross-validation. Then export the code for the best model."*
+
+**What you get:**
+
+- A table of cross-validation metrics for each model.
+- A recommendation for the best-performing model.
+- A Python script that reproduces the experiment end-to-end.
 
 ---
 
-### 2. Business Person
-- **Goal:** Wants forecasts, analysis, and reports as outputs.
+#### Use-Case 2: Composing Pipelines
+
+**Scenario:** You want to build a multi-step pipeline (e.g., deseasonalize → detrend → forecast) and evaluate it as a single unit.
+
+**What you do:**
+
+1. Describe the pipeline components and their order.
+2. The assistant validates compatibility and creates the pipeline.
+3. Ask the assistant to run it on your data.
+4. Request the code to share with your team.
+
+**Example prompt:**
+
+> *"Build a pipeline: ConditionalDeseasonalizer, then Detrender, then ARIMA(1,1,1). Run it on the airline dataset for 12 months. Export the code."*
+
+**What you get:**
+
+- Confirmation that the pipeline is valid.
+- Forecast results from the composed pipeline.
+- A standalone Python script that constructs and runs the pipeline.
+
+**Tips for designing pipelines:**
+
+- Transformers (e.g., `Deseasonalizer`, `Detrender`, `BoxCoxTransformer`) go first.
+- The final component should be a forecaster.
+- If unsure which transformers to use, ask: *"What preprocessing transformers work well before ARIMA?"*
+
+---
+
+### 2. Business User
+
+**Goal:** Get forecasts, analysis, and summary reports — without writing code.
 
 #### Use-Case: Get Forecasts & Reports
-- **What happens:**
-    - Your data (CSV or demo) is loaded and processed automatically.
-    - The requested analysis (forecast, report) is performed in the background.
-    - Results (forecasts, charts, summary reports) are made available for you to view or download. Just submit your request and wait for completion.
+
+**Scenario:** You have a CSV of monthly sales data and want a forecast for the next quarter, presented as a table you can share with stakeholders.
+
+**What you do:**
+
+1. Tell the assistant where your data file is and which columns to use.
+2. Ask for a forecast (you can specify the model or let the assistant choose).
+3. Ask the assistant to summarize the results.
+
+**Example prompt:**
+
+> *"Load my sales data from /home/user/quarterly_sales.csv (date column: 'quarter', target: 'revenue'). Forecast revenue for the next 4 quarters. Summarize the results."*
+
+**What you get:**
+
+- A table of forecasted values for each future period.
+- A plain-language summary of the trend (e.g., *"Revenue is projected to grow ~5% per quarter"*).
+- Optionally, you can ask for a chart or a CSV export of the results.
 
 ---
 
 ## 📂 Loading Data
 
-### 1. Demo Datasets
-- Use built-in demo datasets for quick testing.
+### Demo Datasets
 
-### 2. User-Defined Data
-- **Local CSV:**  
-    - Place your CSV in the project directory.
-    - The system will automatically load your file when you reference it in your query—no manual code needed.
-- **Web URL (Planned):**  
-    - Soon, you’ll be able to load CSVs directly from a web URL by simply providing the link in your query.
-    - _Action: Add web URL support and update docs when ready._
+Built-in datasets are available for quick experimentation — no file paths needed:
+
+> *"What demo datasets are available?"*
+>
+> *"Use the airline dataset."*
+
+Demo datasets are useful for learning the workflows before bringing in your own data.
+
+### Your Own Data
+
+| Source | What to tell the assistant | Example |
+|--------|---------------------------|---------|
+| **Local CSV / Parquet / Excel** | Absolute file path, time column name, target column name. | *"Load /home/user/data.csv, time column 'date', target 'value'"* |
+| **SQL database** | Connection string, query, time and target columns. | *"Load from my PostgreSQL database at localhost:5432/mydb, run 'SELECT date, sales FROM monthly', time column 'date', target 'sales'"* |
+
+For detailed configuration options, see [Data Sources](data-sources.md).
 
 ---
 
-## 📝 Outputs
-- **Code Files:**  
-    - Scripts and notebooks for reproducibility.
-- **Forecasts:**  
-    - CSV, plots, and summary tables.
+## 📝 What You Can Get Out
+
+| Output | How to ask for it | Best for |
+|--------|-------------------|----------|
+| **Forecast table** | *"Forecast X for N periods"* | Quick answers, sharing with stakeholders |
+| **Comparison metrics** | *"Compare these models with cross-validation"* | Model selection |
+| **Python code** | *"Export the code for this"* | Reproducibility, integration into production |
+| **Saved model artifact** | *"Save this model to /path"* | Persistence across server restarts |
 
 ---
 
 ## 🔗 See Also
-- [User Guide](user-guide.md)
-- [Usage Examples](usage-examples.md)
-- [Implementation Details](implementation.md)
+
+- [User Guide](user-guide.md) — Step-by-step instructions for every workflow.
+- [Usage Examples](usage-examples.md) — Concrete prompt examples with expected outputs.
+- [Data Sources](data-sources.md) — Detailed data loading configuration.
+- [Background Jobs](background-jobs.md) — Running long operations asynchronously.

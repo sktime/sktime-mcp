@@ -26,7 +26,7 @@ This MCP is **not** just documentation or static code analysis. It is a **semant
 
 ## 🛠️ Prerequisites
 
-- **Python 3.10+** (3.9 is listed in `pyproject.toml` but the `mcp` package requires 3.10+)
+- **Python 3.10+**
 - **pip** package manager
 
 ## 🛠️ Installation
@@ -123,6 +123,19 @@ The server uses stdio transport by default, compatible with Claude Desktop, Clau
   "mcpServers": {
     "sktime": {
       "command": "sktime-mcp"
+    }
+  }
+}
+```
+
+If you are using a virtual environment, specify the full path to the environment's Python executable in the `command` field, and run the server with `-m sktime_mcp.server`.
+
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "<project-root>/venv/bin/python",
+      "args": ["-m", "sktime_mcp.server"]
     }
   }
 }
@@ -281,18 +294,28 @@ Check if a proposed pipeline composition is valid before instantiation.
 ### Execution
 
 #### 8. `fit_predict`
-Execute a complete workflow: load dataset, fit estimator, and generate predictions.
+Execute a complete workflow: fit the estimator and generate predictions. Use a **demo dataset name** or a **`data_handle`** from `load_data_source` (provide exactly one of the two).
 
 **Arguments:**
 - `estimator_handle` (required): Handle from `instantiate_estimator` or `instantiate_pipeline`
-- `dataset` (required): Dataset name (e.g., `"airline"`, `"sunspots"`, `"lynx"`)
+- `dataset` (optional): Demo dataset name (e.g., `"airline"`, `"sunspots"`, `"lynx"`) when not using custom data
+- `data_handle` (optional): Handle from `load_data_source` for custom data (omit `dataset` in that case)
 - `horizon` (optional): Forecast horizon (default: 12)
 
-**Example:**
+**Example (demo data):**
 ```json
 {
   "estimator_handle": "est_abc123",
   "dataset": "airline",
+  "horizon": 12
+}
+```
+
+**Example (custom data):**
+```json
+{
+  "estimator_handle": "est_abc123",
+  "data_handle": "data_abc123",
   "horizon": 12
 }
 ```
@@ -362,21 +385,9 @@ Load data from various sources (CSV/Parquet files, pandas DataFrames, SQL databa
 
 ---
 
-#### 12. `fit_predict_with_data`
-Fit an estimator and generate predictions using a custom data handle (instead of a demo dataset).
-
-**Arguments:**
-- `estimator_handle` (required): Handle from `instantiate_estimator`
-- `data_handle` (required): Handle from `load_data_source`
-- `horizon` (optional): Forecast horizon (default: 12)
-
-**Returns:** Same format as `fit_predict`.
-
----
-
 ### Code & Model Export
 
-#### 13. `export_code`
+#### 12. `export_code`
 Export an estimator or pipeline as executable Python code.
 
 **Arguments:**
@@ -390,7 +401,7 @@ Export an estimator or pipeline as executable Python code.
 
 ### Background Jobs
 
-#### 14. `fit_predict_async`
+#### 13. `fit_predict_async`
 Non-blocking version of `fit_predict`. Returns a `job_id` immediately; use `check_job_status` to poll.
 
 **Arguments:** Same as `fit_predict`.
@@ -399,7 +410,7 @@ Non-blocking version of `fit_predict`. Returns a `job_id` immediately; use `chec
 
 ---
 
-#### 15. `check_job_status`
+#### 14. `check_job_status`
 Check the status and progress of a background job.
 
 **Arguments:**
@@ -407,7 +418,7 @@ Check the status and progress of a background job.
 
 ---
 
-#### 16. `list_jobs`
+#### 15. `list_jobs`
 List all background jobs with optional status filter.
 
 **Arguments:**
@@ -418,7 +429,7 @@ List all background jobs with optional status filter.
 
 ### Data Formatting
 
-#### 17. `format_time_series`
+#### 16. `format_time_series`
 Automatically format time series data (infer frequency, remove duplicates, fill missing values).
 
 **Arguments:**

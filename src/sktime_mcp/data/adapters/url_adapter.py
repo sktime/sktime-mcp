@@ -7,6 +7,7 @@ Supports downloading and loading CSV, Excel, and Parquet files from URLs.
 import tempfile
 import urllib.request
 from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
 from typing import Any
 from urllib.parse import urlparse
 
@@ -37,6 +38,76 @@ class UrlAdapter(DataSourceAdapter):
         "frequency": "D"
     }
     """
+    
+    async def load_async(self, job_id: Optional[str] = None) -> pd.DataFrame:
+        url = self.config.get("url")
+        if not url:
+            raise ValueError("Config must contain 'url' key")
+        
+        parsed_url = urlparse(url)
+        path = parsed_url.path
+        filename = os.path.basename(path)
+        if not filename:
+            filename = "downloaded_data"
+            
+        temp_dir = tempfile.TemporaryDirectory()
+        temp_file_path = Path(temp_dir.name) / filename
+        
+        try:
+            import aiohttp
+            from sktime_mcp.runtime.jobs import get_job_manager
+            job_manager = get_job_manager()
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        raise ValueError(f"Error downloading from URL {url}: HTTP {response.status}")
+                    
+                    total_size = int(response.headers.get('Content-Length', 0))
+                    downloaded = 0
+                    
+                    with open(temp_file_path, 'wb') as f:
+                        async for chunk in response.content.iter_chunked(1024 * 64):
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            
+                            if job_id and total_size > 0:
+                                progress = (downloaded / total_size) * 100
+                                job_manager.update_job(
+                                    job_id,
+                                    current_step=f"Downloading: {progress:.1f}% ({downloaded / 1024 / 1024:.2f}MB)"
+                                )
+            
+            # Use FileAdapter to load the data (runs in executor via its own load_async if we want, 
+            # but here we can just use the sync load in an executor)
+            file_config = dict(self.config)
+            file_config["type"] = "file"
+            file_config["path"] = str(temp_file_path)
+            
+            file_adapter = FileAdapter(file_config)
+            
+            if job_id:
+                job_manager.update_job(job_id, current_step="Parsing data file...")
+            
+            import asyncio
+            loop = asyncio.get_event_loop()
+            df = await loop.run_in_executor(None, file_adapter.load)
+            
+            self._data = df
+            self._metadata = file_adapter.get_metadata()
+            self._metadata["source"] = "url"
+            self._metadata["url"] = url
+            
+            if "path" in self._metadata:
+                del self._metadata["path"]
+                
+            return df
+            
+        except Exception as e:
+            raise ValueError(f"Error downloading or loading data from URL {url}: {e}")
+            
+        finally:
+            temp_dir.cleanup()
 
     def load(self) -> pd.DataFrame:
         url = self.config.get("url")
@@ -63,8 +134,7 @@ class UrlAdapter(DataSourceAdapter):
             file_config = dict(self.config)
             file_config["type"] = "file"
             file_config["path"] = str(temp_file_path)
-
-            # Use FileAdapter to load the data
+            
             file_adapter = FileAdapter(file_config)
             df = file_adapter.load()
 

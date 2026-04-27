@@ -18,7 +18,6 @@ from mcp.types import TextContent, Tool
 from sktime_mcp.composition.validator import get_composition_validator
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
-    fit_predict_with_data_tool,
     load_data_source_async_tool,
     load_data_source_tool,
     release_data_handle_tool,
@@ -27,6 +26,18 @@ from sktime_mcp.tools.describe_estimator import describe_estimator_tool
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
+    fit_tool,
+    predict_tool,
+    list_datasets_tool,
+)
+from sktime_mcp.tools.codegen import export_code_tool
+from sktime_mcp.tools.data_tools import (
+    load_data_source_tool,
+    load_data_source_async_tool,
+    list_data_sources_tool,
+    fit_predict_with_data_tool,
+    list_data_handles_tool,
+    release_data_handle_tool,
     fit_predict_tool,
 )
 from sktime_mcp.tools.format_tools import format_time_series_tool
@@ -77,18 +88,6 @@ def sanitize_for_json(obj):
         return str(obj)
     else:
         return obj
-
-
-# ===================================================================
-# Tool definitions
-# ===================================================================
-# Consolidation changes applied (see docs/TOOL_CONSOLIDATION_PLAN.md):
-#   1. list_data_sources   -> baked into load_data_source description
-#   2. auto_format_on_load -> env var SKTIME_MCP_AUTO_FORMAT (default true)
-#   3. cleanup_old_jobs    -> automatic periodic timer
-#   4. delete_job          -> merged into cancel_job(delete=True)
-#   5. search_estimators   -> merged into list_estimators(query=...)
-# ===================================================================
 
 
 @server.list_tools()
@@ -243,8 +242,9 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="fit_predict",
             description=(
-                "Fit an estimator on a dataset and generate predictions. "
-                "Accepts either a demo dataset name or a data_handle from load_data_source."
+                "Fit an estimator and generate predictions. "
+                "Provide exactly one of: dataset (demo name such as airline, sunspots) "
+                "or data_handle (from load_data_source for custom data)."
             ),
             inputSchema={
                 "type": "object",
@@ -276,8 +276,9 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="fit_predict_async",
             description=(
-                "Fit an estimator on a dataset and generate predictions "
-                "(non-blocking background job). Returns a job_id."
+                "Fit an estimator and generate predictions in the background. "
+                "Provide exactly ONE of 'dataset' (built-in demo name) "
+                "or 'data_handle' (from load_data_source)."
             ),
             inputSchema={
                 "type": "object",
@@ -288,7 +289,11 @@ async def list_tools() -> list[Tool]:
                     },
                     "dataset": {
                         "type": "string",
-                        "description": "Dataset name: airline, sunspots, lynx, etc.",
+                        "description": "Demo dataset name: airline, sunspots, lynx, etc.",
+                    },
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Data handle from load_data_source (e.g. 'data_abc123')",
                     },
                     "horizon": {
                         "type": "integer",
@@ -296,7 +301,7 @@ async def list_tools() -> list[Tool]:
                         "default": 12,
                     },
                 },
-                "required": ["estimator_handle", "dataset"],
+                "required": ["estimator_handle"],
             },
         ),
         Tool(
@@ -618,11 +623,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         elif name == "release_handle":
             result = release_handle_tool(arguments["handle"])
 
-        elif name == "validate_pipeline":
-            validator = get_composition_validator()
-            validation = validator.validate_pipeline(arguments["components"])
-            result = validation.to_dict()
-
         # -- Execution -------------------------------------------------------
         elif name == "fit_predict":
             result = fit_predict_tool(
@@ -635,20 +635,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         elif name == "fit_predict_async":
             result = fit_predict_async_tool(
-                arguments["estimator_handle"],
-                arguments["dataset"],
-                arguments.get("horizon", 12),
+                estimator_handle=arguments["estimator_handle"],
+                dataset=arguments.get("dataset"),
+                data_handle=arguments.get("data_handle"),
+                horizon=arguments.get("horizon", 12),
             )
-
-        elif name == "fit_predict_with_data":
-            # Deprecated — kept for backward compatibility
-            logger.warning("fit_predict_with_data is deprecated; use fit_predict(data_handle=...)")
-            result = fit_predict_with_data_tool(
-                arguments["estimator_handle"],
-                arguments["data_handle"],
-                arguments.get("horizon", 12),
-            )
-            result = sanitize_for_json(result)
 
         elif name == "evaluate_estimator":
             result = evaluate_estimator_tool(
@@ -658,10 +649,16 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             )
             result = sanitize_for_json(result)
 
+        elif name == "validate_pipeline":
+            validator = get_composition_validator()
+            validation = validator.validate_pipeline(arguments["components"])
+            result = validation.to_dict()
+            result["success"] = result["valid"]
+
+
         # -- Data ------------------------------------------------------------
         elif name == "list_available_data":
             result = list_available_data_tool(arguments.get("is_demo"))
-
         elif name == "load_data_source":
             result = load_data_source_tool(arguments["config"])
 
@@ -670,8 +667,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         elif name == "list_data_sources":
             # Deprecated — info is now in load_data_source description
-            logger.warning("list_data_sources is deprecated; info is in load_data_source description")
+            logger.warning(
+                "list_data_sources is deprecated; info is in load_data_source description"
+            )
             from sktime_mcp.tools.data_tools import list_data_sources_tool
+
             result = list_data_sources_tool()
 
         elif name == "release_data_handle":
@@ -691,6 +691,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 "auto_format_on_load is deprecated; use env var SKTIME_MCP_AUTO_FORMAT=true/false"
             )
             from sktime_mcp.tools.format_tools import auto_format_on_load_tool
+
             result = auto_format_on_load_tool(arguments.get("enabled", True))
 
         # -- Export / Persistence --------------------------------------------
@@ -737,6 +738,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             # Deprecated — now runs automatically on a periodic timer
             logger.warning("cleanup_old_jobs is deprecated; jobs are cleaned up automatically")
             from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
+
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
 
         else:
@@ -750,7 +752,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         return [TextContent(type="text", text=json.dumps(sanitized_result, indent=2, default=str))]
     except Exception as e:
         logger.exception(f"Error in tool {name}")
-        return [TextContent(type="text", text=json.dumps({"error": str(e)}))]
+        return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
 
 
 # ===================================================================

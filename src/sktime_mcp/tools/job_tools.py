@@ -106,10 +106,7 @@ def cancel_job_tool(job_id: str, delete: bool = False) -> dict[str, Any]:
 
     return {
         "success": False,
-        "error": (
-            f"Job is already '{job.status.value}'. "
-            "Use delete=true to remove the record."
-        ),
+        "error": (f"Job is already '{job.status.value}'. Use delete=true to remove the record."),
     }
 
 
