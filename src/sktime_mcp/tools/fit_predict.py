@@ -41,10 +41,19 @@ def fit_predict_tool(
             "horizon": 12
         }
     """
+    if dataset and data_handle:
+        return {
+            "success": False,
+            "error": "Provide either 'dataset' or 'data_handle', not both.",
+        }
+
     if data_handle is None and (not dataset or not str(dataset).strip()):
         return {
             "success": False,
-            "error": "Provide either dataset (demo name) or data_handle from load_data_source.",
+            "error": (
+                "Either 'dataset' (e.g. 'airline') or "
+                "'data_handle' (from load_data_source) is required."
+            ),
         }
     executor = get_executor()
     return executor.fit_predict(estimator_handle, dataset, horizon, data_handle=data_handle)
