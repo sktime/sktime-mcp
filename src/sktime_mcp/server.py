@@ -26,7 +26,7 @@ from sktime_mcp.tools.data_tools import (
 from sktime_mcp.tools.describe_estimator import describe_estimator_tool
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
-    fit_predict_async_tool,
+    fit_predict_tool,
 )
 from sktime_mcp.tools.format_tools import format_time_series_tool
 from sktime_mcp.tools.instantiate import (
@@ -232,7 +232,8 @@ async def list_tools() -> list[Tool]:
             description=(
                 "Fit an estimator and generate predictions. "
                 "Provide exactly one of: dataset (demo name such as airline, sunspots) "
-                "or data_handle (from load_data_source for custom data)."
+                "or data_handle (from load_data_source for custom data). "
+                "Set background=true to run as a background job."
             ),
             inputSchema={
                 "type": "object",
@@ -257,36 +258,10 @@ async def list_tools() -> list[Tool]:
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
                     },
-                },
-                "required": ["estimator_handle"],
-            },
-        ),
-        Tool(
-            name="fit_predict_async",
-            description=(
-                "Fit an estimator and generate predictions in the background. "
-                "Provide exactly ONE of 'dataset' (built-in demo name) "
-                "or 'data_handle' (from load_data_source)."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "estimator_handle": {
-                        "type": "string",
-                        "description": "Handle from instantiate_estimator",
-                    },
-                    "dataset": {
-                        "type": "string",
-                        "description": "Demo dataset name: airline, sunspots, lynx, etc.",
-                    },
-                    "data_handle": {
-                        "type": "string",
-                        "description": "Data handle from load_data_source (e.g. 'data_abc123')",
-                    },
-                    "horizon": {
-                        "type": "integer",
-                        "description": "Forecast horizon (default: 12)",
-                        "default": 12,
+                    "background": {
+                        "type": "boolean",
+                        "description": "Run in background and return a job_id (default: false)",
+                        "default": False,
                     },
                 },
                 "required": ["estimator_handle"],
@@ -618,16 +593,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("dataset", ""),
                 arguments.get("horizon", 12),
                 data_handle=arguments.get("data_handle"),
+                background=arguments.get("background", False),
             )
             result = sanitize_for_json(result)
-
-        elif name == "fit_predict_async":
-            result = fit_predict_async_tool(
-                estimator_handle=arguments["estimator_handle"],
-                dataset=arguments.get("dataset"),
-                data_handle=arguments.get("data_handle"),
-                horizon=arguments.get("horizon", 12),
-            )
 
         elif name == "evaluate_estimator":
             result = evaluate_estimator_tool(
