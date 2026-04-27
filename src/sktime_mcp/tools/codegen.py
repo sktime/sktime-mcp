@@ -4,6 +4,7 @@ Code generation tool for sktime MCP.
 Generates Python code to recreate estimators and pipelines.
 """
 
+import keyword
 from typing import Any
 
 from sktime_mcp.registry.interface import get_registry
@@ -43,6 +44,11 @@ def _get_estimator_module(estimator_name: str) -> str | None:
     if node and node.class_ref:
         return node.class_ref.__module__
     return None
+
+
+def _is_valid_var_name(var_name: str) -> bool:
+    """Return True when var_name is a valid non-keyword Python identifier."""
+    return isinstance(var_name, str) and var_name.isidentifier() and not keyword.iskeyword(var_name)
 
 
 def _generate_single_estimator_code(
@@ -220,6 +226,12 @@ def export_code_tool(
         handle_info = handle_manager.get_info(handle)
     except KeyError:
         return {"success": False, "error": f"Handle not found: {handle}"}
+
+    if not _is_valid_var_name(var_name):
+        return {
+            "success": False,
+            "error": "var_name must be a valid Python identifier and not a keyword.",
+        }
 
     estimator_name = handle_info.estimator_name
     params = handle_info.params
