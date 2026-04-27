@@ -24,7 +24,38 @@ This MCP is **not** just documentation or static code analysis. It is a **semant
 
 3. **Minimal MCP Surface** - Exposes only what an LLM needs: Discovery, Description, Instantiation, Execution, and model persistence.
 
+## 🛠️ Prerequisites
+
+- **Python 3.10+**
+- **pip** package manager
+
 ## 🛠️ Installation
+
+### Virtual Environment Setup
+
+It is recommended to use a virtual environment:
+
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+### Package Installation
+
+The recommended way to install is using `python3 -m pip`:
+
+```bash
+# Install from source
+python3 -m pip install -e .
+
+# With all optional dependencies
+python3 -m pip install -e ".[all]"
+
+# Development installation
+python3 -m pip install -e ".[dev]"
+```
+
+Alternatively, you can use `pip`:
 
 ```bash
 # Install from source
@@ -36,6 +67,32 @@ pip install -e ".[all]"
 # Development installation
 pip install -e ".[dev]"
 ```
+## 🧭 Beginner Setup (First‑Time Users)
+
+If you are new to sktime‑mcp or to MCP‑based workflows, this section provides a minimal starting point to help you verify that your setup is working correctly.
+
+### What is MCP?
+The Model Context Protocol (MCP) allows Large Language Models (LLMs) to discover, reason about, and execute sktime workflows programmatically. This project exposes sktime’s estimator registry and semantics in a structured way so that LLMs can safely compose and run real time‑series pipelines.
+
+### Prerequisites
+- Python 3.10 or newer
+- A working Python virtual environment (recommended)
+- `pip` installed
+
+### Minimal Setup Check
+After installing the package, you can verify that the MCP server starts correctly by running:
+
+```bash
+sktime-mcp
+```
+
+
+> **Note:** On Windows, the `sktime-mcp` command may be installed to a directory
+> not on your `PATH` (e.g., `%APPDATA%\Python\Python3xx\Scripts`). Either add
+> that directory to your `PATH` or use `python -m sktime_mcp.server` instead.
+
+**Note:** On some systems (like macOS), `pip` may not be available in the path. In such cases, use `python3 -m pip` to ensure the command runs with the intended Python version.
+
 
 ## 🚀 Quick Start
 
@@ -51,9 +108,15 @@ python -m sktime_mcp.server
 
 ### Connecting from an LLM Client
 
-The server uses stdio transport by default, compatible with Claude Desktop and other MCP clients.
+The server uses stdio transport by default, compatible with Claude Desktop, Claude Code, and other MCP clients.
 
-Add to your Claude Desktop config (`~/.config/claude/claude_desktop_config.json`):
+**Claude Desktop** — add to your config file:
+
+| Platform | Config path |
+|----------|-------------|
+| macOS    | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Linux    | `~/.config/claude/claude_desktop_config.json` |
+| Windows  | `%APPDATA%\Claude\claude_desktop_config.json` |
 
 ```json
 {
@@ -64,6 +127,22 @@ Add to your Claude Desktop config (`~/.config/claude/claude_desktop_config.json`
   }
 }
 ```
+
+If you are using a virtual environment, specify the full path to the environment's Python executable in the `command` field, and run the server with `-m sktime_mcp.server`.
+
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "<project-root>/venv/bin/python",
+      "args": ["-m", "sktime_mcp.server"]
+    }
+  }
+}
+```
+
+If `sktime-mcp` is not on your `PATH`, use the full path to the executable or
+use `python -m sktime_mcp.server` as the command instead.
 
 ## 📚 Available Tools
 
@@ -215,18 +294,28 @@ Check if a proposed pipeline composition is valid before instantiation.
 ### Execution
 
 #### 8. `fit_predict`
-Execute a complete workflow: load dataset, fit estimator, and generate predictions.
+Execute a complete workflow: fit the estimator and generate predictions. Use a **demo dataset name** or a **`data_handle`** from `load_data_source` (provide exactly one of the two).
 
 **Arguments:**
 - `estimator_handle` (required): Handle from `instantiate_estimator` or `instantiate_pipeline`
-- `dataset` (required): Dataset name (e.g., `"airline"`, `"sunspots"`, `"lynx"`)
+- `dataset` (optional): Demo dataset name (e.g., `"airline"`, `"sunspots"`, `"lynx"`) when not using custom data
+- `data_handle` (optional): Handle from `load_data_source` for custom data (omit `dataset` in that case)
 - `horizon` (optional): Forecast horizon (default: 12)
 
-**Example:**
+**Example (demo data):**
 ```json
 {
   "estimator_handle": "est_abc123",
   "dataset": "airline",
+  "horizon": 12
+}
+```
+
+**Example (custom data):**
+```json
+{
+  "estimator_handle": "est_abc123",
+  "data_handle": "data_abc123",
   "horizon": 12
 }
 ```
@@ -260,42 +349,94 @@ Persist a fitted estimator or pipeline handle to a local filesystem path using `
 
 ---
 
-### Datasets
+### Data Availability
 
-#### 10. `list_datasets`
-List all available demo datasets for testing and experimentation.
-
-**Arguments:** None
-
-**Returns:** `{"success": true, "datasets": ["airline", "sunspots", "lynx", "shampoo", ...]}`
-
----
-
-### Handle Management
-
-#### 11. `list_handles`
-List all active estimator handles and their status.
-
-**Arguments:** None
-
-**Returns:** List of active handles with metadata (estimator name, fitted status, creation time)
-
----
-
-#### 12. `release_handle`
-Release an estimator handle and free memory.
+#### 10. `list_available_data`
+List all available data — both system demo datasets and active user-loaded data handles — in a single unified response.
 
 **Arguments:**
-- `handle` (required): Handle ID to release
+- `is_demo` (optional): `true` returns only demo datasets, `false` returns only active data handles, omit to get both
+
+**Returns:** `{"success": true, "system_demos": ["airline", "sunspots", ...], "active_handles": [...], "total": 8}`
+
+---
+
+### Data Loading
+
+#### 11. `load_data_source`
+Load data from various sources (CSV/Parquet files, pandas DataFrames, SQL databases, URLs).
+
+**Arguments:**
+- `config` (required): Data source configuration object. Must include `"type"` (`"pandas"`, `"sql"`, `"file"`, `"url"`).
 
 **Example:**
 ```json
 {
-  "handle": "est_abc123"
+  "config": {
+    "type": "file",
+    "path": "/absolute/path/to/data.csv",
+    "time_column": "date",
+    "target_column": "value"
+  }
 }
 ```
 
-**Returns:** `{"success": true, "message": "Handle released"}`
+**Returns:** `{"success": true, "data_handle": "data_abc123", "metadata": {...}}`
+
+---
+
+### Code & Model Export
+
+#### 12. `export_code`
+Export an estimator or pipeline as executable Python code.
+
+**Arguments:**
+- `handle` (required): Handle ID of the estimator/pipeline
+- `var_name` (optional): Variable name in generated code (default: `"model"`)
+- `include_fit_example` (optional): Include a fit/predict example (default: `false`)
+
+**Returns:** `{"success": true, "code": "from sktime..."}`
+
+---
+
+### Background Jobs
+
+#### 13. `fit_predict_async`
+Non-blocking version of `fit_predict`. Returns a `job_id` immediately; use `check_job_status` to poll.
+
+**Arguments:** Same as `fit_predict`.
+
+**Returns:** `{"success": true, "job_id": "abc-123", "message": "Training job started..."}`
+
+---
+
+#### 14. `check_job_status`
+Check the status and progress of a background job.
+
+**Arguments:**
+- `job_id` (required): Job ID to check
+
+---
+
+#### 15. `list_jobs`
+List all background jobs with optional status filter.
+
+**Arguments:**
+- `status` (optional): Filter by status (`"pending"`, `"running"`, `"completed"`, `"failed"`, `"cancelled"`)
+- `limit` (optional): Maximum results (default: 20)
+
+---
+
+### Data Formatting
+
+#### 16. `format_time_series`
+Automatically format time series data (infer frequency, remove duplicates, fill missing values).
+
+**Arguments:**
+- `data_handle` (required): Handle from `load_data_source`
+- `auto_infer_freq` (optional): Infer and set frequency (default: `true`)
+- `fill_missing` (optional): Fill missing values (default: `true`)
+- `remove_duplicates` (optional): Remove duplicate timestamps (default: `true`)
 
 ## 🔄 Example LLM Flows
 
@@ -357,13 +498,15 @@ Release an estimator handle and free memory.
 ## 📁 Project Structure
 
 ```
-sktime_mcp/
+sktime-mcp/
 ├── src/sktime_mcp/
 │   ├── server.py           # MCP server entry point
 │   ├── registry/           # Registry interface & tag resolver
 │   ├── composition/        # Pipeline composition validator
-│   ├── runtime/            # Execution engine & handle management
+│   ├── runtime/            # Execution engine, handle & job management
+│   ├── data/               # Data adapters (file, pandas, SQL, URL)
 │   └── tools/              # MCP tool implementations
+├── docs/                   # MkDocs documentation source
 ├── examples/               # Usage examples
 └── tests/                  # Test suite
 ```
@@ -372,4 +515,26 @@ sktime_mcp/
 
 ```bash
 pytest tests/
+```
+
+## Local Quality Checks
+
+Run standardized local checks before raising a PR:
+
+```bash
+make check
+```
+
+Auto-fix formatting and fixable lint issues:
+
+```bash
+make format-fix
+```
+
+If `make` is unavailable (common on Windows), run the equivalent commands:
+
+```bash
+python -m black --check .
+python -m ruff check .
+python -m pytest
 ```

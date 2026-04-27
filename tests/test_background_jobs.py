@@ -121,33 +121,36 @@ def test_list_jobs():
     job_manager.delete_job(job3)
 
 
-@pytest.mark.asyncio
-async def test_async_fit_predict():
-    """Test async fit_predict."""
-    executor = get_executor()
-    job_manager = get_job_manager()
+def test_async_fit_predict():
+    """Test async fit_predict (runs coroutine on a fresh event loop)."""
 
-    # Instantiate a simple forecaster
-    result = executor.instantiate("NaiveForecaster")
-    assert result["success"]
-    handle = result["handle"]
+    async def _run():
+        executor = get_executor()
+        job_manager = get_job_manager()
 
-    print(f"✓ Instantiated NaiveForecaster: {handle}")
+        # Instantiate a simple forecaster
+        result = executor.instantiate("NaiveForecaster")
+        assert result["success"]
+        handle = result["handle"]
 
-    # Create job
-    job_id = job_manager.create_job(
-        job_type="fit_predict",
-        estimator_handle=handle,
-        estimator_name="NaiveForecaster",
-        dataset_name="airline",
-        horizon=12,
-        total_steps=3,
-    )
+        print(f"✓ Instantiated NaiveForecaster: {handle}")
 
-    print(f"✓ Created job: {job_id}")
+        # Create job
+        job_id = job_manager.create_job(
+            job_type="fit_predict",
+            estimator_handle=handle,
+            estimator_name="NaiveForecaster",
+            dataset_name="airline",
+            horizon=12,
+            total_steps=3,
+        )
 
-    # Run async fit_predict
-    result = await executor.fit_predict_async(handle, "airline", 12, job_id)
+        print(f"✓ Created job: {job_id}")
+
+        # Run async fit_predict
+        return await executor.fit_predict_async(handle, "airline", 12, job_id), job_id, job_manager
+
+    (result, job_id, job_manager) = asyncio.run(_run())
 
     # Check result
     assert result["success"]
@@ -220,7 +223,7 @@ def run_all_tests():
     test_list_jobs()
 
     print("\n4. Testing async fit_predict...")
-    asyncio.run(test_async_fit_predict())
+    test_async_fit_predict()
 
     print("\n5. Testing cancel job...")
     test_cancel_job()

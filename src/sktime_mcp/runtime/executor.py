@@ -6,7 +6,9 @@ and running fit/predict operations.
 """
 
 import asyncio
+import inspect
 import logging
+import os
 import uuid
 from typing import Any, Optional, Union
 
@@ -19,17 +21,25 @@ from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 logger = logging.getLogger(__name__)
 
 
-# Available demo datasets
-# L-5: We can add more datasets here by directly wrapping on top of sktime datasets (https://www.sktime.net/en/latest/api_reference/datasets.html)
-# L-6: We can also add custom datasets here
-DEMO_DATASETS = {
-    "airline": "sktime.datasets.load_airline",
-    "longley": "sktime.datasets.load_longley",
-    "lynx": "sktime.datasets.load_lynx",
-    "shampoo": "sktime.datasets.load_shampoo_sales",
-    "sunspots": "sktime.datasets.load_sunspot",
-    "uschange": "sktime.datasets.load_uschange",
-}
+# Dynamically discover all available sktime demo datasets at import time.
+# This replaces the old hardcoded dictionary and automatically exposes every
+# load_* function in sktime.datasets to the MCP server.
+def _discover_demo_datasets() -> dict:
+    """Return a mapping of dataset name -> dotted module path for every
+    ``load_*`` function exported by ``sktime.datasets``."""
+    try:
+        import sktime.datasets as _ds_module
+
+        return {
+            name.removeprefix("load_"): f"sktime.datasets.{name}"
+            for name, obj in inspect.getmembers(_ds_module, inspect.isfunction)
+            if name.startswith("load_")
+        }
+    except Exception:  # pragma: no cover
+        return {}  # fallback: empty dict if sktime not installed
+
+
+DEMO_DATASETS = _discover_demo_datasets()
 
 
 class Executor:
@@ -44,6 +54,9 @@ class Executor:
         self._handle_manager = get_handle_manager()
         self._job_manager = get_job_manager()
         self._data_handles = {}  # Store data handles
+        self._auto_format_enabled = (
+            os.environ.get("SKTIME_MCP_AUTO_FORMAT", "true").lower() == "true"
+        )
 
     def instantiate(
         self,
@@ -176,14 +189,33 @@ class Executor:
         handle_id: str,
         dataset: str,
         horizon: int = 12,
+        data_handle: Optional[str] = None,
     ) -> dict[str, Any]:
         """Convenience method: load data, fit, and predict."""
-        data_result = self.load_dataset(dataset)
-        if not data_result["success"]:
-            return data_result
+        if data_handle is None and (not dataset or not str(dataset).strip()):
+            return {
+                "success": False,
+                "error": "Provide either dataset (demo name) or data_handle from load_data_source.",
+            }
+        if data_handle is not None:
+            # Use custom loaded data
+            if data_handle not in self._data_handles:
+                return {
+                    "success": False,
+                    "error": f"Unknown data handle: {data_handle}",
+                    "available_handles": list(self._data_handles.keys()),
+                }
+            data_info = self._data_handles[data_handle]
+            y = data_info["y"]
+            X = data_info.get("X")
+        else:
+            # Use demo dataset
+            data_result = self.load_dataset(dataset)
+            if not data_result["success"]:
+                return data_result
+            y = data_result["data"]
+            X = data_result.get("exog")
 
-        y = data_result["data"]
-        X = data_result.get("exog")
         fh = list(range(1, horizon + 1))
 
         fit_result = self.fit(handle_id, y, X=X, fh=fh)
@@ -195,19 +227,22 @@ class Executor:
     async def fit_predict_async(
         self,
         handle_id: str,
-        dataset: str,
+        dataset: Optional[str] = None,
+        data_handle: Optional[str] = None,
         horizon: int = 12,
         job_id: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         Async version of fit_predict with job tracking.
 
-        This method runs the training in the background without blocking the MCP server.
-        Progress is tracked via the JobManager.
+        Runs the training in the background without blocking the MCP server.
+        Accepts either a demo dataset name or a data handle from
+        load_data_source.
 
         Args:
             handle_id: Estimator handle
-            dataset: Dataset name
+            dataset: Demo dataset name
+            data_handle: Data handle from load_data_source
             horizon: Forecast horizon
             job_id: Optional job ID for tracking (created if not provided)
 
@@ -222,47 +257,79 @@ class Executor:
             logger.warning(f"Could not get estimator name: {e}")
             estimator_name = "Unknown"
 
+        source_name = dataset if dataset else data_handle
+
         # Create job if not provided
         if job_id is None:
             job_id = self._job_manager.create_job(
                 job_type="fit_predict",
                 estimator_handle=handle_id,
                 estimator_name=estimator_name,
-                dataset_name=dataset,
+                dataset_name=source_name,
                 horizon=horizon,
-                total_steps=3,  # load data, fit, predict
+                total_steps=3,
             )
 
         try:
             # Update status to RUNNING
             self._job_manager.update_job(job_id, status=JobStatus.RUNNING)
 
-            # Step 1: Load dataset
-            self._job_manager.update_job(
-                job_id, completed_steps=0, current_step=f"Loading dataset '{dataset}'..."
-            )
-            await asyncio.sleep(0.01)  # Yield control to event loop
-
-            data_result = self.load_dataset(dataset)
-            if not data_result["success"]:
+            # Step 1: Load data
+            if data_handle:
+                # Use custom data from a loaded handle
                 self._job_manager.update_job(
                     job_id,
-                    status=JobStatus.FAILED,
-                    errors=[f"Failed to load dataset: {data_result.get('error')}"],
+                    completed_steps=0,
+                    current_step=f"Loading data from handle '{data_handle}'...",
                 )
-                return data_result
+                await asyncio.sleep(0.01)
 
-            y = data_result["data"]
-            X = data_result.get("exog")
+                if data_handle not in self._data_handles:
+                    self._job_manager.update_job(
+                        job_id,
+                        status=JobStatus.FAILED,
+                        errors=[f"Unknown data handle: {data_handle}"],
+                    )
+                    return {
+                        "success": False,
+                        "error": f"Unknown data handle: {data_handle}",
+                        "available_handles": list(self._data_handles.keys()),
+                    }
+
+                data_info = self._data_handles[data_handle]
+                y = data_info["y"]
+                X = data_info.get("X")
+            else:
+                # Use built-in demo dataset
+                self._job_manager.update_job(
+                    job_id,
+                    completed_steps=0,
+                    current_step=f"Loading dataset '{dataset}'...",
+                )
+                await asyncio.sleep(0.01)
+
+                data_result = self.load_dataset(dataset)
+                if not data_result["success"]:
+                    self._job_manager.update_job(
+                        job_id,
+                        status=JobStatus.FAILED,
+                        errors=[f"Failed to load dataset: {data_result.get('error')}"],
+                    )
+                    return data_result
+
+                y = data_result["data"]
+                X = data_result.get("exog")
+
             fh = list(range(1, horizon + 1))
 
             # Step 2: Fit model
             self._job_manager.update_job(
-                job_id, completed_steps=1, current_step=f"Fitting {estimator_name} on {dataset}..."
+                job_id,
+                completed_steps=1,
+                current_step=f"Fitting {estimator_name} on {source_name}...",
             )
-            await asyncio.sleep(0.01)  # Yield control
+            await asyncio.sleep(0.01)
 
-            # Run fit in executor to avoid blocking
             loop = asyncio.get_event_loop()
             fit_result = await loop.run_in_executor(
                 None, lambda: self.fit(handle_id, y, X=X, fh=fh)
@@ -282,9 +349,8 @@ class Executor:
                 completed_steps=2,
                 current_step=f"Generating predictions (horizon={horizon})...",
             )
-            await asyncio.sleep(0.01)  # Yield control
+            await asyncio.sleep(0.01)
 
-            # Run predict in executor
             predict_result = await loop.run_in_executor(
                 None, lambda: self.predict(handle_id, fh=fh, X=X)
             )
@@ -794,43 +860,6 @@ class Executor:
             "metadata": self._data_handles[new_handle]["metadata"],
             "changes_made": changes_made,
         }
-
-    def fit_predict_with_data(
-        self,
-        estimator_handle: str,
-        data_handle: str,
-        horizon: int = 12,
-    ) -> dict[str, Any]:
-        """
-        Fit and predict using a data handle.
-
-        Args:
-            estimator_handle: Estimator handle from instantiate_estimator
-            data_handle: Data handle from load_data_source
-            horizon: Forecast horizon
-
-        Returns:
-            Dictionary with predictions
-        """
-        if data_handle not in self._data_handles:
-            return {
-                "success": False,
-                "error": f"Unknown data handle: {data_handle}",
-                "available_handles": list(self._data_handles.keys()),
-            }
-
-        data = self._data_handles[data_handle]
-        y = data["y"]
-        X = data.get("X")
-
-        # Fit
-        fh = list(range(1, horizon + 1))
-        fit_result = self.fit(estimator_handle, y=y, X=X, fh=fh)
-        if not fit_result["success"]:
-            return fit_result
-
-        # Predict
-        return self.predict(estimator_handle, fh=fh, X=X)
 
     def list_data_handles(self) -> dict[str, Any]:
         """

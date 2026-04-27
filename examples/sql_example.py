@@ -65,10 +65,11 @@ if result["success"]:
     estimator_result = executor.instantiate("ARIMA", {"order": (1, 1, 1)})
 
     if estimator_result["success"]:
-        predictions = executor.fit_predict_with_data(
-            estimator_handle=estimator_result["handle"],
+        predictions = executor.fit_predict(
+            estimator_result["handle"],
+            "",
+            7,
             data_handle=result["data_handle"],
-            horizon=7,
         )
 
         if predictions["success"]:

@@ -4,9 +4,8 @@ fit_predict tool for sktime MCP.
 Executes complete forecasting workflows.
 """
 
-import asyncio
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from sktime_mcp.runtime.executor import get_executor
 
@@ -17,6 +16,7 @@ def fit_predict_tool(
     estimator_handle: str,
     dataset: str,
     horizon: int = 12,
+    data_handle: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Execute a complete fit-predict workflow.
@@ -25,6 +25,7 @@ def fit_predict_tool(
         estimator_handle: Handle from instantiate_estimator
         dataset: Name of demo dataset (e.g., "airline", "sunspots")
         horizon: Forecast horizon (default: 12)
+        data_handle: Optional handle from load_data_source for custom data
 
     Returns:
         Dictionary with:
@@ -40,8 +41,13 @@ def fit_predict_tool(
             "horizon": 12
         }
     """
+    if data_handle is None and (not dataset or not str(dataset).strip()):
+        return {
+            "success": False,
+            "error": "Provide either dataset (demo name) or data_handle from load_data_source.",
+        }
     executor = get_executor()
-    return executor.fit_predict(estimator_handle, dataset, horizon)
+    return executor.fit_predict(estimator_handle, dataset, horizon, data_handle=data_handle)
 
 
 def fit_tool(
@@ -105,18 +111,23 @@ def list_datasets_tool() -> dict[str, Any]:
 
 def fit_predict_async_tool(
     estimator_handle: str,
-    dataset: str,
+    dataset: Optional[str] = None,
+    data_handle: Optional[str] = None,
     horizon: int = 12,
 ) -> dict[str, Any]:
     """
     Execute a fit-predict workflow in the background (non-blocking).
 
-    This tool schedules the training as a background job and returns immediately
+    Schedules the training as a background job and returns immediately
     with a job_id. Use check_job_status to monitor progress.
+
+    Accepts either a demo dataset name or a data handle from
+    load_data_source -- exactly one must be provided.
 
     Args:
         estimator_handle: Handle from instantiate_estimator
         dataset: Name of demo dataset (e.g., "airline", "sunspots")
+        data_handle: Handle from load_data_source (e.g., "data_abc123")
         horizon: Forecast horizon (default: 12)
 
     Returns:
@@ -126,13 +137,25 @@ def fit_predict_async_tool(
         - message: Information about the job
 
     Example:
-        >>> fit_predict_async_tool("est_abc123", "airline", horizon=12)
-        {
-            "success": True,
-            "job_id": "abc-123-def-456",
-            "message": "Training job started. Use check_job_status to monitor progress."
-        }
+        >>> fit_predict_async_tool("est_abc123", dataset="airline", horizon=12)
+        >>> fit_predict_async_tool("est_abc123", data_handle="data_xyz", horizon=5)
     """
+    if dataset and data_handle:
+        return {
+            "success": False,
+            "error": "Provide either 'dataset' or 'data_handle', not both.",
+        }
+
+    if not dataset and not data_handle:
+        return {
+            "success": False,
+            "error": (
+                "Either 'dataset' (e.g. 'airline') or "
+                "'data_handle' (from load_data_source) is required."
+            ),
+        }
+
+    import asyncio
 
     from sktime_mcp.runtime.jobs import get_job_manager
 
@@ -147,12 +170,14 @@ def fit_predict_async_tool(
         logger.warning(f"Could not get estimator name: {e}")
         estimator_name = "Unknown"
 
+    source_name = dataset if dataset else data_handle
+
     # Create job
     job_id = job_manager.create_job(
         job_type="fit_predict",
         estimator_handle=estimator_handle,
         estimator_name=estimator_name,
-        dataset_name=dataset,
+        dataset_name=source_name,
         horizon=horizon,
         total_steps=3,
     )
@@ -161,19 +186,26 @@ def fit_predict_async_tool(
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
-        # No event loop in current thread, create one
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-    # Schedule the coroutine (non-blocking!)
-    coro = executor.fit_predict_async(estimator_handle, dataset, horizon, job_id)
+    coro = executor.fit_predict_async(
+        estimator_handle,
+        dataset=dataset,
+        data_handle=data_handle,
+        horizon=horizon,
+        job_id=job_id,
+    )
     asyncio.run_coroutine_threadsafe(coro, loop)
 
     return {
         "success": True,
         "job_id": job_id,
-        "message": f"Training job started for {estimator_name} on {dataset}. Use check_job_status('{job_id}') to monitor progress.",
+        "message": (
+            f"Training job started for {estimator_name} on {source_name}. "
+            f"Use check_job_status('{job_id}') to monitor progress."
+        ),
         "estimator": estimator_name,
-        "dataset": dataset,
+        "data_source": source_name,
         "horizon": horizon,
     }

@@ -70,10 +70,11 @@ if result["success"]:
     estimator_result = executor.instantiate("NaiveForecaster", {"strategy": "drift"})
 
     if estimator_result["success"]:
-        predictions = executor.fit_predict_with_data(
-            estimator_handle=estimator_result["handle"],
+        predictions = executor.fit_predict(
+            estimator_result["handle"],
+            "",
+            10,
             data_handle=result["data_handle"],
-            horizon=10,
         )
 
         if predictions["success"]:
