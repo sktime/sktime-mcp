@@ -807,7 +807,7 @@ async def read_resource(uri: AnyUrl) -> list[TextResourceContents]:
 
     if uri_str == "sktime://tags":
         result = get_available_tags()
-        text = json.dumps(result, indent=2)
+        text = json.dumps(result.get("tags", result), indent=2)
     elif uri_str == "sktime://datasets":
         from sktime_mcp.runtime.executor import get_executor
         executor = get_executor()
@@ -816,7 +816,7 @@ async def read_resource(uri: AnyUrl) -> list[TextResourceContents]:
     elif uri_str.startswith("sktime://estimators/"):
         name = uri_str[len("sktime://estimators/"):]
         result = describe_estimator_tool(name)
-        text = json.dumps(result, indent=2)
+        text = json.dumps({k: v for k, v in result.items() if k != "success"}, indent=2)
     else:
         raise ValueError(f"Unknown resource URI: {uri_str}")
 
