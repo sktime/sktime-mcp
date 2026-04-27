@@ -40,6 +40,7 @@ class UrlAdapter(DataSourceAdapter):
     """
     
     async def load_async(self, job_id: Optional[str] = None) -> pd.DataFrame:
+        import os
         url = self.config.get("url")
         if not url:
             raise ValueError("Config must contain 'url' key")
@@ -110,6 +111,7 @@ class UrlAdapter(DataSourceAdapter):
             temp_dir.cleanup()
 
     def load(self) -> pd.DataFrame:
+        import os
         url = self.config.get("url")
         if not url:
             raise ValueError("Config must contain 'url' key")

@@ -40,10 +40,16 @@ def fit_predict_tool(
             "horizon": 12
         }
     """
-    if data_handle is None and (not dataset or not str(dataset).strip()):
+    if dataset and data_handle:
         return {
             "success": False,
-            "error": "Provide either dataset (demo name) or data_handle from load_data_source.",
+            "error": "Provide either 'dataset' (demo name) or 'data_handle' (from load_data_source), not both.",
+        }
+
+    if not data_handle and (not dataset or not str(dataset).strip()):
+        return {
+            "success": False,
+            "error": "Provide either 'dataset' (demo name) or 'data_handle' (from load_data_source).",
         }
     executor = get_executor()
 
@@ -53,6 +59,7 @@ def fit_predict_tool(
         )
 
     # Handle background execution
+    import asyncio
     from sktime_mcp.runtime.jobs import get_job_manager
 
     job_manager = get_job_manager()

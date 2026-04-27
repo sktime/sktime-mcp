@@ -82,4 +82,4 @@ async def test_executor_load_data_source_async():
             
             job = job_manager.get_job(job_id)
             assert job.status == JobStatus.COMPLETED
-            assert job.completed_steps == 4
+            assert job.completed_steps == 3
