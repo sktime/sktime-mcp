@@ -14,9 +14,10 @@ logger = logging.getLogger(__name__)
 
 def fit_predict_tool(
     estimator_handle: str,
-    dataset: str,
+    dataset: str | None = None,
     horizon: int = 12,
     data_handle: str | None = None,
+    background: bool = False,
 ) -> dict[str, Any]:
     """
     Execute a complete fit-predict workflow.
@@ -26,11 +27,13 @@ def fit_predict_tool(
         dataset: Name of demo dataset (e.g., "airline", "sunspots")
         horizon: Forecast horizon (default: 12)
         data_handle: Optional handle from load_data_source for custom data
+        background: If True, run in background and return job_id (default: False)
 
     Returns:
         Dictionary with:
         - success: bool
-        - predictions: Forecast values
+        - predictions: Forecast values (if background=False)
+        - job_id: Job ID (if background=True)
         - horizon: Number of steps predicted
 
     Example:
@@ -41,6 +44,14 @@ def fit_predict_tool(
             "horizon": 12
         }
     """
+    if background:
+        return fit_predict_async_tool(
+            estimator_handle=estimator_handle,
+            dataset=dataset,
+            data_handle=data_handle,
+            horizon=horizon,
+        )
+
     if data_handle is None and (not dataset or not str(dataset).strip()):
         return {
             "success": False,
