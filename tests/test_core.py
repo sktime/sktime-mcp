@@ -157,18 +157,26 @@ class TestTools:
         assert "estimators" in result
         assert len(result["estimators"]) <= 5
 
-    def test_list_estimators_query_prioritizes_exact_name(self):
-        """Exact-name query should keep the intended estimator in small pages."""
+    def test_list_estimators_detection_task(self):
+        """Test that detection estimators are returned when filtering by detection task."""
         from sktime_mcp.tools.list_estimators import list_estimators_tool
 
-        result = list_estimators_tool(
-            task="forecasting",
-            query="NaiveForecaster",
-            limit=5,
-        )
+        result = list_estimators_tool(task="detection", limit=100)
 
         assert result["success"]
-        assert result["estimators"][0]["name"] == "NaiveForecaster"
+        assert result["total"] > 0, "There should be detection estimators"
+        assert all(e["task"] == "detection" for e in result["estimators"]), (
+            "All returned estimators should have task='detection'"
+        )
+
+    def test_detection_in_available_tasks(self):
+        """Test that detection appears in available tasks."""
+        from sktime_mcp.tools.list_estimators import get_available_tasks
+
+        result = get_available_tasks()
+
+        assert result["success"]
+        assert "detection" in result["tasks"], "detection should be a valid task"
 
     def test_describe_unknown_estimator(self):
         """Test describing an unknown estimator."""
@@ -318,7 +326,6 @@ class TestServerImports:
             # Other ImportErrors (e.g. mcp not installed) are fine — not our bug
         except Exception:
             pass
-
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

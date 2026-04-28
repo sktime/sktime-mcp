@@ -23,7 +23,7 @@ Usage:
     y, X = adapter.to_sktime_format(data)
 """
 
-from .adapters import FileAdapter, PandasAdapter, SQLAdapter
+from .adapters import FileAdapter, PandasAdapter, SQLAdapter, UrlAdapter
 from .base import DataSourceAdapter
 from .registry import DataSourceRegistry
 
@@ -33,4 +33,5 @@ __all__ = [
     "PandasAdapter",
     "SQLAdapter",
     "FileAdapter",
+    "UrlAdapter",
 ]

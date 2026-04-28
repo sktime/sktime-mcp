@@ -42,29 +42,18 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 ### Package Installation
 
-The recommended way to install is using `python3 -m pip`:
+Install from PyPI (recommended for users):
 
 ```bash
-# Install from source
-python3 -m pip install -e .
+pip install sktime-mcp
 
 # With all optional dependencies
-python3 -m pip install -e ".[all]"
-
-# Development installation
-python3 -m pip install -e ".[dev]"
+pip install "sktime-mcp[all]"
 ```
 
-Alternatively, you can use `pip`:
+For development (editable install from source):
 
 ```bash
-# Install from source
-pip install -e .
-
-# With all optional dependencies
-pip install -e ".[all]"
-
-# Development installation
 pip install -e ".[dev]"
 ```
 
@@ -90,6 +79,12 @@ For macOS or Unix-like shells, create an isolated virtual environment before ins
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
+python -m pip install sktime-mcp
+```
+
+For development (if you want to modify the source):
+
+```bash
 python -m pip install -e ".[dev]"
 ```
 
@@ -110,7 +105,7 @@ python -m sktime_mcp.server
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | `command not found: sktime-mcp` | Scripts directory not on `PATH` | Run `python -m sktime_mcp.server` or add `.venv/bin` to your `PATH` |
-| `ModuleNotFoundError: sktime_mcp` | Package not installed in the active environment | Confirm `.venv` is active (`which python`) and re-run `pip install -e ".[dev]"` |
+| `ModuleNotFoundError: sktime_mcp` | Package not installed in the active environment | Confirm `.venv` is active (`which python`) and re-run `pip install sktime-mcp` |
 | `pip: command not found` | System `pip` not available | Use `python -m pip` instead of bare `pip` |
 | Wrong Python version selected | Multiple Python installations | Invoke `python3 -m venv .venv` explicitly and always use `python` inside the activated environment |
 
@@ -287,14 +282,14 @@ Create a complete pipeline from a list of components (transformers → forecaste
 
 ## 📖 Documentation
 
-Project documentation lives in `docs/` and can be served locally with MkDocs:
+Project documentation lives in `docs/` and is built with Sphinx:
 
 ```bash
 pip install -e ".[dev]"
-mkdocs serve
+sphinx-build docs/source docs/_build/html
 ```
 
-The MkDocs config is in `mkdocs.yml`.
+Then open `docs/_build/html/index.html` in your browser. The Sphinx config is in `docs/source/conf.py`.
 
 ### Validation
 
@@ -530,7 +525,7 @@ sktime-mcp/
 │   ├── runtime/            # Execution engine, handle & job management
 │   ├── data/               # Data adapters (file, pandas, SQL, URL)
 │   └── tools/              # MCP tool implementations
-├── docs/                   # MkDocs documentation source
+├── docs/                   # Sphinx documentation source
 ├── examples/               # Usage examples
 └── tests/                  # Test suite
 ```
@@ -558,7 +553,14 @@ make format-fix
 If `make` is unavailable (common on Windows), run the equivalent commands:
 
 ```bash
-python -m black --check .
-python -m ruff check .
-python -m pytest
+ruff format --check .
+ruff check .
+pytest
 ```
+
+### Pre-Commit Hooks (Recommended)
+To ensure your code meets quality standards before pushing, install the pre-commit hooks:
+```bash
+make install-hooks
+```
+This will automatically run Black, Ruff, and Pytest on your code every time you make a commit.
