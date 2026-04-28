@@ -32,7 +32,6 @@ from mcp.types import TextContent, Tool
 from sktime_mcp.composition.validator import get_composition_validator
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
-    fit_predict_tool,
     load_data_source_async_tool,
     load_data_source_tool,
     release_data_handle_tool,
@@ -41,6 +40,7 @@ from sktime_mcp.tools.describe_estimator import describe_estimator_tool
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
+    fit_predict_tool,
 )
 from sktime_mcp.tools.format_tools import format_time_series_tool
 from sktime_mcp.tools.instantiate import (
@@ -679,7 +679,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("horizon", 12),
                 data_handle=arguments.get("data_handle"),
             )
-            result = sanitize_for_json(result)
 
         elif name == "fit_predict_async":
             result = fit_predict_async_tool(
@@ -695,7 +694,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["dataset"],
                 arguments.get("cv_folds", 3),
             )
-            result = sanitize_for_json(result)
 
         elif name == "validate_pipeline":
             validator = get_composition_validator()

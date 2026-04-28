@@ -92,32 +92,6 @@ def fit_predict_tool(
     return executor.fit_predict(estimator_handle, dataset, horizon, data_handle=data_handle)
 
 
-def fit_tool(
-    estimator_handle: str,
-    dataset: str,
-) -> dict[str, Any]:
-    """
-    Fit an estimator on a dataset.
-
-    Args:
-        estimator_handle: Handle from instantiate_estimator
-        dataset: Name of demo dataset
-
-    Returns:
-        Dictionary with success status
-    """
-    executor = get_executor()
-    data_result = executor.load_dataset(dataset)
-    if not data_result["success"]:
-        return data_result
-
-    return executor.fit(
-        estimator_handle,
-        y=data_result["data"],
-        X=data_result.get("exog"),
-    )
-
-
 def predict_tool(
     estimator_handle: str,
     horizon: int = 12,

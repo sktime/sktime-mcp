@@ -2,7 +2,6 @@
 Test background job management.
 """
 
-from sktime_mcp.runtime.executor import get_executor
 from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 
 
@@ -176,33 +175,3 @@ def test_cleanup_old_jobs():
     # Job should be gone
     job = job_manager.get_job(job_id)
     assert job is None
-
-
-def run_all_tests():
-    """Run all tests."""
-    print("=" * 60)
-    print("Testing Background Job Management")
-    print("=" * 60)
-
-    print("\n1. Testing job creation...")
-    test_job_creation()
-
-    print("\n2. Testing job updates...")
-    test_job_updates()
-
-    print("\n3. Testing list jobs...")
-    test_list_jobs()
-
-    print("\n5. Testing cancel job...")
-    test_cancel_job()
-
-    print("\n6. Testing cleanup old jobs...")
-    test_cleanup_old_jobs()
-
-    print("\n" + "=" * 60)
-    print("✅ All tests passed!")
-    print("=" * 60)
-
-
-if __name__ == "__main__":
-    run_all_tests()
