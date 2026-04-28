@@ -248,5 +248,48 @@ class TestTools:
         assert calls["serialization_format"] == "pickle"
 
 
+class TestSearchEstimatorsLimit:
+    """Tests for the limit parameter validation in search_estimators_tool."""
+
+    def test_limit_zero_returns_error(self):
+        """limit=0 should return an error, not an empty list."""
+        from sktime_mcp.tools.describe_estimator import search_estimators_tool
+
+        result = search_estimators_tool("NaiveForecaster", limit=0)
+
+        assert not result["success"]
+        assert result["error"] == "limit must be a positive integer."
+
+    def test_limit_negative_one_returns_error(self):
+        """limit=-1 should return an error, not the last result."""
+        from sktime_mcp.tools.describe_estimator import search_estimators_tool
+
+        result = search_estimators_tool("NaiveForecaster", limit=-1)
+
+        assert not result["success"]
+        assert result["error"] == "limit must be a positive integer."
+
+    def test_limit_negative_five_returns_error(self):
+        """limit=-5 should return an error, not the last 5 results."""
+        from sktime_mcp.tools.describe_estimator import search_estimators_tool
+
+        result = search_estimators_tool("NaiveForecaster", limit=-5)
+
+        assert not result["success"]
+        assert result["error"] == "limit must be a positive integer."
+
+    def test_limit_valid_returns_results(self):
+        """A positive limit should work correctly and cap results."""
+        pytest.importorskip("sktime", reason="sktime not installed in this environment")
+        from sktime_mcp.tools.describe_estimator import search_estimators_tool
+
+        result = search_estimators_tool("Forecaster", limit=3)
+
+        assert result["success"]
+        assert "results" in result
+        assert len(result["results"]) <= 3
+        assert result["count"] <= 3
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
