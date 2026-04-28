@@ -6,3 +6,4 @@ TODO.md
 dist/
 docs/_build/
 docs/build/
+.ignore/

@@ -5,7 +5,7 @@ Provides tools for checking job status, listing jobs, and cancelling jobs.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 
@@ -38,7 +38,7 @@ def check_job_status_tool(job_id: str) -> dict[str, Any]:
 
 
 def list_jobs_tool(
-    status: Optional[str] = None,
+    status: str | None = None,
     limit: int = 20,
 ) -> dict[str, Any]:
     """
@@ -56,6 +56,14 @@ def list_jobs_tool(
     # Convert status string to enum
     status_filter = None
     if status is not None:
+        if not isinstance(status, str):
+            return {
+                "success": False,
+                "error": (
+                    f"Invalid status type '{type(status).__name__}'. "
+                    "Expected one of: pending, running, completed, failed, cancelled"
+                ),
+            }
         try:
             status_filter = JobStatus(status.lower())
         except ValueError:
@@ -63,6 +71,12 @@ def list_jobs_tool(
                 "success": False,
                 "error": f"Invalid status '{status}'. Valid values: pending, running, completed, failed, cancelled",
             }
+
+    if limit < 1:
+        return {
+            "success": False,
+            "error": "limit must be a positive integer.",
+        }
 
     jobs = job_manager.list_jobs(status=status_filter, limit=limit)
 
@@ -106,10 +120,7 @@ def cancel_job_tool(job_id: str, delete: bool = False) -> dict[str, Any]:
 
     return {
         "success": False,
-        "error": (
-            f"Job is already '{job.status.value}'. "
-            "Use delete=true to remove the record."
-        ),
+        "error": (f"Job is already '{job.status.value}'. Use delete=true to remove the record."),
     }
 
 

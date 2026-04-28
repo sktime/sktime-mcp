@@ -17,7 +17,7 @@ This prevents invalid pipelines at planning time.
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from sktime_mcp.registry.interface import EstimatorNode, get_registry
 
@@ -195,7 +195,7 @@ class CompositionValidator:
         suggestions = []
 
         # Get all estimator nodes
-        nodes: list[tuple[str, Optional[EstimatorNode]]] = []
+        nodes: list[tuple[str, EstimatorNode | None]] = []
         for name in components:
             node = self._registry.get_estimator_by_name(name)
             nodes.append((name, node))
@@ -358,7 +358,7 @@ class CompositionValidator:
     def suggest_pipeline(
         self,
         task: str,
-        requirements: Optional[dict[str, Any]] = None,
+        requirements: dict[str, Any] | None = None,
     ) -> list[str]:
         """
         Suggest a valid pipeline for a given task.
@@ -399,7 +399,7 @@ class CompositionValidator:
 
 
 # Singleton instance
-_validator_instance: Optional[CompositionValidator] = None
+_validator_instance: CompositionValidator | None = None
 
 
 def get_composition_validator() -> CompositionValidator:
