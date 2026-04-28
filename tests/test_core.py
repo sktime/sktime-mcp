@@ -250,3 +250,48 @@ class TestTools:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestDocstringTruncation:
+    """Regression test for issue #335 — bump the docstring truncation
+    cap so the numpydoc ``Parameters`` section, which appears past
+    the first 500 chars in many sktime estimators, survives the
+    EstimatorNode.to_dict serialisation."""
+
+    def test_short_docstring_unchanged(self):
+        from sktime_mcp.registry.interface import _truncate_docstring
+
+        assert _truncate_docstring("hi") == "hi"
+
+    def test_none_passes_through(self):
+        from sktime_mcp.registry.interface import _truncate_docstring
+
+        assert _truncate_docstring(None) is None
+
+    def test_long_docstring_truncated_with_ellipsis(self):
+        from sktime_mcp.registry.interface import (
+            _DOCSTRING_MAX_CHARS,
+            _truncate_docstring,
+        )
+
+        long_doc = "x" * (_DOCSTRING_MAX_CHARS + 50)
+        out = _truncate_docstring(long_doc)
+        assert out is not None
+        assert out.endswith("...")
+        # Plain content (without ellipsis) is at most the cap.
+        assert len(out) - 3 <= _DOCSTRING_MAX_CHARS
+
+    def test_cap_preserves_parameters_section_past_500_chars(self):
+        """The whole point of #335: Parameters section appears past 500
+        chars in many sktime docstrings, and the new cap must keep it."""
+        from sktime_mcp.registry.interface import _truncate_docstring
+
+        intro = "x" * 600
+        doc = (
+            intro
+            + "\n\nParameters\n----------\nn_neighbors : int, default=5\n"
+        )
+        out = _truncate_docstring(doc)
+        assert out is not None
+        assert "Parameters" in out
+        assert "n_neighbors" in out

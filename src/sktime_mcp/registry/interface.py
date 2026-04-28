@@ -12,6 +12,37 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Maximum characters of docstring to expose to LLMs in to_dict() output.
+# Earlier versions truncated at 500 chars, but sktime's numpydoc-style
+# docstrings put the "Parameters" section — the most useful information
+# for an agent reasoning about hyperparameters — past the first 500
+# chars in many estimators (issue #335). Bumping the cap to 4000 keeps
+# the response compact enough for an MCP tool result while preserving
+# the Parameters section for the vast majority of sktime estimators.
+_DOCSTRING_MAX_CHARS = 4000
+
+
+def _truncate_docstring(docstring: str | None) -> str | None:
+    """Return *docstring* truncated to a length that preserves the
+    Parameters section when possible.
+
+    The function:
+    - returns ``None`` for a missing docstring;
+    - returns the full docstring if it is already short enough;
+    - otherwise returns the first ``_DOCSTRING_MAX_CHARS`` characters,
+      with a trailing ellipsis when content was dropped.
+
+    Per #335 the cap is large enough to capture the numpydoc
+    ``Parameters`` block of every estimator we have looked at without
+    embedding the full docstring (which can run several pages on
+    composite forecasters).
+    """
+    if docstring is None:
+        return None
+    if len(docstring) <= _DOCSTRING_MAX_CHARS:
+        return docstring
+    return docstring[:_DOCSTRING_MAX_CHARS].rstrip() + "..."
+
 
 @dataclass
 class EstimatorNode:
@@ -47,9 +78,7 @@ class EstimatorNode:
             "module": self.module,
             "tags": self.tags,
             "hyperparameters": self.hyperparameters,
-            "docstring": (
-                self.docstring[:500] if self.docstring else None
-            ),  # L-1: Truncate docstring to 500 characters, we can also try summarization
+            "docstring": _truncate_docstring(self.docstring),
         }
 
     def to_summary(self) -> dict[str, Any]:
