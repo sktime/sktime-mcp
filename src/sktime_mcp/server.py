@@ -95,7 +95,11 @@ def sanitize_for_json(obj):
         if isinstance(obj, np.integer):
             return int(obj)
         if isinstance(obj, np.floating):
-            return float(obj)
+            f = float(obj)
+            # JSON has no representation for NaN/Inf — map to null.
+            if f != f or f == float("inf") or f == float("-inf"):
+                return None
+            return f
         if isinstance(obj, np.bool_):
             return bool(obj)
         if isinstance(obj, np.ndarray):
