@@ -1,4 +1,4 @@
-.PHONY: check test lint format help format-fix
+.PHONY: check test lint format help format-fix install-hooks
 
 help:
 	@echo "Available commands:"
@@ -22,3 +22,7 @@ test:
 format-fix:
 	black .
 	ruff check --fix .
+
+install-hooks:
+	pip install pre-commit
+	pre-commit install

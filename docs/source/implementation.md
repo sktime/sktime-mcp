@@ -134,7 +134,7 @@ LLM → JSON-RPC request → server.call_tool() → tool function → sanitize �
    - **Key Methods**:
      - `get_all_estimators(task, tags)`: Filter estimators by task and tags
      - `get_estimator_by_name(name)`: Lookup specific estimator
-     - `search_estimators(query)`: Text search in names/docstrings
+     - `list_estimators(query=...)`: Text search in names/docstrings
      - `get_available_tasks()`: List all task types
      - `get_available_tags()`: List all capability tags
    - **Internal Methods**:
@@ -315,15 +315,11 @@ Each file implements one or more MCP tools that LLMs can call.
 
 #### `list_estimators.py`
 **Tools**:
-1. **`list_estimators_tool(task, tags, limit)`**
+1. **`list_estimators_tool(task, tags, query, limit)`**
    - Calls `registry.get_all_estimators(task, tags)`
    - Returns: `{"success": True, "estimators": [...], "total": 50}`
 
-2. **`search_estimators_tool(query, limit)`**
-   - Calls `registry.search_estimators(query)`
-   - Text search in estimator names/docstrings
-
-3. **`get_available_tags()`**
+2. **`get_available_tags()`**
    - Returns all capability tags
    - Example: `["capability:pred_int", "handles-missing-data", ...]`
 

@@ -71,10 +71,11 @@ print(f"\nEstimator handle: {estimator_result['handle']}")
 
 # Fit and predict
 if result["success"] and estimator_result["success"]:
-    predictions = executor.fit_predict_with_data(
-        estimator_handle=estimator_result["handle"],
+    predictions = executor.fit_predict(
+        estimator_result["handle"],
+        "",
+        7,
         data_handle=result["data_handle"],
-        horizon=7,
     )
 
     print(f"\nPredictions: {predictions['success']}")

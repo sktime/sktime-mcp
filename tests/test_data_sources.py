@@ -94,15 +94,16 @@ try:
         handles = executor.list_data_handles()
         print(f"✓ Active data handles: {handles['count']}")
 
-        # Test instantiate and fit_predict_with_data
+        # Test instantiate and fit_predict with data_handle
         est_result = executor.instantiate("NaiveForecaster", {"strategy": "last"})
         if est_result["success"]:
             print(f"✓ Estimator instantiated: {est_result['handle']}")
 
-            pred_result = executor.fit_predict_with_data(
-                estimator_handle=est_result["handle"],
+            pred_result = executor.fit_predict(
+                est_result["handle"],
+                "",
+                5,
                 data_handle=result["data_handle"],
-                horizon=5,
             )
 
             if pred_result["success"]:
