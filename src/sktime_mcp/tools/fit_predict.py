@@ -41,6 +41,11 @@ def fit_predict_tool(
             "horizon": 12
         }
     """
+    if horizon < 1:
+        return {
+            "success": False,
+            "error": "horizon must be a positive integer.",
+        }
     if data_handle is None and (not dataset or not str(dataset).strip()):
         return {
             "success": False,
@@ -90,6 +95,11 @@ def predict_tool(
     Returns:
         Dictionary with predictions
     """
+    if horizon < 1:
+        return {
+            "success": False,
+            "error": "horizon must be a positive integer.",
+        }
     executor = get_executor()
     fh = list(range(1, horizon + 1))
     return executor.predict(estimator_handle, fh=fh)
@@ -140,6 +150,12 @@ def fit_predict_async_tool(
         >>> fit_predict_async_tool("est_abc123", dataset="airline", horizon=12)
         >>> fit_predict_async_tool("est_abc123", data_handle="data_xyz", horizon=5)
     """
+    if horizon < 1:
+        return {
+            "success": False,
+            "error": "horizon must be a positive integer.",
+        }
+
     if dataset and data_handle:
         return {
             "success": False,
