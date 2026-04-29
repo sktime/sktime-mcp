@@ -37,6 +37,7 @@ from sktime_mcp.tools.data_tools import (
     release_data_handle_tool,
 )
 from sktime_mcp.tools.describe_estimator import describe_estimator_tool
+from sktime_mcp.tools.describe_data import describe_data_tool
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
@@ -489,6 +490,36 @@ async def list_tools() -> list[Tool]:
                 "required": ["data_handle"],
             },
         ),
+        Tool(
+            name="describe_data",
+            description=(
+                "Return a statistical fingerprint of a named sktime dataset: "
+                "length, frequency, mean/std, trend slope, missingness, and "
+                "candidate seasonal period. Use this before list_estimators or "
+                "evaluate_estimator so the agent can reason about data "
+                "characteristics when selecting a forecaster."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "dataset": {
+                        "type": "string",
+                        "description": (
+                            "Dataset name, e.g. 'airline', 'sunspots', 'lynx'. "
+                            "Same values accepted by evaluate_estimator."
+                        ),
+                    },
+                    "target_col": {
+                        "type": "string",
+                        "description": (
+                            "Column to describe for multivariate datasets. "
+                            "Omit for univariate series."
+                        ),
+                    },
+                },
+                "required": ["dataset"],
+            },
+        ),
         # -- Export / Persistence --------------------------------------------
         Tool(
             name="export_code",
@@ -693,6 +724,12 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["estimator_handle"],
                 arguments["dataset"],
                 arguments.get("cv_folds", 3),
+            )
+        
+        elif name == "describe_data":
+            result = describe_data_tool(
+                arguments["dataset"],
+                arguments.get("target_col"),
             )
 
         elif name == "validate_pipeline":
