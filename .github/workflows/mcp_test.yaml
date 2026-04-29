@@ -1,0 +1,55 @@
+name: test MCP Protocol
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - run: pytest tests/ -v --tb=short --ignore=tests/test_mcp_protocol.py --cov=sktime_mcp --cov-report=xml --cov-report=term-missing
+
+      - uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.12'
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+
+  test-mcp-protocol:
+    name: MCP Protocol Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - run: pytest tests/test_mcp_protocol.py -v --tb=short
