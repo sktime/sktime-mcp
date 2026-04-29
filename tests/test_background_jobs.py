@@ -2,7 +2,6 @@
 Test background job management.
 """
 
-from sktime_mcp.runtime.executor import get_executor
 from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 
 
@@ -135,6 +134,32 @@ def test_cancel_job():
     job_manager.delete_job(job_id)
 
 
+def test_list_jobs_tool_rejects_non_string_status():
+    """Non-string status values should return validation errors, not crash."""
+    from sktime_mcp.tools.job_tools import list_jobs_tool
+
+    for bad_status in (True, 1, ["running"], {"status": "running"}):
+        result = list_jobs_tool(status=bad_status)
+        assert result["success"] is False
+        assert "Invalid status type" in result["error"]
+
+
+def test_list_jobs_tool_accepts_case_insensitive_status():
+    """Valid status strings should still work regardless of case."""
+    from sktime_mcp.tools.job_tools import list_jobs_tool
+
+    job_manager = get_job_manager()
+    job_id = job_manager.create_job("fit_predict", "handle", "ARIMA")
+    job_manager.update_job(job_id, status=JobStatus.RUNNING)
+
+    result = list_jobs_tool(status="RUNNING")
+
+    assert result["success"] is True
+    assert any(job["job_id"] == job_id for job in result["jobs"])
+
+    job_manager.delete_job(job_id)
+
+
 def test_cleanup_old_jobs():
     """Test cleaning up old jobs."""
     job_manager = get_job_manager()
@@ -150,33 +175,3 @@ def test_cleanup_old_jobs():
     # Job should be gone
     job = job_manager.get_job(job_id)
     assert job is None
-
-
-def run_all_tests():
-    """Run all tests."""
-    print("=" * 60)
-    print("Testing Background Job Management")
-    print("=" * 60)
-
-    print("\n1. Testing job creation...")
-    test_job_creation()
-
-    print("\n2. Testing job updates...")
-    test_job_updates()
-
-    print("\n3. Testing list jobs...")
-    test_list_jobs()
-
-    print("\n5. Testing cancel job...")
-    test_cancel_job()
-
-    print("\n6. Testing cleanup old jobs...")
-    test_cleanup_old_jobs()
-
-    print("\n" + "=" * 60)
-    print("✅ All tests passed!")
-    print("=" * 60)
-
-
-if __name__ == "__main__":
-    run_all_tests()

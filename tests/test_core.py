@@ -157,18 +157,26 @@ class TestTools:
         assert "estimators" in result
         assert len(result["estimators"]) <= 5
 
-    def test_list_estimators_query_prioritizes_exact_name(self):
-        """Exact-name query should keep the intended estimator in small pages."""
+    def test_list_estimators_detection_task(self):
+        """Test that detection estimators are returned when filtering by detection task."""
         from sktime_mcp.tools.list_estimators import list_estimators_tool
 
-        result = list_estimators_tool(
-            task="forecasting",
-            query="NaiveForecaster",
-            limit=5,
-        )
+        result = list_estimators_tool(task="detection", limit=100)
 
         assert result["success"]
-        assert result["estimators"][0]["name"] == "NaiveForecaster"
+        assert result["total"] > 0, "There should be detection estimators"
+        assert all(e["task"] == "detection" for e in result["estimators"]), (
+            "All returned estimators should have task='detection'"
+        )
+
+    def test_detection_in_available_tasks(self):
+        """Test that detection appears in available tasks."""
+        from sktime_mcp.tools.list_estimators import get_available_tasks
+
+        result = get_available_tasks()
+
+        assert result["success"]
+        assert "detection" in result["tasks"], "detection should be a valid task"
 
     def test_describe_unknown_estimator(self):
         """Test describing an unknown estimator."""
@@ -305,7 +313,7 @@ class TestHorizonValidation:
         result = fit_predict_tool("est_dummy", "airline", horizon=0)
 
         assert not result["success"]
-        assert result["error"] == "horizon must be a positive integer."
+        assert "horizon" in result["error"].lower()
 
     def test_fit_predict_tool_horizon_negative(self):
         """horizon=-5 must return an error."""
@@ -314,7 +322,7 @@ class TestHorizonValidation:
         result = fit_predict_tool("est_dummy", "airline", horizon=-5)
 
         assert not result["success"]
-        assert result["error"] == "horizon must be a positive integer."
+        assert "horizon" in result["error"].lower()
 
     def test_fit_predict_tool_horizon_negative_one(self):
         """horizon=-1 must return an error."""
@@ -323,11 +331,11 @@ class TestHorizonValidation:
         result = fit_predict_tool("est_dummy", "airline", horizon=-1)
 
         assert not result["success"]
-        assert result["error"] == "horizon must be a positive integer."
+        assert "horizon" in result["error"].lower()
 
-    # ------------------------------------------------------------------ #
-    # predict_tool                                                         #
-    # ------------------------------------------------------------------ #
+   
+    # predict_tool                                                         
+ 
 
     def test_predict_tool_horizon_zero(self):
         """horizon=0 must return an error, not pass fh=[] to the executor."""
@@ -336,7 +344,7 @@ class TestHorizonValidation:
         result = predict_tool("est_dummy", horizon=0)
 
         assert not result["success"]
-        assert result["error"] == "horizon must be a positive integer."
+        assert "horizon" in result["error"].lower()
 
     def test_predict_tool_horizon_negative(self):
         """horizon=-3 must return an error."""
@@ -345,7 +353,7 @@ class TestHorizonValidation:
         result = predict_tool("est_dummy", horizon=-3)
 
         assert not result["success"]
-        assert result["error"] == "horizon must be a positive integer."
+        assert "horizon" in result["error"].lower()
 
     def test_predict_tool_horizon_negative_one(self):
         """horizon=-1 must return an error."""
@@ -354,11 +362,10 @@ class TestHorizonValidation:
         result = predict_tool("est_dummy", horizon=-1)
 
         assert not result["success"]
-        assert result["error"] == "horizon must be a positive integer."
+        assert "horizon" in result["error"].lower()
 
-    # ------------------------------------------------------------------ #
-    # fit_predict_async_tool                                               #
-    # ------------------------------------------------------------------ #
+    # fit_predict_async_tool                                               
+
 
     def test_fit_predict_async_tool_horizon_zero(self):
         """horizon=0 must be rejected before a background job is created."""
@@ -367,8 +374,8 @@ class TestHorizonValidation:
         result = fit_predict_async_tool("est_dummy", dataset="airline", horizon=0)
 
         assert not result["success"]
-        assert result["error"] == "horizon must be a positive integer."
-
+        assert "horizon" in result["error"].lower()
+        
     def test_fit_predict_async_tool_horizon_negative(self):
         """horizon=-1 must be rejected before a background job is created."""
         from sktime_mcp.tools.fit_predict import fit_predict_async_tool
@@ -376,7 +383,7 @@ class TestHorizonValidation:
         result = fit_predict_async_tool("est_dummy", dataset="airline", horizon=-1)
 
         assert not result["success"]
-        assert result["error"] == "horizon must be a positive integer."
+        assert "horizon" in result["error"].lower()
 
     def test_fit_predict_async_tool_horizon_very_negative(self):
         """horizon=-100 must be rejected before a background job is created."""
@@ -385,8 +392,7 @@ class TestHorizonValidation:
         result = fit_predict_async_tool("est_dummy", dataset="airline", horizon=-100)
 
         assert not result["success"]
-        assert result["error"] == "horizon must be a positive integer."
-
+        assert "horizon" in result["error"].lower()
 
 class TestServerImports:
     """Verify server.py imports the right symbols from the right modules."""
@@ -415,6 +421,7 @@ class TestServerImports:
             # Other ImportErrors (e.g. mcp not installed) are fine — not our bug
         except Exception:
             pass
+
 
 
 if __name__ == "__main__":

@@ -120,5 +120,72 @@ class TestAsyncCustomData:
         assert "job_id" in result
 
 
+class TestSyncCustomData:
+    """Tests for fit_predict_tool input validation parity with async flow."""
+
+    def _get_estimator_handle(self):
+        """Create a NaiveForecaster handle for reuse."""
+        from sktime_mcp.runtime.executor import get_executor
+
+        executor = get_executor()
+        result = executor.instantiate("NaiveForecaster", {"strategy": "last"})
+        assert result["success"], f"Failed to instantiate: {result}"
+        return result["handle"]
+
+    def _load_custom_data(self):
+        """Load custom data and return the data handle."""
+        import pandas as pd
+
+        from sktime_mcp.runtime.executor import get_executor
+
+        executor = get_executor()
+        config = {
+            "type": "pandas",
+            "data": {
+                "date": pd.date_range("2021-01-01", periods=20, freq="D").tolist(),
+                "sales": [50 + i for i in range(20)],
+            },
+            "time_column": "date",
+            "target_column": "sales",
+        }
+        result = executor.load_data_source(config)
+        assert result["success"], f"Data load failed: {result}"
+        return result["data_handle"]
+
+    def test_sync_both_provided_error(self):
+        """Providing both dataset and data_handle should fail."""
+        from sktime_mcp.tools.fit_predict import fit_predict_tool
+
+        handle = self._get_estimator_handle()
+        data_handle = self._load_custom_data()
+
+        result = fit_predict_tool(
+            estimator_handle=handle,
+            dataset="airline",
+            data_handle=data_handle,
+            horizon=3,
+        )
+
+        assert not result["success"]
+        assert result["error"] == "Provide either 'dataset' or 'data_handle', not both."
+
+    def test_sync_neither_provided_error(self):
+        """Omitting both dataset and data_handle should fail."""
+        from sktime_mcp.tools.fit_predict import fit_predict_tool
+
+        handle = self._get_estimator_handle()
+        result = fit_predict_tool(
+            estimator_handle=handle,
+            dataset="",
+            horizon=3,
+        )
+
+        assert not result["success"]
+        assert (
+            result["error"]
+            == "Either 'dataset' (e.g. 'airline') or 'data_handle' (from load_data_source) is required."
+        )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -192,10 +192,19 @@ class Executor:
         data_handle: str | None = None,
     ) -> dict[str, Any]:
         """Convenience method: load data, fit, and predict."""
+        if dataset and data_handle:
+            return {
+                "success": False,
+                "error": "Provide either 'dataset' or 'data_handle', not both.",
+            }
+
         if data_handle is None and (not dataset or not str(dataset).strip()):
             return {
                 "success": False,
-                "error": "Provide either dataset (demo name) or data_handle from load_data_source.",
+                "error": (
+                    "Either 'dataset' (e.g. 'airline') or "
+                    "'data_handle' (from load_data_source) is required."
+                ),
             }
         if data_handle is not None:
             # Use custom loaded data

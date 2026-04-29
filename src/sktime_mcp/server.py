@@ -11,6 +11,20 @@ import logging
 import os
 from typing import Any
 
+try:
+    import numpy as np
+
+    _NUMPY_AVAILABLE = True
+except ImportError:
+    _NUMPY_AVAILABLE = False
+
+try:
+    import pandas as pd
+
+    _PANDAS_AVAILABLE = True
+except ImportError:
+    _PANDAS_AVAILABLE = False
+
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
@@ -55,8 +69,9 @@ JOB_MAX_AGE_HOURS = int(os.environ.get("SKTIME_MCP_JOB_MAX_AGE_HOURS", "24"))
 JOB_CLEANUP_INTERVAL_SECS = int(os.environ.get("SKTIME_MCP_JOB_CLEANUP_INTERVAL", "3600"))
 
 # Configure logging to stderr with detailed format
+_LOG_LEVEL = os.environ.get("SKTIME_MCP_LOG_LEVEL", "WARNING").upper()
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=getattr(logging, _LOG_LEVEL, logging.WARNING),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler()],
 )
@@ -67,15 +82,60 @@ server = Server("sktime-mcp")
 
 
 def sanitize_for_json(obj):
-    """Recursively convert objects to JSON-serializable format."""
+    """Recursively convert objects to JSON-serializable format.
+
+    Handles:
+    - Standard Python scalars and containers (dict, list, tuple)
+    - NumPy integer/float scalars and ndarrays
+    - Pandas Timestamp, NaT, NA, and Series/DataFrame
+    - Arbitrary objects (fallback to str repr)
+    """
+    # --- NumPy types ---
+    if _NUMPY_AVAILABLE:
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        if isinstance(obj, np.ndarray):
+            return [sanitize_for_json(item) for item in obj.tolist()]
+        if isinstance(obj, np.complexfloating):
+            return str(obj)
+
+    # --- Pandas types ---
+    if _PANDAS_AVAILABLE:
+        if isinstance(obj, pd.Timestamp):
+            return obj.isoformat()
+        if obj is pd.NaT:
+            return None
+        # pd.NA
+        try:
+            if obj is pd.NA:
+                return None
+        except AttributeError:
+            pass
+        if isinstance(obj, pd.Series):
+            return sanitize_for_json(obj.tolist())
+        if isinstance(obj, pd.DataFrame):
+            return sanitize_for_json(obj.to_dict(orient="records"))
+
+    # --- Standard Python containers ---
     if isinstance(obj, dict):
         return {str(k): sanitize_for_json(v) for k, v in obj.items()}
-    elif isinstance(obj, (list, tuple)):
+    if isinstance(obj, (list, tuple)):
         return [sanitize_for_json(item) for item in obj]
-    elif hasattr(obj, "__dict__") and not isinstance(obj, (str, int, float, bool, type(None))):
-        return str(obj)
-    else:
+
+    # --- Already JSON-safe scalars ---
+    if isinstance(obj, (str, int, float, bool, type(None))):
         return obj
+
+    # --- Fallback: objects with __dict__ or anything else ---
+    if hasattr(obj, "__dict__"):
+        return str(obj)
+
+    # Last resort
+    return str(obj)
 
 
 @server.list_tools()
@@ -619,7 +679,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("horizon", 12),
                 data_handle=arguments.get("data_handle"),
             )
-            result = sanitize_for_json(result)
 
         elif name == "fit_predict_async":
             result = fit_predict_async_tool(
@@ -635,7 +694,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["dataset"],
                 arguments.get("cv_folds", 3),
             )
-            result = sanitize_for_json(result)
 
         elif name == "validate_pipeline":
             validator = get_composition_validator()
@@ -772,7 +830,7 @@ async def run_server():
 
 def main():
     """Main entry point."""
-    print("Starting sktime-mcp server...")
+    logger.info("Starting sktime-mcp server...")
     asyncio.run(run_server())
 
 

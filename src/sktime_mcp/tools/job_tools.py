@@ -56,6 +56,14 @@ def list_jobs_tool(
     # Convert status string to enum
     status_filter = None
     if status is not None:
+        if not isinstance(status, str):
+            return {
+                "success": False,
+                "error": (
+                    f"Invalid status type '{type(status).__name__}'. "
+                    "Expected one of: pending, running, completed, failed, cancelled"
+                ),
+            }
         try:
             status_filter = JobStatus(status.lower())
         except ValueError:
@@ -63,6 +71,12 @@ def list_jobs_tool(
                 "success": False,
                 "error": f"Invalid status '{status}'. Valid values: pending, running, completed, failed, cancelled",
             }
+
+    if limit < 1:
+        return {
+            "success": False,
+            "error": "limit must be a positive integer.",
+        }
 
     jobs = job_manager.list_jobs(status=status_filter, limit=limit)
 
