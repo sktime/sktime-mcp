@@ -60,6 +60,10 @@ from sktime_mcp.tools.list_estimators import (
     get_available_tags,
     list_estimators_tool,
 )
+from sktime_mcp.tools.diagnostics import (
+    check_structural_break_tool,
+    detect_seasonality_tool,
+)
 from sktime_mcp.tools.save_model import save_model_tool
 
 # ---------------------------------------------------------------------------
@@ -613,6 +617,44 @@ async def list_tools() -> list[Tool]:
                 "required": ["job_id"],
             },
         ),
+        Tool(
+            name="detect_seasonality",
+            description="Detect cyclic patterns in a time series and quantify their strength. Uses FFT-accelerated autocorrelation with adaptive detrending. Returns period, strength, confidence, candidate periods, and a next_action_hint for the agent.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "description": "The time series values as a flat list of floats",
+                    },
+                    "frequency": {
+                        "type": "string",
+                        "description": "Optional frequency hint (e.g. 'D', 'W', 'M') to boost known seasonal periods",
+                    },
+                    "max_lag": {
+                        "type": "integer",
+                        "description": "Maximum lag to check. Defaults to min(len(data)//2, 200)",
+                    },
+                },
+                "required": ["data"],
+            },
+        ),
+        Tool(
+            name="check_structural_break",
+            description="Detect permanent regime changes (level shifts) in a time series using retrospective CUSUM. Returns whether a break was detected, its location, confidence, and a next_action_hint for the agent.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "description": "The time series values as a flat list of floats",
+                    },
+                },
+                "required": ["data"],
+            },
+        ),
     ]
 
 
@@ -786,6 +828,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
 
+        elif name == "detect_seasonality":
+            result = detect_seasonality_tool(
+                arguments["data"],
+                arguments.get("frequency"),
+                arguments.get("max_lag"),
+            )
+        elif name == "check_structural_break":
+            result = check_structural_break_tool(arguments["data"])
         else:
             result = {"error": f"Unknown tool: {name}"}
 
