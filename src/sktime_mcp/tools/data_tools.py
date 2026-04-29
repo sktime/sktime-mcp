@@ -19,7 +19,7 @@ def load_data_source_tool(config: dict[str, Any]) -> dict[str, Any]:
     Args:
         config: Data source configuration
             {
-                "type": "pandas" | "sql" | "file",
+                "type": "pandas" | "sql" | "file" | "url",
                 ... (type-specific configuration)
             }
 
@@ -88,37 +88,6 @@ def list_data_sources_tool() -> dict[str, Any]:
         "sources": sources,
         "descriptions": descriptions,
     }
-
-
-def fit_predict_with_data_tool(
-    estimator_handle: str,
-    data_handle: str,
-    horizon: int = 12,
-) -> dict[str, Any]:
-    """
-    Fit and predict using custom data.
-
-    Args:
-        estimator_handle: Handle from instantiate_estimator
-        data_handle: Handle from load_data_source
-        horizon: Forecast horizon (default: 12)
-
-    Returns:
-        Dictionary with predictions
-
-    Example:
-        >>> fit_predict_with_data_tool(
-        ...     estimator_handle="est_abc123",
-        ...     data_handle="data_xyz789",
-        ...     horizon=12
-        ... )
-    """
-    executor = get_executor()
-    return executor.fit_predict_with_data(
-        estimator_handle,
-        data_handle,
-        horizon,
-    )
 
 
 def release_data_handle_tool(data_handle: str) -> dict[str, Any]:
