@@ -16,6 +16,10 @@ from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
     instantiate_pipeline_tool,
 )
+from sktime_mcp.tools.describe_estimator import (
+    describe_estimator_tool,
+    search_estimators_tool,
+)
 
 
 class TestValidateParams:
@@ -131,6 +135,42 @@ class TestFitPredictValidation:
         result = predict_tool("fake_handle", horizon=invalid_horizon)
         assert result["success"] is False
         assert expected_error in result["error"]
+
+
+class TestDescribeEstimatorValidation:
+    """Tests for input validation in describe_estimator_tool and search_estimators_tool.
+    
+    Covers Issue #373.
+    """
+
+    @pytest.mark.parametrize(
+        ("invalid_input", "expected_error"),
+        [
+            (123, "non-empty string"),
+            (["ARIMA"], "non-empty string"),
+            ("", "non-empty string"),
+            ("   ", "non-empty string"),
+        ],
+    )
+    def test_invalid_estimator_input_rejected(self, invalid_input, expected_error):
+        result = describe_estimator_tool(invalid_input)
+        assert result["success"] is False
+        assert expected_error in result["error"]
+
+    @pytest.mark.parametrize(
+        ("invalid_input", "expected_error"),
+        [
+            (123, "non-empty string"),
+            (["ARIMA"], "non-empty string"),
+            ("", "non-empty string"),
+            ("   ", "non-empty string"),
+        ],
+    )
+    def test_invalid_query_input_rejected(self, invalid_input, expected_error):
+        result = search_estimators_tool(invalid_input)
+        assert result["success"] is False
+        assert expected_error in result["error"]
+
 
 
 if __name__ == "__main__":

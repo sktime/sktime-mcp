@@ -39,6 +39,15 @@ def describe_estimator_tool(estimator: str) -> dict[str, Any]:
             ...
         }
     """
+    if not isinstance(estimator, str) or not estimator.strip():
+        return {
+            "success": False,
+            "error": (
+                f"'estimator' must be a non-empty string, "
+                f"got {type(estimator).__name__!r}. example: \"ARIMA\""
+            ),
+        }
+
     registry = get_registry()
     tag_resolver = get_tag_resolver()
 
@@ -84,6 +93,15 @@ def search_estimators_tool(query: str, limit: int = 20) -> dict[str, Any]:
     Returns:
         Dictionary with matching estimators
     """
+    if not isinstance(query, str) or not query.strip():
+        return {
+            "success": False,
+            "error": (
+                f"'query' must be a non-empty string, "
+                f"got {type(query).__name__!r}. example: \"ARIMA\""
+            ),
+        }
+
     if limit < 1:
         return {
             "success": False,
