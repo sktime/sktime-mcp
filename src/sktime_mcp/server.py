@@ -274,7 +274,12 @@ async def list_tools() -> list[Tool]:
         # -- Instantiation ---------------------------------------------------
         Tool(
             name="instantiate_estimator",
-            description="Create an estimator instance with given parameters",
+            description=(
+                "Create one or more estimator instances with given parameters. "
+                "Set n_instances > 1 to create multiple independent copies "
+                "in a single call (useful for A/B testing or parallel "
+                "experimentation on different datasets)."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -285,6 +290,14 @@ async def list_tools() -> list[Tool]:
                     "params": {
                         "type": "object",
                         "description": "Hyperparameters for the estimator",
+                    },
+                    "n_instances": {
+                        "type": "integer",
+                        "description": (
+                            "Number of independent instances to create "
+                            "(default: 1). Each gets its own handle."
+                        ),
+                        "default": 1,
                     },
                 },
                 "required": ["estimator"],
@@ -775,6 +788,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = instantiate_estimator_tool(
                 arguments["estimator"],
                 arguments.get("params"),
+                n_instances=arguments.get("n_instances", 1),
             )
 
         elif name == "instantiate_pipeline":
@@ -921,6 +935,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 X_test_handle=arguments.get("X_test_handle"),
             )
             result = sanitize_for_json(result)
+
         else:
             result = {"error": f"Unknown tool: {name}"}
 

@@ -102,18 +102,26 @@ def _validate_params(
 def instantiate_estimator_tool(
     estimator: str,
     params: dict[str, Any] | None = None,
+    n_instances: int = 1,
 ) -> dict[str, Any]:
-    """
-    Create an estimator instance and return a handle.
+    """Create one or more estimator instances and return their handles.
+
+    When ``n_instances`` is 1 (the default), a single estimator is
+    created — identical to the previous behaviour.  When ``n_instances``
+    is greater than 1, independent copies are created via
+    ``sklearn.base.clone`` so that each handle can be fitted on
+    different data for A/B testing or parallel experimentation.
 
     Args:
         estimator: Name of the estimator class (e.g., "ARIMA")
         params: Optional hyperparameters for the estimator
+        n_instances: Number of independent instances to create (default: 1)
 
     Returns:
         Dictionary with:
         - success: bool
-        - handle: Unique handle ID string
+        - handle: Unique handle ID string  (when n_instances == 1)
+        - handles: List of handle ID strings (when n_instances > 1)
         - estimator: Name of the estimator
         - params: Parameters used
         - warnings: List of any validation warnings
@@ -126,7 +134,26 @@ def instantiate_estimator_tool(
             "estimator": "ARIMA",
             "params": {"order": [1, 1, 1]}
         }
+
+        >>> instantiate_estimator_tool("ARIMA", {"order": [1,1,1]}, n_instances=3)
+        {
+            "success": True,
+            "handles": ["est_aaa...", "est_bbb...", "est_ccc..."],
+            "n_instances": 3,
+            "estimator": "ARIMA",
+            "params": {"order": [1, 1, 1]}
+        }
     """
+    # --- validate n_instances ---
+    if not isinstance(n_instances, int) or n_instances < 1:
+        return {
+            "success": False,
+            "error": (
+                "'n_instances' must be a positive integer, "
+                f"got {n_instances!r}."
+            ),
+        }
+
     # validate params before passing to executor
     validation = _validate_params(params, estimator_name=estimator)
 
@@ -137,12 +164,61 @@ def instantiate_estimator_tool(
         }
 
     executor = get_executor()
-    result = executor.instantiate(estimator, params)
 
-    # attach any key-mismatch warnings to the response
-    if validation["warnings"] and result.get("success"):
+    # --- Single instance (default, backward-compatible) ---
+    if n_instances == 1:
+        result = executor.instantiate(estimator, params)
+        if validation["warnings"] and result.get("success"):
+            result["warnings"] = validation["warnings"]
+        return result
+
+    # --- Multiple instances ---
+    first_result = executor.instantiate(estimator, params)
+    if not first_result.get("success"):
+        return first_result
+
+    handles = [first_result["handle"]]
+
+    # Clone the first instance to create independent copies
+    try:
+        from sklearn.base import clone
+    except ImportError:
+        return {
+            "success": False,
+            "error": (
+                "scikit-learn is required for creating multiple instances. "
+                "Install it with: pip install scikit-learn"
+            ),
+        }
+
+    handle_manager = get_handle_manager()
+    first_info = handle_manager.get_info(handles[0])
+
+    for _ in range(n_instances - 1):
+        try:
+            cloned = clone(first_info.instance)
+            h = handle_manager.create_handle(
+                estimator_name=estimator,
+                instance=cloned,
+                params=params or {},
+            )
+            handles.append(h)
+        except Exception as exc:
+            return {
+                "success": False,
+                "error": f"Failed to create instance: {str(exc)}",
+                "handles_created": handles,
+            }
+
+    result = {
+        "success": True,
+        "handles": handles,
+        "n_instances": n_instances,
+        "estimator": estimator,
+        "params": params or {},
+    }
+    if validation["warnings"]:
         result["warnings"] = validation["warnings"]
-
     return result
 
 
@@ -299,3 +375,88 @@ def load_model_tool(path: str) -> dict[str, Any]:
             "error": f"Failed to load model: {str(exc)}",
             "path": path,
         }
+
+
+def clone_estimator_tool(handle: str) -> dict[str, Any]:
+    """Clone an existing estimator handle, creating a fresh unfitted copy.
+
+    Uses ``sklearn.base.clone`` to create an independent copy of the
+    estimator with identical hyperparameters but no fitted state. This
+    is useful for A/B testing on different datasets or preserving the
+    original configuration while fitting a copy.
+
+    Args:
+        handle: Handle ID of the estimator to clone.
+
+    Returns:
+        Dictionary with:
+        - success: bool
+        - original_handle: The source handle ID
+        - cloned_handle: The new handle ID (unfitted)
+        - estimator: Name of the estimator
+        - params: Hyperparameters carried over
+
+    Example::
+
+        >>> clone_estimator_tool("est_abc123def456")
+        {
+            "success": True,
+            "original_handle": "est_abc123def456",
+            "cloned_handle": "est_xyz789uvw012",
+            "estimator": "ARIMA",
+            "params": {"order": [1, 1, 1]}
+        }
+    """
+    if not isinstance(handle, str) or not handle.strip():
+        return {
+            "success": False,
+            "error": "'handle' must be a non-empty string.",
+        }
+
+    handle_manager = get_handle_manager()
+
+    try:
+        info = handle_manager.get_info(handle)
+    except KeyError:
+        return {
+            "success": False,
+            "error": f"Handle not found: {handle}",
+            "suggestion": "Use list_handles to see active handles.",
+        }
+
+    try:
+        from sklearn.base import clone
+
+        cloned_instance = clone(info.instance)
+    except ImportError:
+        return {
+            "success": False,
+            "error": (
+                "scikit-learn is required for clone_estimator. "
+                "Install it with: pip install scikit-learn"
+            ),
+        }
+    except Exception as exc:
+        return {
+            "success": False,
+            "error": f"Failed to clone estimator: {str(exc)}",
+        }
+
+    cloned_handle = handle_manager.create_handle(
+        estimator_name=info.estimator_name,
+        instance=cloned_instance,
+        params=info.params,
+        metadata={"cloned_from": handle},
+    )
+
+    return {
+        "success": True,
+        "original_handle": handle,
+        "cloned_handle": cloned_handle,
+        "estimator": info.estimator_name,
+        "params": info.params,
+        "message": (
+            f"Successfully cloned {info.estimator_name}. "
+            f"The new handle '{cloned_handle}' is unfitted."
+        ),
+    }
