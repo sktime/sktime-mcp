@@ -13,6 +13,7 @@ from sktime_mcp.tools.fit_predict import (
     fit_predict_tool,
 )
 from sktime_mcp.tools.format_tools import format_time_series_tool
+from sktime_mcp.tools.health import get_server_health_tool
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
     instantiate_pipeline_tool,
@@ -54,4 +55,5 @@ __all__ = [
     "check_job_status_tool",
     "list_jobs_tool",
     "cancel_job_tool",
+    "get_server_health_tool",
 ]
