@@ -48,8 +48,8 @@ class EstimatorNode:
             "tags": self.tags,
             "hyperparameters": self.hyperparameters,
             "docstring": (
-                self.docstring[:500] if self.docstring else None
-            ),  # L-1: Truncate docstring to 500 characters, we can also try summarization
+                self.docstring[:2000] if self.docstring else None
+            ),  # L-1: Truncate docstring to 2000 characters, we can also try summarization
         }
 
     def to_summary(self) -> dict[str, Any]:
