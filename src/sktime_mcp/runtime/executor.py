@@ -40,6 +40,38 @@ def _discover_demo_datasets() -> dict:
 
 
 DEMO_DATASETS = _discover_demo_datasets()
+_SUPPORTED_DEMO_DATASETS: list[str] | None = None
+
+
+def _is_supported_demo_dataset(name: str, module_path: str) -> bool:
+    """Return whether a discovered demo dataset matches current forecasting-oriented support."""
+    try:
+        parts = module_path.rsplit(".", 1)
+        module = __import__(parts[0], fromlist=[parts[1]])
+        loader = getattr(module, parts[1])
+        signature = inspect.signature(loader)
+    except Exception:
+        logger.warning(
+            "Skipping demo dataset '%s' because its loader could not be inspected.", name
+        )
+        return False
+
+    # sktime supervised/classification/regression demo loaders typically expose return_X_y.
+    return "return_X_y" not in signature.parameters
+
+
+def _get_supported_demo_datasets() -> list[str]:
+    """Lazily filter discovered demo datasets to supported forecasting-compatible loaders."""
+    global _SUPPORTED_DEMO_DATASETS
+
+    if _SUPPORTED_DEMO_DATASETS is None:
+        _SUPPORTED_DEMO_DATASETS = [
+            name
+            for name, module_path in DEMO_DATASETS.items()
+            if _is_supported_demo_dataset(name, module_path)
+        ]
+
+    return _SUPPORTED_DEMO_DATASETS.copy()
 
 
 class Executor:
@@ -91,7 +123,7 @@ class Executor:
             return {
                 "success": False,
                 "error": f"Unknown dataset: {name}",
-                "available": list(DEMO_DATASETS.keys()),
+                "available": self.list_datasets(),
             }
 
         try:
@@ -529,7 +561,7 @@ class Executor:
 
     def list_datasets(self) -> list[str]:
         """List available demo datasets."""
-        return list(DEMO_DATASETS.keys())
+        return _get_supported_demo_datasets()
 
     def load_data_source(self, config: dict[str, Any]) -> dict[str, Any]:
         """
