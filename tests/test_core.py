@@ -302,9 +302,9 @@ class TestSearchEstimatorsLimit:
 class TestHorizonValidation:
     """Tests for horizon parameter validation in fit_predict, predict, and fit_predict_async."""
 
- 
-    # fit_predict_tool                                                     
-     
+
+    # fit_predict_tool
+
 
     def test_fit_predict_tool_horizon_zero(self):
         """horizon=0 must return an error before touching the executor."""
@@ -333,9 +333,9 @@ class TestHorizonValidation:
         assert not result["success"]
         assert "horizon" in result["error"].lower()
 
-   
-    # predict_tool                                                         
- 
+
+    # predict_tool
+
 
     def test_predict_tool_horizon_zero(self):
         """horizon=0 must return an error, not pass fh=[] to the executor."""
@@ -364,7 +364,7 @@ class TestHorizonValidation:
         assert not result["success"]
         assert "horizon" in result["error"].lower()
 
-    # fit_predict_async_tool                                               
+    # fit_predict_async_tool
 
 
     def test_fit_predict_async_tool_horizon_zero(self):
@@ -375,7 +375,7 @@ class TestHorizonValidation:
 
         assert not result["success"]
         assert "horizon" in result["error"].lower()
-        
+
     def test_fit_predict_async_tool_horizon_negative(self):
         """horizon=-1 must be rejected before a background job is created."""
         from sktime_mcp.tools.fit_predict import fit_predict_async_tool
