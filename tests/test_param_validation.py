@@ -10,7 +10,11 @@ import pytest
 
 sys.path.insert(0, "src")
 
-from sktime_mcp.tools.fit_predict import predict_tool
+from sktime_mcp.tools.fit_predict import (
+    fit_predict_async_tool,
+    fit_predict_tool,
+    predict_tool,
+)
 from sktime_mcp.tools.instantiate import (
     _validate_params,
     instantiate_estimator_tool,
@@ -129,6 +133,56 @@ class TestFitPredictValidation:
     def test_predict_tool_horizon_string(self, invalid_horizon, expected_error):
         """Invalid horizons should be rejected with the correct error"""
         result = predict_tool("fake_handle", horizon=invalid_horizon)
+        assert result["success"] is False
+        assert expected_error in result["error"]
+
+
+class TestFitPredictToolHorizonValidation:
+    """Tests for horizon validation in fit_predict_tool.
+
+    Covers Issue #367: horizon parameter not validated in predict_tool,
+    fit_predict_tool, and fit_predict_async_tool.
+    """
+
+    @pytest.mark.parametrize(
+        "invalid_horizon, expected_error",
+        [
+            (0, "greater than 0"),
+            (-1, "greater than 0"),
+            (-100, "greater than 0"),
+            ("twelve", "must be an integer"),
+            (3.5, "must be an integer"),
+            (None, "must be an integer"),
+        ],
+    )
+    def test_fit_predict_tool_invalid_horizon_rejected(self, invalid_horizon, expected_error):
+        """fit_predict_tool must reject invalid horizon values."""
+        result = fit_predict_tool("fake_handle", dataset="airline", horizon=invalid_horizon)
+        assert result["success"] is False
+        assert expected_error in result["error"]
+
+
+class TestFitPredictAsyncToolHorizonValidation:
+    """Tests for horizon validation in fit_predict_async_tool.
+
+    Covers Issue #367: horizon parameter not validated in predict_tool,
+    fit_predict_tool, and fit_predict_async_tool.
+    """
+
+    @pytest.mark.parametrize(
+        "invalid_horizon, expected_error",
+        [
+            (0, "greater than 0"),
+            (-1, "greater than 0"),
+            (-100, "greater than 0"),
+            ("twelve", "must be an integer"),
+            (3.5, "must be an integer"),
+            (None, "must be an integer"),
+        ],
+    )
+    def test_fit_predict_async_tool_invalid_horizon_rejected(self, invalid_horizon, expected_error):
+        """fit_predict_async_tool must reject invalid horizon before job creation."""
+        result = fit_predict_async_tool("fake_handle", dataset="airline", horizon=invalid_horizon)
         assert result["success"] is False
         assert expected_error in result["error"]
 
