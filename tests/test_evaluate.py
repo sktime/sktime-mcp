@@ -11,7 +11,8 @@ sys.path.insert(0, "src")
 
 def test_evaluate_estimator_tool():
     """Test evaluate_estimator_tool with a simple estimator."""
-    from sktime.forecasting.naive import NaiveForecaster
+    from sktime.forecasting.naive import NaiveForecaster  # noqa: I001
+
     from sktime_mcp.runtime.executor import get_executor
     from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 
@@ -35,6 +36,7 @@ def test_evaluate_estimator_tool():
     finally:
         # Clean up
         executor._handle_manager.release_handle(handle)
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
