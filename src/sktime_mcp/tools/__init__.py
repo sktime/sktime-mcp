@@ -7,6 +7,7 @@ from sktime_mcp.tools.data_tools import (
     release_data_handle_tool,
 )
 from sktime_mcp.tools.describe_estimator import describe_estimator_tool
+from sktime_mcp.tools.diagnose import diagnose_residuals_tool
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
@@ -44,6 +45,7 @@ __all__ = [
     "fit_predict_tool",
     "fit_predict_async_tool",
     "evaluate_estimator_tool",
+    "diagnose_residuals_tool",
     "load_data_source_tool",
     "load_data_source_async_tool",
     "release_data_handle_tool",
