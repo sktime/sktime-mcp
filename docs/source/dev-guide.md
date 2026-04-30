@@ -6,7 +6,7 @@ This guide explains how the project is structured, how to develop new features, 
 
 - Python 3.10+
 - pip
-- Optional: `mkdocs` if you want to build the documentation site
+- Optional: `sphinx` if you want to build the documentation site
 
 ## Setup
 
@@ -114,8 +114,8 @@ Update `DEMO_DATASETS` in `src/sktime_mcp/runtime/executor.py` with a new loader
 If you want to build the docs site locally:
 
 ```bash
-pip install mkdocs
-mkdocs serve
+pip install -r docs/requirements.txt
+sphinx-build -b html docs/source docs/build/html
 ```
 
-The config lives in `mkdocs.yml` and the docs content is under `docs/`.
+The config lives in `docs/source/conf.py` and the docs content is under `docs/source/`.
