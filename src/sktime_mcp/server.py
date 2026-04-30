@@ -160,10 +160,14 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "task": {
                         "type": "string",
-                        "description": (
-                            "Task type filter: forecasting, classification, "
-                            "regression, transformation, clustering"
-                        ),
+                        "description": "Task type filter",
+                        "enum": [
+                            "forecasting",
+                            "classification",
+                            "regression",
+                            "transformation",
+                            "clustering",
+                        ],
                     },
                     "tags": {
                         "type": "object",
@@ -370,6 +374,8 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Number of cross-validation folds (default: 3)",
                         "default": 3,
+                        "minimum": 1,
+                        "maximum": 10,
                     },
                 },
                 "required": ["estimator_handle", "dataset"],
