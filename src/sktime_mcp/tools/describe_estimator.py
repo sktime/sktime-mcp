@@ -42,6 +42,12 @@ def describe_estimator_tool(estimator: str) -> dict[str, Any]:
     registry = get_registry()
     tag_resolver = get_tag_resolver()
 
+    if not isinstance(estimator, str):
+        return {
+            "success": False,
+            "error": f"'estimator' must be a string, got {type(estimator).__name__}.",
+        }
+
     node = registry.get_estimator_by_name(estimator)
     if node is None:
         # Try case-insensitive search
@@ -69,7 +75,7 @@ def describe_estimator_tool(estimator: str) -> dict[str, Any]:
         "hyperparameters": node.hyperparameters,
         "tags": node.tags,
         "tag_explanations": tag_explanations,
-        "docstring": doc[:500],
+        "docstring": doc,
     }
 
 
@@ -84,6 +90,12 @@ def search_estimators_tool(query: str, limit: int = 20) -> dict[str, Any]:
     Returns:
         Dictionary with matching estimators
     """
+    if not isinstance(query, str):
+        return {
+            "success": False,
+            "error": f"'query' must be a string, got {type(query).__name__}.",
+        }
+
     if limit < 1:
         return {
             "success": False,

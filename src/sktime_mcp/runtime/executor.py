@@ -168,11 +168,14 @@ class Executor:
                 # Convert index to string to avoid JSON serialization issues with Period/DatetimeIndex
                 predictions_copy = predictions.copy()
                 predictions_copy.index = predictions_copy.index.astype(str)
-                result = predictions_copy.to_dict()
+                # Convert values to native Python types for JSON serialization
+                result = {k: float(v) if hasattr(v, "item") else v for k, v in predictions_copy.to_dict().items()}
             elif isinstance(predictions, pd.DataFrame):
                 predictions_copy = predictions.copy()
                 predictions_copy.index = predictions_copy.index.astype(str)
-                result = predictions_copy.to_dict(orient="list")
+                # Convert lists of values to native Python types
+                raw_dict = predictions_copy.to_dict(orient="list")
+                result = {k: [float(v_i) if hasattr(v_i, "item") else v_i for v_i in v_list] for k, v_list in raw_dict.items()}
             else:
                 result = predictions.tolist() if hasattr(predictions, "tolist") else predictions
 

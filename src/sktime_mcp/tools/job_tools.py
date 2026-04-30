@@ -134,6 +134,12 @@ def cleanup_old_jobs_tool(max_age_hours: int = 24) -> dict[str, Any]:
     Returns:
         Dictionary with number of jobs removed
     """
+    if max_age_hours <= 0:
+        return {
+            "success": False,
+            "error": "max_age_hours must be a positive number.",
+        }
+        
     job_manager = get_job_manager()
 
     count = job_manager.cleanup_old_jobs(max_age_hours)

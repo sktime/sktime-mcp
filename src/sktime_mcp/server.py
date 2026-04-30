@@ -831,7 +831,10 @@ async def run_server():
 def main():
     """Main entry point."""
     logger.info("Starting sktime-mcp server...")
-    asyncio.run(run_server())
+    try:
+        asyncio.run(run_server())
+    except KeyboardInterrupt:
+        logger.info("Server stopped by user (Ctrl+C)")
 
 
 if __name__ == "__main__":
