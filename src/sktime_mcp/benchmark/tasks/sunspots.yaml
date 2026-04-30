@@ -1,0 +1,19 @@
+name: sunspots_forecast
+dataset: sunspots
+horizon: 24
+expected_task: forecasting
+valid_estimators:
+  - NaiveForecaster
+  - ARIMA
+  - AutoARIMA
+valid_pipelines:
+  - [NaiveForecaster]
+  - [ARIMA]
+  - [Detrend, ARIMA]
+metric: MeanAbsolutePercentageError
+difficulty: intermediate
+description: "Sunspots dataset. Long yearly cycle, non-linear patterns."
+tags:
+  seasonal: true
+  frequency: yearly
+  n_timepoints: 2820

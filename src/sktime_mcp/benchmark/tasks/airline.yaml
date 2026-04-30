@@ -1,0 +1,21 @@
+name: airline_forecast
+dataset: airline
+horizon: 12
+expected_task: forecasting
+valid_estimators:
+  - NaiveForecaster
+  - ExponentialSmoothing
+  - AutoETS
+  - ARIMA
+valid_pipelines:
+  - [NaiveForecaster]
+  - [ExponentialSmoothing]
+  - [Detrend, NaiveForecaster]
+  - [Deseasonalize, NaiveForecaster]
+metric: MeanAbsolutePercentageError
+difficulty: beginner
+description: "Classic airline passengers dataset. Seasonal monthly data, 1949-1960."
+tags:
+  seasonal: true
+  frequency: monthly
+  n_timepoints: 144
