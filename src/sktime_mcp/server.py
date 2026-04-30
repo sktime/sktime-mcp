@@ -6,6 +6,7 @@ that exposes sktime's registry and execution capabilities to LLMs.
 """
 
 import asyncio
+import sys
 import json
 import logging
 import os
@@ -830,9 +831,11 @@ async def run_server():
 
 def main():
     """Main entry point."""
-    logger.info("Starting sktime-mcp server...")
-    asyncio.run(run_server())
-
+    try:
+        asyncio.run(run_server())
+    except KeyboardInterrupt:
+        print("\nINFO: sktime-mcp server shut down gracefully.")
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()
