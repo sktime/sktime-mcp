@@ -70,9 +70,9 @@ Load data from any supported source.
 }
 ```
 
-### `fit_predict_with_data`
+### `fit_predict` (custom data)
 
-Fit a model and generate predictions using custom data.
+After `load_data_source`, call `fit_predict` with `data_handle` set (and omit `dataset`, or pass an empty string). This is the same MCP tool used for demo datasets.
 
 **Arguments:**
 - `estimator_handle` (str): Handle from `instantiate_estimator`

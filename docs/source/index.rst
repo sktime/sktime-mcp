@@ -32,6 +32,7 @@ The Semantic Engine for Time-Series Forecasting with LLMs.
    :caption: Development
 
    architecture
+   ideal-mcp-tools
    implementation
    dev-guide
    api
