@@ -90,7 +90,7 @@ The codebase is organized into **5 main layers**:
    
 2. **`@server.list_tools()`**: Registers all available MCP tools
    - Returns tool schemas (name, description, input schema)
-   - Tools: `list_estimators`, `describe_estimator`, `instantiate_estimator`, `instantiate_pipeline`, `fit_predict`, `validate_pipeline`, `list_available_data`, `get_available_tags`
+   - Tools: `list_estimators`, `describe_estimator`, `instantiate_estimator`, `instantiate_pipeline`, `fit_predict`, `validate_pipeline`, `suggest_pipeline` (proposed in `sktime/sktime-mcp#288`, implemented in PR `#301`), `list_available_data`, `get_available_tags`
 
 3. **`@server.call_tool(name, arguments)`**: Routes tool calls to implementations
    - Validates arguments
