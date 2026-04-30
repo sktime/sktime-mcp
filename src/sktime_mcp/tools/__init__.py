@@ -1,5 +1,6 @@
 """Tools module for sktime MCP."""
 
+from sktime_mcp.tools.batch import run_tools_batch_tool
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_async_tool,
@@ -54,4 +55,5 @@ __all__ = [
     "check_job_status_tool",
     "list_jobs_tool",
     "cancel_job_tool",
+    "run_tools_batch_tool",
 ]
