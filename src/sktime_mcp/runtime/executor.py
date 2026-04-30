@@ -788,46 +788,54 @@ class Executor:
 
         # 3. Infer and set frequency
         if auto_infer_freq:
-            freq = y.index.freq
-
-            if freq is None:
-                # Try to infer
-                freq = pd.infer_freq(y.index)
+            # Guard: integer / RangeIndex data should not go through
+            # datetime-specific frequency inference (fixes #390).
+            if isinstance(y.index, pd.RangeIndex) or not hasattr(y.index, "freq"):
+                changes_made["frequency_set"] = True
+                changes_made["frequency"] = "Integer"
+            else:
+                freq = y.index.freq
 
                 if freq is None:
-                    # Manual inference
-                    time_diffs = y.index.to_series().diff().dropna()
-                    if len(time_diffs) > 0:
-                        most_common_diff = time_diffs.mode()[0]
+                    # Try to infer
+                    freq = pd.infer_freq(y.index)
 
-                        if most_common_diff == pd.Timedelta(days=1):
-                            freq = "D"
-                        elif most_common_diff == pd.Timedelta(hours=1):
-                            freq = "h"
-                        elif most_common_diff == pd.Timedelta(minutes=1):
-                            freq = "min"
-                        elif most_common_diff == pd.Timedelta(seconds=1):
-                            freq = "s"
-                        elif most_common_diff == pd.Timedelta(days=7):
-                            freq = "W"
-                        elif most_common_diff.days >= 28 and most_common_diff.days <= 31:
-                            freq = "MS"
-                        else:
-                            freq = "D"
+                    if freq is None:
+                        # Manual inference
+                        time_diffs = y.index.to_series().diff().dropna()
+                        if len(time_diffs) > 0:
+                            most_common_diff = time_diffs.mode()[0]
 
-                # Create complete date range
-                if freq:
-                    full_range = pd.date_range(start=y.index.min(), end=y.index.max(), freq=freq)
+                            if most_common_diff == pd.Timedelta(days=1):
+                                freq = "D"
+                            elif most_common_diff == pd.Timedelta(hours=1):
+                                freq = "h"
+                            elif most_common_diff == pd.Timedelta(minutes=1):
+                                freq = "min"
+                            elif most_common_diff == pd.Timedelta(seconds=1):
+                                freq = "s"
+                            elif most_common_diff == pd.Timedelta(days=7):
+                                freq = "W"
+                            elif most_common_diff.days >= 28 and most_common_diff.days <= 31:
+                                freq = "MS"
+                            else:
+                                freq = "D"
 
-                    n_gaps = len(full_range) - len(y)
+                    # Create complete date range
+                    if freq:
+                        full_range = pd.date_range(
+                            start=y.index.min(), end=y.index.max(), freq=freq
+                        )
 
-                    y = y.reindex(full_range)
-                    if X is not None:
-                        X = X.reindex(full_range)
+                        n_gaps = len(full_range) - len(y)
 
-                    changes_made["gaps_filled"] = n_gaps
-                    changes_made["frequency_set"] = True
-                    changes_made["frequency"] = freq
+                        y = y.reindex(full_range)
+                        if X is not None:
+                            X = X.reindex(full_range)
+
+                        changes_made["gaps_filled"] = n_gaps
+                        changes_made["frequency_set"] = True
+                        changes_made["frequency"] = freq
 
         # 4. Fill missing values
         if fill_missing and y.isna().any():
@@ -837,8 +845,13 @@ class Executor:
                 X = X.ffill().bfill()
             changes_made["missing_filled"] = n_missing
 
-        # 5. Set frequency explicitly on index
-        if hasattr(y.index, "freq") and changes_made.get("frequency"):
+        # 5. Set frequency explicitly on index (only for datetime-like indexes)
+        if (
+            hasattr(y.index, "freq")
+            and not isinstance(y.index, pd.RangeIndex)
+            and changes_made.get("frequency")
+            and changes_made["frequency"] != "Integer"
+        ):
             y.index.freq = changes_made["frequency"]
             if X is not None:
                 X.index.freq = changes_made["frequency"]
@@ -853,7 +866,13 @@ class Executor:
             "metadata": {
                 **data_info["metadata"],
                 "formatted": True,
-                "frequency": str(y.index.freq) if y.index.freq else changes_made.get("frequency"),
+                "frequency": (
+                    str(y.index.freq)
+                    if hasattr(y.index, "freq")
+                    and not isinstance(y.index, pd.RangeIndex)
+                    and y.index.freq
+                    else changes_made.get("frequency")
+                ),
                 "rows": len(y),
                 "start_date": str(y.index.min()),
                 "end_date": str(y.index.max()),
