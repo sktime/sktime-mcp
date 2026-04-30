@@ -12,7 +12,7 @@ Before you begin, ensure you have:
 
 - **Python 3.10+** installed.
 - **pip** package manager.
-- A compatible MCP client (like **Claude Desktop**, **Cursor**, or **VS Code with Copilot**).
+- A compatible MCP client (like **Claude Desktop**, **Cursor**, or compatible **VS Code extensions** like Cline).
 
 ### Installation
 
@@ -67,6 +67,8 @@ The `sktime-mcp` server exposes a suite of tools that your AI assistant uses on 
 | **Find models** | The assistant searches the sktime registry by task, tags, or keywords. | *"What forecasting models are available?"* |
 | **Create a model or pipeline** | An estimator or multi-step pipeline is instantiated with your chosen parameters. | *"Set up an ARIMA(1,1,1) model"* |
 | **Run a forecast** | The model is fitted on your data and predictions are generated. | *"Forecast the airline dataset 12 months ahead"* |
+| **Cross-validate a model** | The model is evaluated across multiple folds using an expanding window to get metrics like MAE and RMSE. | *"Evaluate ARIMA using 3-fold cross-validation"* |
+| **Run async background jobs** | Heavy training operations run in the background without blocking the client. | *"Fit this model in the background"* |
 | **Load your own data** | CSV, Parquet, Excel, or SQL data is loaded and prepared for modelling. | *"Load my sales data from /home/user/sales.csv"* |
 | **Export code** | A standalone Python script is generated so you can reproduce results outside the MCP server. | *"Give me the Python code for this model"* |
 | **Save a trained model** | The fitted estimator is persisted to disk for later reuse. | *"Save this model to /home/user/models/arima"* |
@@ -108,7 +110,7 @@ The assistant will:
 You can then ask follow-up questions like *"Plot these results"*, *"Try a different model"*, or *"Give me the Python code for this"*.
 
 <details>
-<summary>🔧 MCP tool calls (what happens under the hood)</summary>
+<summary>🔧 Detailed MCP Tool Calls</summary>
 
 The assistant translates this workflow into the following tool calls:
 
@@ -156,7 +158,7 @@ If you want a standalone Python script:
 You receive a script you can run independently of the MCP server.
 
 <details>
-<summary>🔧 MCP tool calls (what happens under the hood)</summary>
+<summary>🔧 Detailed MCP Tool Calls</summary>
 
 ```json
 {
@@ -208,7 +210,7 @@ Once the pipeline is created, use it like any other model:
 The entire pipeline (preprocessing + forecasting) runs end-to-end, and you get predictions back.
 
 <details>
-<summary>🔧 MCP tool calls (what happens under the hood)</summary>
+<summary>🔧 Detailed MCP Tool Calls</summary>
 
 ```json
 {
@@ -249,7 +251,7 @@ The assistant persists the fitted estimator to the specified path using sktime's
 > *"Load the model from /home/user/models/my_forecaster and predict 6 months ahead on the airline dataset."*
 
 <details>
-<summary>🔧 MCP tool calls (what happens under the hood)</summary>
+<summary>🔧 Detailed MCP Tool Calls</summary>
 
 **Saving:**
 ```json
@@ -265,7 +267,7 @@ The assistant persists the fitted estimator to the specified path using sktime's
 **Loading and predicting:**
 ```json
 {
-  "tool": "instantiate_estimator",
+  "tool": "load_model",
   "arguments": {"path": "/home/user/models/my_forecaster"}
 }
 ```

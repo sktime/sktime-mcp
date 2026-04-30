@@ -1,6 +1,6 @@
 # 🎯 Use Cases & Personas
 
-This page describes **who** uses sktime-mcp, **what** they want to accomplish, and **how** a typical session looks. For step-by-step walkthroughs, see the [User Guide](user-guide.md). For concrete prompt examples, see [Usage Examples](usage-examples.md).
+Describes typical user personas and their corresponding workflows. For step-by-step instructions, see the [User Guide](user-guide.md). For prompt examples, see [Usage Examples](usage-examples.md).
 
 ---
 
@@ -84,6 +84,7 @@ This page describes **who** uses sktime-mcp, **what** they want to accomplish, a
 
 - A table of forecasted values for each future period.
 - A plain-language summary of the trend (e.g., *"Revenue is projected to grow ~5% per quarter"*).
+- A downloadable Python script reproducing the process (if requested).
 - Optionally, you can ask for a chart or a CSV export of the results.
 
 ---
@@ -104,8 +105,8 @@ Demo datasets are useful for learning the workflows before bringing in your own 
 
 | Source | What to tell the assistant | Example |
 |--------|---------------------------|---------|
-| **Local CSV / Parquet / Excel** | Absolute file path, time column name, target column name. | *"Load /home/user/data.csv, time column 'date', target 'value'"* |
-| **SQL database** | Connection string, query, time and target columns. | *"Load from my PostgreSQL database at localhost:5432/mydb, run 'SELECT date, sales FROM monthly', time column 'date', target 'sales'"* |
+| **Local CSV / Parquet / Excel** | Absolute file path, time column name, target column name. Tell it the `type` is `file`. | *"Load /home/user/data.csv, type 'file', time column 'date', target 'value'"* |
+| **SQL database** | Connection string, query, time and target columns. Tell it the `type` is `sql`. | *"Load from my PostgreSQL database at localhost:5432/mydb with type 'sql', run 'SELECT date, sales FROM monthly', time column 'date', target 'sales'"* |
 
 For detailed configuration options, see [Data Sources](data-sources.md).
 

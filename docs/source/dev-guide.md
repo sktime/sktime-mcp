@@ -64,7 +64,7 @@ make format-fix
 If `make` is unavailable (common on Windows), run:
 
 ```bash
-python -m black --check .
+python -m ruff format --check .
 python -m ruff check .
 python -m pytest
 ```
@@ -96,14 +96,14 @@ This separation keeps the MCP surface small while allowing deeper functionality 
 2. Add a tool schema in `src/sktime_mcp/server.py` within `list_tools()`.
 3. Add a handler in `call_tool()` to dispatch the tool name.
 4. Add tests in `tests/`.
-5. Document the tool in `docs/user-guide.md`.
+5. Document the tool in `docs/source/user-guide.md`.
 
 ## Adding A New Data Source Adapter
 
 1. Implement a new adapter in `src/sktime_mcp/data/adapters/` that inherits `DataSourceAdapter`.
 2. Register it in `src/sktime_mcp/data/registry.py` using `DataSourceRegistry.register()`.
 3. Add tests covering `load()`, `validate()`, and `to_sktime_format()`.
-4. Update `docs/data-sources.md`.
+4. Update `docs/source/data-sources.md`.
 
 ## Adding A Demo Dataset
 

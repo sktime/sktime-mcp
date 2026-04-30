@@ -563,4 +563,4 @@ To ensure your code meets quality standards before pushing, install the pre-comm
 ```bash
 make install-hooks
 ```
-This will automatically run Black, Ruff, and Pytest on your code every time you make a commit.
+This will automatically run Ruff and Pytest on your code every time you make a commit.
