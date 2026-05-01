@@ -7,6 +7,7 @@ Executes cross-validation on an estimator.
 import logging
 from typing import Any
 
+import numpy as np
 from sktime.forecasting.model_evaluation import evaluate
 
 try:
@@ -73,4 +74,63 @@ def evaluate_estimator_tool(
         }
     except Exception as e:
         logger.exception("Error during evaluate")
+        return {"success": False, "error": str(e)}
+
+
+def diagnose_residuals_tool(
+    predictions: dict[str, Any] | list[float],
+    actuals: dict[str, Any] | list[float],
+) -> dict[str, Any]:
+    """
+    Diagnose residuals by comparing predictions and actuals.
+
+    Args:
+        predictions: Forecasted values.
+        actuals: Actual observed values.
+
+    Returns:
+        Dictionary with statistical metrics (MAE, RMSE, Bias).
+    """
+    try:
+        def extract_values(data):
+            if isinstance(data, dict):
+                # Handle nested dicts or flat dicts
+                try:
+                    return np.array(list(data.values()), dtype=float)
+                except ValueError:
+                    return np.array([float(v) for v in data.values() if isinstance(v, (int, float))])
+            return np.array(data, dtype=float)
+
+        y_pred = extract_values(predictions)
+        y_true = extract_values(actuals)
+
+        if len(y_pred) != len(y_true):
+            return {
+                "success": False,
+                "error": f"Length mismatch: predictions ({len(y_pred)}) vs actuals ({len(y_true)})",
+            }
+
+        residuals = y_true - y_pred
+        mae = float(np.mean(np.abs(residuals)))
+        mse = float(np.mean(residuals ** 2))
+        rmse = float(np.sqrt(mse))
+        bias = float(np.mean(residuals))
+
+        return {
+            "success": True,
+            "metrics": {
+                "MAE": mae,
+                "RMSE": rmse,
+                "Mean_Bias": bias,
+            },
+            "residuals": [float(r) for r in residuals],
+            "diagnosis": (
+                f"The model has a mean bias of {bias:.4f}. "
+                f"A positive bias means the model under-predicts on average, "
+                f"while a negative bias means it over-predicts. "
+                f"Average absolute error (MAE) is {mae:.4f}."
+            )
+        }
+    except Exception as e:
+        logger.exception("Error during diagnose_residuals")
         return {"success": False, "error": str(e)}

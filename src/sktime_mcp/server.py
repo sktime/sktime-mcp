@@ -37,7 +37,7 @@ from sktime_mcp.tools.data_tools import (
     release_data_handle_tool,
 )
 from sktime_mcp.tools.describe_estimator import describe_estimator_tool
-from sktime_mcp.tools.evaluate import evaluate_estimator_tool
+from sktime_mcp.tools.evaluate import evaluate_estimator_tool, diagnose_residuals_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
     fit_predict_tool,
@@ -376,6 +376,24 @@ async def list_tools() -> list[Tool]:
                     },
                 },
                 "required": ["estimator_handle", "dataset"],
+            },
+        ),
+        Tool(
+            name="diagnose_residuals_tool",
+            description="Diagnose model failures by calculating statistical metrics (MAE, RMSE, Mean Bias) on residuals.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "predictions": {
+                        "type": ["object", "array"],
+                        "description": "Forecasted values (dict or list)",
+                    },
+                    "actuals": {
+                        "type": ["object", "array"],
+                        "description": "Actual observed values (dict or list)",
+                    },
+                },
+                "required": ["predictions", "actuals"],
             },
         ),
         # -- Batch Execution -------------------------------------------------
@@ -723,6 +741,12 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["estimator_handle"],
                 arguments["dataset"],
                 arguments.get("cv_folds", 3),
+            )
+
+        elif name == "diagnose_residuals_tool":
+            result = diagnose_residuals_tool(
+                predictions=arguments["predictions"],
+                actuals=arguments["actuals"],
             )
 
         elif name == "validate_pipeline":

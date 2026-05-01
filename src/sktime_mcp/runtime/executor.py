@@ -131,12 +131,16 @@ class Executor:
             return {"success": False, "error": f"Handle not found: {handle_id}"}
 
         try:
-            if fh is not None:
-                instance.fit(y, X=X, fh=fh)
-            elif X is not None:
-                instance.fit(y, X=X)
+            is_classifier = getattr(instance, "_estimator_type", None) == "classifier"
+            if is_classifier:
+                instance.fit(X, y)
             else:
-                instance.fit(y)
+                if fh is not None:
+                    instance.fit(y, X=X, fh=fh)
+                elif X is not None:
+                    instance.fit(y, X=X)
+                else:
+                    instance.fit(y)
 
             self._handle_manager.mark_fitted(handle_id)
             return {"success": True, "handle": handle_id, "fitted": True}
@@ -159,10 +163,14 @@ class Executor:
             return {"success": False, "error": "Estimator not fitted"}
 
         try:
-            if fh is None:
-                fh = list(range(1, 13))
+            is_classifier = getattr(instance, "_estimator_type", None) == "classifier"
+            if is_classifier:
+                predictions = instance.predict(X)
+            else:
+                if fh is None:
+                    fh = list(range(1, 13))
 
-            predictions = instance.predict(fh=fh, X=X) if X is not None else instance.predict(fh=fh)
+                predictions = instance.predict(fh=fh, X=X) if X is not None else instance.predict(fh=fh)
 
             if isinstance(predictions, pd.Series):
                 # Convert index to string to avoid JSON serialization issues with Period/DatetimeIndex
@@ -580,6 +588,8 @@ class Executor:
                 metadata["exog_columns"] = list(X.columns)
             # Inject column dtypes so LLMs can distinguish time index vs target
             metadata["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
+            # Expose explicit shape metadata for agent reasoning (#416)
+            metadata["shape"] = list(data.shape) if hasattr(data, "shape") else len(data)
             # Generate handle
             data_handle = f"data_{uuid.uuid4().hex[:8]}"
 
@@ -614,6 +624,7 @@ class Executor:
                     # Continue with unformatted data if formatting fails
             _final_meta = adapter.get_metadata().copy()
             _final_meta["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
+            _final_meta["shape"] = list(data.shape) if hasattr(data, "shape") else len(data)
             return {
                 "success": True,
                 "data_handle": data_handle,
