@@ -26,6 +26,22 @@ pip install -e .
 pip install -e ".[all]"
 ```
 
+### Integrating From An External Agent Project
+
+If you are calling `sktime-mcp` from your own agent codebase, the most reliable setup is an editable install from the repository root:
+
+```bash
+pip install -e .
+```
+
+If you are temporarily importing the raw source tree before packaging the dependency, use a `PYTHONPATH` fallback that points to `src/`:
+
+```bash
+PYTHONPATH=/path/to/sktime-mcp/src python your_agent.py
+```
+
+The editable install path is preferred because it keeps imports consistent across examples, tests, and external agent experiments.
+
 ### Running the Server
 
 Start the MCP server to begin listening for connections:
@@ -186,6 +202,9 @@ Returns a data handle, e.g., `{"handle": "data_xyz"}`.
 
 </details>
 
+!!! tip "Inspect Handle Metadata Before Picking A Model"
+    After `load_data_source`, agents should look at the returned metadata before selecting a model path. Fields such as `rows`, `frequency`, `columns`, `exog_columns`, and `dtypes` already provide useful context for deciding whether the loaded handle matches the intended forecasting workflow.
+
 !!! warning "Absolute Paths Required"
     The server requires **absolute file paths** (e.g., `/home/user/data.csv`). Relative paths may fail depending on where the server was started.
 
@@ -279,6 +298,36 @@ The assistant persists the fitted estimator to the specified path using sktime's
 ```
 
 </details>
+
+---
+
+### 5. Cross-Validated Evaluation
+
+**What you want:** Compare candidate forecasters before committing to one.
+
+Ask your assistant for a backtest on a built-in demo dataset:
+
+> *"Evaluate ThetaForecaster on airline using 3 folds."*
+
+The current MCP contract for `evaluate_estimator` is:
+
+- `dataset` must be the name of a **demo dataset**
+- `cv_folds` must be a **positive integer**
+- the tool returns **per-fold rows** with metric columns such as `test_MeanAbsolutePercentageError`
+
+<details>
+<summary>🔧 MCP tool calls (what happens under the hood)</summary>
+
+```json
+{"tool": "instantiate_estimator", "arguments": {"estimator": "ThetaForecaster"}}
+```
+```json
+{"tool": "evaluate_estimator", "arguments": {"estimator_handle": "est_abc123", "dataset": "airline", "cv_folds": 3}}
+```
+
+</details>
+
+For a runnable integration example that combines custom data loading with this evaluation flow, see `examples/08_external_agent_integration.py`.
 
 ---
 
