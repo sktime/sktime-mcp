@@ -61,6 +61,7 @@ from sktime_mcp.tools.list_estimators import (
     list_estimators_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
+from sktime_mcp.tools.suggest_pipeline import suggest_pipeline_tool
 
 # ---------------------------------------------------------------------------
 # Server configuration via environment variables
@@ -284,6 +285,24 @@ async def list_tools() -> list[Tool]:
                     },
                 },
                 "required": ["components"],
+            },
+        ),
+        Tool(
+            name="suggest_pipeline",
+            description="Suggest a valid estimator pipeline for a target task",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task": {
+                        "type": "string",
+                        "description": "Target task, e.g. forecasting or classification",
+                    },
+                    "requirements": {
+                        "type": "object",
+                        "description": "Optional capability requirements for the suggestion",
+                    },
+                },
+                "required": ["task"],
             },
         ),
         # -- Execution -------------------------------------------------------
@@ -701,6 +720,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = validation.to_dict()
             result["success"] = result["valid"]
 
+        elif name == "suggest_pipeline":
+            result = suggest_pipeline_tool(
+                arguments["task"],
+                arguments.get("requirements"),
+            )
         # -- Data ------------------------------------------------------------
         elif name == "list_available_data":
             result = list_available_data_tool(arguments.get("is_demo"))

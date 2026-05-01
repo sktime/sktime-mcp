@@ -187,6 +187,42 @@ class TestTools:
         assert not result["success"]
         assert "error" in result
 
+    def test_suggest_pipeline_tool(self):
+        """Test suggest_pipeline tool response shape."""
+        from sktime_mcp.tools.suggest_pipeline import suggest_pipeline_tool
+
+        result = suggest_pipeline_tool("forecasting")
+
+        assert result["success"]
+        assert result["task"] == "forecasting"
+        assert result["suggestions"]
+        assert result["count"] == len(result["suggestions"])
+
+    def test_suggest_pipeline_tool_rejects_invalid_requirements(self):
+        """Non-dict requirements should return a structured error."""
+        from sktime_mcp.tools.suggest_pipeline import suggest_pipeline_tool
+
+        result = suggest_pipeline_tool("forecasting", requirements=["handles_missing"])
+
+        assert not result["success"]
+        assert "requirements" in result["error"]
+
+    async def test_suggest_pipeline_registered_and_callable(self):
+        """Test suggest_pipeline is exposed through the MCP server."""
+        import json
+
+        from sktime_mcp.server import call_tool, list_tools
+
+        tools = await list_tools()
+        assert "suggest_pipeline" in {tool.name for tool in tools}
+
+        response = await call_tool("suggest_pipeline", {"task": "forecasting"})
+        payload = json.loads(response[0].text)
+
+        assert payload["success"]
+        assert payload["task"] == "forecasting"
+        assert payload["suggestions"]
+
     def test_list_available_data_no_filter(self):
         """list_available_data with no args returns both system_demos and active_handles."""
         from sktime_mcp.tools.list_available_data import list_available_data_tool

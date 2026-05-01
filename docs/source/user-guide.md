@@ -200,7 +200,7 @@ Tell the assistant the components and their order:
 
 > *"Build a pipeline that deseasonalizes, detrends, then applies ARIMA(1,1,1) to forecast."*
 
-The assistant will first validate that these components are compatible (e.g., that transformers feed into a forecaster correctly). If something is incompatible, it will explain why and suggest alternatives.
+The assistant can suggest a starting pipeline for your task, then validate that the chosen components are compatible (e.g., that transformers feed into a forecaster correctly). If something is incompatible, it will explain why and suggest alternatives.
 
 **Step 2: Run it on data**
 Once the pipeline is created, use it like any other model:
@@ -212,6 +212,12 @@ The entire pipeline (preprocessing + forecasting) runs end-to-end, and you get p
 <details>
 <summary>🔧 Detailed MCP Tool Calls</summary>
 
+```json
+{
+  "tool": "suggest_pipeline",
+  "arguments": {"task": "forecasting"}
+}
+```
 ```json
 {
   "tool": "validate_pipeline",
