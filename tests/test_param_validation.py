@@ -12,6 +12,8 @@ sys.path.insert(0, "src")
 
 from sktime_mcp.tools.fit_predict import predict_tool
 from sktime_mcp.tools.instantiate import (
+    _validate_components,
+    _validate_estimator_name,
     _validate_params,
     instantiate_estimator_tool,
     instantiate_pipeline_tool,
@@ -65,6 +67,34 @@ class TestValidateParams:
         assert "nonexistent_param_xyz" in result["warnings"][0]
 
 
+class TestValidateTopLevelInputs:
+    """Tests for top-level estimator/components validation helpers."""
+
+    def test_estimator_name_must_be_string(self):
+        """Estimator name should reject non-string values."""
+        result = _validate_estimator_name(["ARIMA"])
+        assert result["valid"] is False
+        assert "'estimator' must be a non-empty string" in result["error"]
+
+    def test_estimator_name_rejects_blank_string(self):
+        """Estimator name should reject blank strings."""
+        result = _validate_estimator_name("   ")
+        assert result["valid"] is False
+        assert "non-empty string" in result["error"]
+
+    def test_components_must_be_list(self):
+        """Components should reject non-list values."""
+        result = _validate_components("ARIMA")
+        assert result["valid"] is False
+        assert "'components' must be a non-empty list" in result["error"]
+
+    def test_components_reject_nested_non_string(self):
+        """Components should reject nested non-string entries."""
+        result = _validate_components(["ARIMA", ["NaiveForecaster"]])
+        assert result["valid"] is False
+        assert "components[1]" in result["error"]
+
+
 class TestInstantiateEstimatorValidation:
     """Tests for validation in the instantiate_estimator_tool."""
 
@@ -86,9 +116,27 @@ class TestInstantiateEstimatorValidation:
         assert result["success"] is False
         assert "Unsupported type" in result["error"]
 
+    def test_invalid_estimator_type_returns_error(self):
+        """Non-string estimator names should return success=False with error."""
+        result = instantiate_estimator_tool(["NaiveForecaster"])
+        assert result["success"] is False
+        assert "'estimator' must be a non-empty string" in result["error"]
+
 
 class TestPipelineParamsValidation:
     """Tests for validation in the instantiate_pipeline_tool."""
+
+    def test_pipeline_components_must_be_list(self):
+        """String components should return an explicit type validation error."""
+        result = instantiate_pipeline_tool("NaiveForecaster")
+        assert result["success"] is False
+        assert "'components' must be a non-empty list" in result["error"]
+
+    def test_pipeline_components_reject_non_string_entries(self):
+        """Nested non-string components should return success=False with error."""
+        result = instantiate_pipeline_tool(["NaiveForecaster", ["ARIMA"]])
+        assert result["success"] is False
+        assert "components[1]" in result["error"]
 
     def test_pipeline_invalid_params_list_type(self):
         """Non-list params_list should return error."""

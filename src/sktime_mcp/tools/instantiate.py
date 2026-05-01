@@ -99,6 +99,55 @@ def _validate_params(
     return {"valid": True, "warnings": warnings}
 
 
+def _validate_estimator_name(estimator: Any) -> dict[str, Any]:
+    """Validate the top-level estimator argument."""
+    if not isinstance(estimator, str):
+        return {
+            "valid": False,
+            "error": (
+                f"'estimator' must be a non-empty string, got {type(estimator).__name__}. "
+                'Example: "ARIMA"'
+            ),
+        }
+
+    if not estimator.strip():
+        return {
+            "valid": False,
+            "error": "'estimator' must be a non-empty string.",
+        }
+
+    return {"valid": True}
+
+
+def _validate_components(components: Any) -> dict[str, Any]:
+    """Validate the top-level pipeline components argument."""
+    if not isinstance(components, list):
+        return {
+            "valid": False,
+            "error": (
+                f"'components' must be a non-empty list of estimator names, "
+                f"got {type(components).__name__}."
+            ),
+        }
+
+    if not components:
+        return {
+            "valid": False,
+            "error": "Pipeline cannot be empty",
+        }
+
+    for i, component in enumerate(components):
+        if not isinstance(component, str) or not component.strip():
+            return {
+                "valid": False,
+                "error": (
+                    f"'components[{i}]' must be a non-empty string, got {type(component).__name__}."
+                ),
+            }
+
+    return {"valid": True}
+
+
 def instantiate_estimator_tool(
     estimator: str,
     params: dict[str, Any] | None = None,
@@ -127,6 +176,13 @@ def instantiate_estimator_tool(
             "params": {"order": [1, 1, 1]}
         }
     """
+    estimator_validation = _validate_estimator_name(estimator)
+    if not estimator_validation["valid"]:
+        return {
+            "success": False,
+            "error": estimator_validation["error"],
+        }
+
     # validate params before passing to executor
     validation = _validate_params(params, estimator_name=estimator)
 
@@ -180,6 +236,13 @@ def instantiate_pipeline_tool(
         }
     """
     all_warnings = []
+
+    components_validation = _validate_components(components)
+    if not components_validation["valid"]:
+        return {
+            "success": False,
+            "error": components_validation["error"],
+        }
 
     # validate each params dict in params_list
     if params_list is not None:
