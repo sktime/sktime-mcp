@@ -9,6 +9,17 @@ from typing import Any
 from sktime_mcp.runtime.executor import get_executor
 
 
+def _validate_boolean_flag(flag_name: str, value: Any) -> dict[str, Any] | None:
+    """Return a structured error when a formatting control flag is not boolean."""
+    if isinstance(value, bool):
+        return None
+
+    return {
+        "success": False,
+        "error": (f"Invalid {flag_name} type '{type(value).__name__}'. Expected a boolean value."),
+    }
+
+
 def format_time_series_tool(
     data_handle: str,
     auto_infer_freq: bool = True,
@@ -46,6 +57,15 @@ def format_time_series_tool(
     """
     executor = get_executor()
 
+    for flag_name, value in (
+        ("auto_infer_freq", auto_infer_freq),
+        ("fill_missing", fill_missing),
+        ("remove_duplicates", remove_duplicates),
+    ):
+        error = _validate_boolean_flag(flag_name, value)
+        if error is not None:
+            return error
+
     try:
         # Delegate to executor
         return executor.format_data_handle(
@@ -77,6 +97,10 @@ def auto_format_on_load_tool(enabled: bool = True) -> dict[str, Any]:
         Dictionary with success status and current setting
     """
     executor = get_executor()
+
+    error = _validate_boolean_flag("enabled", enabled)
+    if error is not None:
+        return error
 
     # Store setting in executor
     if not hasattr(executor, "_auto_format_enabled"):
