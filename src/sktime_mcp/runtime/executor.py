@@ -802,11 +802,16 @@ class Executor:
 
         # 3. Infer and set frequency
         if auto_infer_freq:
-            freq = y.index.freq
+            freq = None
+            if not isinstance(y.index, (pd.DatetimeIndex, pd.PeriodIndex)):
+                changes_made["frequency_set"] = True
+                changes_made["frequency"] = "Integer"
+            else:
+                freq = getattr(y.index, "freq", None)
 
-            if freq is None:
-                # Try to infer
-                freq = pd.infer_freq(y.index)
+                if freq is None:
+                    # Try to infer
+                    freq = pd.infer_freq(y.index)
 
                 if freq is None:
                     # Manual inference
@@ -867,7 +872,7 @@ class Executor:
             "metadata": {
                 **data_info["metadata"],
                 "formatted": True,
-                "frequency": str(y.index.freq) if y.index.freq else changes_made.get("frequency"),
+                "frequency": str(y.index.freq) if getattr(y.index, "freq", None) else changes_made.get("frequency"),
                 "rows": len(y),
                 "start_date": str(y.index.min()),
                 "end_date": str(y.index.max()),
