@@ -1,6 +1,6 @@
 # Usage Examples
 
-This page shows concrete examples of what you can ask your AI assistant to do with sktime-mcp, what to expect in return, and — for those interested — the MCP tool calls that happen behind the scenes.
+Examples of tasks performed via sktime-mcp and their corresponding MCP tool calls.
 
 ---
 
@@ -38,7 +38,7 @@ This page shows concrete examples of what you can ask your AI assistant to do wi
 - *"Plot the forecast against the historical data."*
 
 <details>
-<summary>🔧 MCP tool calls (what happens under the hood)</summary>
+<summary>🔧 Detailed MCP Tool Calls</summary>
 
 **1. Discover models with prediction interval support:**
 ```json
@@ -113,7 +113,7 @@ This page shows concrete examples of what you can ask your AI assistant to do wi
 - *"What other preprocessing transformers are available?"*
 
 <details>
-<summary>🔧 MCP tool calls (what happens under the hood)</summary>
+<summary>🔧 Detailed MCP Tool Calls</summary>
 
 **1. Validate composition:**
 ```json
@@ -175,7 +175,7 @@ This page shows concrete examples of what you can ask your AI assistant to do wi
 > | ...     | ...             |
 
 <details>
-<summary>🔧 MCP tool calls (what happens under the hood)</summary>
+<summary>🔧 Detailed MCP Tool Calls</summary>
 
 **1. Load data:**
 ```json
@@ -243,6 +243,37 @@ This page shows concrete examples of what you can ask your AI assistant to do wi
 - *"Use ARIMA then — forecast 24 months ahead."*
 - *"Save the ARIMA model for later."*
 - *"Export the comparison code as a Python script."*
+
+### Example 5: Background Training
+
+**What you type:**
+
+> *"Train ARIMA(1,1,1) on my airline dataset in the background so I can do other things."*
+
+**What happens:**
+
+1. The assistant creates an estimator.
+2. It uses `fit_predict_async` to launch the training job without blocking the connection.
+3. You get a job ID immediately and can check the status later.
+
+**What you get back:**
+
+> Background training started! Job ID: `abc-123-def`.
+> You can ask me to check its status or list all running jobs.
+
+---
+
+### Example 6: Auto-Formatting Data
+
+**What you type:**
+
+> *"Load /home/user/messy_data.csv and fix any missing values or timestamp issues."*
+
+**What happens:**
+
+1. The assistant loads the data and notices warnings.
+2. It uses `format_time_series` to infer frequency, fill missing values, and remove duplicates.
+3. It reports the cleaned data summary.
 
 ---
 

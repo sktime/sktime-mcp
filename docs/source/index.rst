@@ -37,6 +37,13 @@ The Semantic Engine for Time-Series Forecasting with LLMs.
    dev-guide
    api
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Links
+   :hidden:
+
+   GitHub Repository <https://github.com/sktime/sktime-mcp>
+
 Indices and tables
 ==================
 
