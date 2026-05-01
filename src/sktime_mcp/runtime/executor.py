@@ -41,6 +41,16 @@ def _discover_demo_datasets() -> dict:
 
 DEMO_DATASETS = _discover_demo_datasets()
 
+# Hardcoded list of supported forecasting demo datasets
+FORECASTING_DEMO_DATASETS = {
+    "airline",
+    "shampoo_sales",
+    "lynx",
+    "macroeconomic",
+    "longley",
+    "PBS_dataset",
+    "uschange",
+}
 
 class Executor:
     """
@@ -91,7 +101,14 @@ class Executor:
             return {
                 "success": False,
                 "error": f"Unknown dataset: {name}",
-                "available": list(DEMO_DATASETS.keys()),
+                "available": list(FORECASTING_DEMO_DATASETS),
+            }
+
+        if name not in FORECASTING_DEMO_DATASETS:
+            return {
+                "success": False,
+                "error": f"Dataset '{name}' is not currently supported in high-level forecasting workflows.",
+                "available": list(FORECASTING_DEMO_DATASETS),
             }
 
         try:
@@ -529,7 +546,7 @@ class Executor:
 
     def list_datasets(self) -> list[str]:
         """List available demo datasets."""
-        return list(DEMO_DATASETS.keys())
+        return list(FORECASTING_DEMO_DATASETS)
 
     def load_data_source(self, config: dict[str, Any]) -> dict[str, Any]:
         """

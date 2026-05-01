@@ -8,7 +8,7 @@ import keyword
 from typing import Any
 
 from sktime_mcp.registry.interface import get_registry
-from sktime_mcp.runtime.executor import DEMO_DATASETS
+from sktime_mcp.runtime.executor import DEMO_DATASETS, FORECASTING_DEMO_DATASETS
 from sktime_mcp.runtime.handles import get_handle_manager
 
 
@@ -253,8 +253,13 @@ def export_code_tool(
 
     # Optionally add fit/predict example
     if include_fit_example:
-        # Resolve the dataset loader from DEMO_DATASETS
-        if dataset and dataset in DEMO_DATASETS:
+        # Resolve the dataset loader from FORECASTING_DEMO_DATASETS
+        if dataset:
+            if dataset not in FORECASTING_DEMO_DATASETS:
+                return {
+                    "success": False,
+                    "error": f"Dataset '{dataset}' is not supported for generating fit examples. Must be a forecasting dataset.",
+                }
             module_path = DEMO_DATASETS[dataset]
             module_parts = module_path.rsplit(".", 1)
             loader_module = module_parts[0]
