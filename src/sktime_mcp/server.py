@@ -160,6 +160,7 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "task": {
                         "type": "string",
+                        "enum": ["forecasting", "classification", "regression", "transformation", "clustering"],
                         "description": (
                             "Task type filter: forecasting, classification, "
                             "regression, transformation, clustering"
@@ -368,12 +369,41 @@ async def list_tools() -> list[Tool]:
                     },
                     "cv_folds": {
                         "type": "integer",
+                        "minimum": 2,
+                        "maximum": 50,
                         "description": "Number of cross-validation folds (default: 3)",
                         "default": 3,
                     },
                 },
                 "required": ["estimator_handle", "dataset"],
             },
+        ),
+        # -- Batch Execution -------------------------------------------------
+        Tool(
+            name="run_tools_batch",
+            description=(
+                "Execute multiple read-only tools in a single batch to reduce latency. "
+                "Supported tools: list_estimators, describe_estimator, "
+                "get_available_tags, list_available_data."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "operations": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "tool": {"type": "string"},
+                                "arguments": {"type": "object"}
+                            },
+                            "required": ["tool", "arguments"]
+                        },
+                        "description": "List of operations to execute in batch."
+                    }
+                },
+                "required": ["operations"]
+            }
         ),
         # -- Data ------------------------------------------------------------
         Tool(
@@ -700,6 +730,54 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             validation = validator.validate_pipeline(arguments["components"])
             result = validation.to_dict()
             result["success"] = result["valid"]
+
+        elif name == "run_tools_batch":
+            batch_results = []
+            allowed_tools = {"list_estimators", "describe_estimator", "get_available_tags", "list_available_data"}
+            
+            for i, op in enumerate(arguments.get("operations", [])):
+                tool_name = op.get("tool")
+                tool_args = op.get("arguments", {})
+                
+                if tool_name not in allowed_tools:
+                    batch_results.append({
+                        "index": i,
+                        "tool": tool_name,
+                        "success": False,
+                        "error": f"Tool '{tool_name}' is not supported in batch mode. Only read-only tools are allowed."
+                    })
+                    continue
+                    
+                try:
+                    if tool_name == "list_estimators":
+                        res = list_estimators_tool(
+                            task=tool_args.get("task"),
+                            tags=tool_args.get("tags"),
+                            query=tool_args.get("query"),
+                            limit=tool_args.get("limit", 50),
+                            offset=tool_args.get("offset", 0),
+                        )
+                    elif tool_name == "describe_estimator":
+                        res = describe_estimator_tool(tool_args.get("estimator", ""))
+                    elif tool_name == "get_available_tags":
+                        res = get_available_tags()
+                    elif tool_name == "list_available_data":
+                        res = list_available_data_tool(tool_args.get("is_demo"))
+                    
+                    batch_results.append({
+                        "index": i,
+                        "tool": tool_name,
+                        "success": True,
+                        "result": res
+                    })
+                except Exception as e:
+                    batch_results.append({
+                        "index": i,
+                        "tool": tool_name,
+                        "success": False,
+                        "error": str(e)
+                    })
+            result = {"batch_results": batch_results}
 
         # -- Data ------------------------------------------------------------
         elif name == "list_available_data":
