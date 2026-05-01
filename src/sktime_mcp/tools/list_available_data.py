@@ -25,6 +25,15 @@ def list_available_data_tool(is_demo: bool | None = None) -> dict[str, Any]:
     """
     executor = get_executor()
 
+    if is_demo is not None and not isinstance(is_demo, bool):
+        return {
+            "success": False,
+            "error": (
+                f"Invalid is_demo type '{type(is_demo).__name__}'. "
+                "Expected a boolean value or None."
+            ),
+        }
+
     system_demos = []
     active_handles = []
 
