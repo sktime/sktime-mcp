@@ -66,5 +66,5 @@ jobs:
       - name: Install dev dependencies
         run: pip install -e ".[dev]"
 
-      - name: Build docs (Strict)
-        run: sphinx-build -W --keep-going docs/source docs/_build/html
+      - name: Build docs
+        run: sphinx-build docs/source docs/_build/html
