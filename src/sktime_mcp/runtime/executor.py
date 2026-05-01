@@ -166,13 +166,23 @@ class Executor:
 
             if isinstance(predictions, pd.Series):
                 # Convert index to string to avoid JSON serialization issues with Period/DatetimeIndex
+                # Convert values to native Python floats to avoid numpy.float64 serialization issues
                 predictions_copy = predictions.copy()
                 predictions_copy.index = predictions_copy.index.astype(str)
-                result = predictions_copy.to_dict()
+                result = {
+                    str(k): float(v) if hasattr(v, "dtype") else v
+                    for k, v in predictions_copy.items()
+                }
             elif isinstance(predictions, pd.DataFrame):
+                # Convert index to string and values to native Python types
                 predictions_copy = predictions.copy()
                 predictions_copy.index = predictions_copy.index.astype(str)
-                result = predictions_copy.to_dict(orient="list")
+                raw_dict = predictions_copy.to_dict(orient="list")
+                # Convert numpy values in each list to native Python floats
+                result = {
+                    k: [float(v) if hasattr(v, "dtype") else v for v in lst]
+                    for k, lst in raw_dict.items()
+                }
             else:
                 result = predictions.tolist() if hasattr(predictions, "tolist") else predictions
 
