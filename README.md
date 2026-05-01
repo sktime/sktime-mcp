@@ -59,6 +59,20 @@ pip install -e ".[dev]"
 
 For a more detailed first-time setup flow, including MCP server verification and troubleshooting, see [Beginner Setup](#-beginner-setup-firsttime-users).
 
+## 🔌 Integrating with External Agents
+
+If you are building an external agent framework (e.g. LangChain, AutoGen, or a custom ReAct loop) and want to import `sktime-mcp` tools directly into your Python codebase without running the MCP server, you must ensure the package is properly installed.
+
+**Local Development Warning:** Do not simply clone the repository and try to import `sktime_mcp` from a sibling directory without installing it. The package relies on namespace resolution. 
+
+Always install the package in editable mode from the repository root:
+```bash
+pip install -e .
+```
+*(Alternatively, explicitly set `PYTHONPATH=.` when running your agent script).*
+
+For a complete runnable example of how a custom Python agent should load data and evaluate an estimator using the raw API, see [`examples/external_agent_integration.py`](examples/external_agent_integration.py).
+
 ## 🧭 Beginner Setup (First‑Time Users)
 
 If you are new to sktime‑mcp or to MCP‑based workflows, this section provides a minimal starting point to help you verify that your setup is working correctly.
