@@ -97,15 +97,15 @@ def simulate_query_1():
 
 def simulate_query_2():
     """
-    Query: "Compare ARIMA and Theta for my sunspot data"
+    Query: "Compare ARIMA and Theta for my airline data"
     """
     print("\n" + "=" * 70)
     print("  QUERY 2: Compare Two Forecasters")
     print("=" * 70)
-    print('\nUser: "Compare NaiveForecaster and ThetaForecaster for sunspot data"')
+    print('\nUser: "Compare NaiveForecaster and ThetaForecaster for airline data"')
 
     # Step 1: LLM plans comparison
-    print_llm_thought("I'll describe both estimators and run them on sunspot data")
+    print_llm_thought("I'll describe both estimators and run them on airline data")
 
     # Step 2: Describe first estimator
     print_tool_call("describe_estimator", {"estimator": "NaiveForecaster"})
@@ -138,21 +138,21 @@ def simulate_query_2():
         # Step 5: Run predictions
         if h1:
             print_tool_call(
-                "fit_predict", {"estimator_handle": h1, "dataset": "sunspots", "horizon": 6}
+                "fit_predict", {"estimator_handle": h1, "dataset": "airline", "horizon": 6}
             )
-            pred1 = fit_predict_tool(h1, "sunspots", 6)
+            pred1 = fit_predict_tool(h1, "airline", 6)
             print_result({"success": pred1["success"], "horizon": pred1.get("horizon")})
 
         if h2:
             print_tool_call(
-                "fit_predict", {"estimator_handle": h2, "dataset": "sunspots", "horizon": 6}
+                "fit_predict", {"estimator_handle": h2, "dataset": "airline", "horizon": 6}
             )
-            pred2 = fit_predict_tool(h2, "sunspots", 6)
+            pred2 = fit_predict_tool(h2, "airline", 6)
             print_result({"success": pred2["success"], "horizon": pred2.get("horizon")})
 
         # Step 6: Generate comparison
         print("\n🤖 LLM Response:")
-        print("   Comparison of NaiveForecaster vs ThetaForecaster on Sunspots:")
+        print("   Comparison of NaiveForecaster vs ThetaForecaster on airline:")
         print("   - NaiveForecaster: Simple baseline, uses last season's values")
         print("   - ThetaForecaster: Decomposition-based, better for trended data")
         if h1 and pred1["success"]:
@@ -163,19 +163,19 @@ def simulate_query_2():
 
 def simulate_query_3():
     """
-    Query: "Can I use ARIMA after LogTransformer?"
+    Query: "Can I use ARIMA after Detrender?"
     """
     print("\n" + "=" * 70)
     print("  QUERY 3: Validate Pipeline Composition")
     print("=" * 70)
-    print('\nUser: "Can I build a pipeline with Imputer -> Detrend -> NaiveForecaster?"')
+    print('\nUser: "Can I build a pipeline with Imputer -> Detrender -> NaiveForecaster?"')
 
     # Step 1: LLM uses composition validator
     print_llm_thought("Let me validate this pipeline composition...")
 
     validator = get_composition_validator()
 
-    pipeline = ["Imputer", "Detrend", "NaiveForecaster"]
+    pipeline = ["Imputer", "Detrender", "NaiveForecaster"]
     print_tool_call("validate_pipeline", {"components": pipeline})
     result = validator.validate_pipeline(pipeline)
     print_result(result.to_dict())

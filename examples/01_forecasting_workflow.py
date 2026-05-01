@@ -110,9 +110,9 @@ def main():
     if result.warnings:
         print(f"   Warnings: {result.warnings}")
 
-    # Invalid pipeline: Forecaster -> Forecaster
-    print("\n❌ Testing: ['NaiveForecaster', 'ExponentialSmoothing']")
-    result = validator.validate_pipeline(["NaiveForecaster", "ExponentialSmoothing"])
+    # Invalid pipeline: Forecaster -> Transformer
+    print("\n❌ Testing: ['NaiveForecaster', 'Imputer']")
+    result = validator.validate_pipeline(["NaiveForecaster", "Imputer"])
     print(f"   Valid: {result.valid}")
     if result.errors:
         print(f"   Errors: {result.errors}")
