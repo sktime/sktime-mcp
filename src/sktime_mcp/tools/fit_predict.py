@@ -41,9 +41,10 @@ def _validate_horizon(horizon: int) -> dict[str, Any]:
 
 def fit_predict_tool(
     estimator_handle: str,
-    dataset: str,
+    dataset: str | None = None,
     horizon: int = 12,
     data_handle: str | None = None,
+    exog_handle: str | None = None,
 ) -> dict[str, Any]:
     """
     Execute a complete fit-predict workflow.
@@ -53,6 +54,8 @@ def fit_predict_tool(
         dataset: Name of demo dataset (e.g., "airline", "sunspots")
         horizon: Forecast horizon (default: 12)
         data_handle: Optional handle from load_data_source for custom data
+        exog_handle: Optional handle for exogenous variables (covariates),
+            also from load_data_source. Passed as X to the estimator.
 
     Returns:
         Dictionary with:
@@ -89,7 +92,13 @@ def fit_predict_tool(
             ),
         }
     executor = get_executor()
-    return executor.fit_predict(estimator_handle, dataset, horizon, data_handle=data_handle)
+    return executor.fit_predict(
+        estimator_handle,
+        dataset,
+        horizon,
+        data_handle=data_handle,
+        exog_handle=exog_handle,
+    )
 
 
 def predict_tool(
@@ -135,6 +144,7 @@ def fit_predict_async_tool(
     estimator_handle: str,
     dataset: str | None = None,
     data_handle: str | None = None,
+    exog_handle: str | None = None,
     horizon: int = 12,
 ) -> dict[str, Any]:
     """
@@ -150,6 +160,8 @@ def fit_predict_async_tool(
         estimator_handle: Handle from instantiate_estimator
         dataset: Name of demo dataset (e.g., "airline", "sunspots")
         data_handle: Handle from load_data_source (e.g., "data_abc123")
+        exog_handle: Optional handle for exogenous covariates from load_data_source.
+            Passed as X to the estimator alongside the target y.
         horizon: Forecast horizon (default: 12)
 
     Returns:
@@ -221,6 +233,7 @@ def fit_predict_async_tool(
         estimator_handle,
         dataset=dataset,
         data_handle=data_handle,
+        exog_handle=exog_handle,
         horizon=horizon,
         job_id=job_id,
     )

@@ -312,6 +312,14 @@ async def list_tools() -> list[Tool]:
                             "of dataset for custom data)"
                         ),
                     },
+                    "exog_handle": {
+                        "type": "string",
+                        "description": (
+                            "Optional handle for exogenous variables (covariates) "
+                            "loaded via load_data_source. Passed as X to the estimator "
+                            "alongside the target y. Required for multivariate forecasting."
+                        ),
+                    },
                     "horizon": {
                         "type": "integer",
                         "description": "Forecast horizon (default: 12)",
@@ -342,6 +350,13 @@ async def list_tools() -> list[Tool]:
                     "data_handle": {
                         "type": "string",
                         "description": "Data handle from load_data_source (e.g. 'data_abc123')",
+                    },
+                    "exog_handle": {
+                        "type": "string",
+                        "description": (
+                            "Optional handle for exogenous variables (covariates) "
+                            "loaded via load_data_source. Passed as X to the estimator."
+                        ),
                     },
                     "horizon": {
                         "type": "integer",
@@ -678,6 +693,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("dataset", ""),
                 arguments.get("horizon", 12),
                 data_handle=arguments.get("data_handle"),
+                exog_handle=arguments.get("exog_handle"),
             )
 
         elif name == "fit_predict_async":
@@ -685,6 +701,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 estimator_handle=arguments["estimator_handle"],
                 dataset=arguments.get("dataset"),
                 data_handle=arguments.get("data_handle"),
+                exog_handle=arguments.get("exog_handle"),
                 horizon=arguments.get("horizon", 12),
             )
 

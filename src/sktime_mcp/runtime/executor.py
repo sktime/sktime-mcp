@@ -187,9 +187,10 @@ class Executor:
     def fit_predict(
         self,
         handle_id: str,
-        dataset: str,
+        dataset: str | None = None,
         horizon: int = 12,
         data_handle: str | None = None,
+        exog_handle: str | None = None,
     ) -> dict[str, Any]:
         """Convenience method: load data, fit, and predict."""
         if dataset and data_handle:
@@ -206,6 +207,10 @@ class Executor:
                     "'data_handle' (from load_data_source) is required."
                 ),
             }
+            
+        y = None
+        X = None
+        
         if data_handle is not None:
             # Use custom loaded data
             if data_handle not in self._data_handles:
@@ -224,6 +229,19 @@ class Executor:
                 return data_result
             y = data_result["data"]
             X = data_result.get("exog")
+            
+        if exog_handle is not None:
+            if exog_handle not in self._data_handles:
+                return {
+                    "success": False,
+                    "error": f"Unknown exog_handle: {exog_handle}",
+                    "available_handles": list(self._data_handles.keys()),
+                }
+            exog_info = self._data_handles[exog_handle]
+            # Exogenous covariates might be loaded as 'y' if no target_column was specified
+            X = exog_info.get("X")
+            if X is None or (hasattr(X, "empty") and X.empty):
+                X = exog_info.get("y")
 
         fh = list(range(1, horizon + 1))
 
@@ -238,6 +256,7 @@ class Executor:
         handle_id: str,
         dataset: str | None = None,
         data_handle: str | None = None,
+        exog_handle: str | None = None,
         horizon: int = 12,
         job_id: str | None = None,
     ) -> dict[str, Any]:
@@ -252,6 +271,7 @@ class Executor:
             handle_id: Estimator handle
             dataset: Demo dataset name
             data_handle: Data handle from load_data_source
+            exog_handle: Handle for exogenous variables (covariates)
             horizon: Forecast horizon
             job_id: Optional job ID for tracking (created if not provided)
 
@@ -329,6 +349,20 @@ class Executor:
                 y = data_result["data"]
                 X = data_result.get("exog")
 
+            # Resolve exog_handle if provided - overrides any X from dataset
+            if exog_handle:
+                if exog_handle not in self._data_handles:
+                    self._job_manager.update_job(
+                        job_id,
+                        status=JobStatus.FAILED,
+                        errors=[f"Unknown exog_handle: {exog_handle}"],
+                    )
+                    return {"success": False, "job_id": job_id}
+                exog_info = self._data_handles[exog_handle]
+                X = exog_info.get("X")
+                if X is None or (hasattr(X, "empty") and X.empty):
+                    X = exog_info.get("y")
+
             fh = list(range(1, horizon + 1))
 
             # Step 2: Fit model
@@ -338,6 +372,7 @@ class Executor:
                 current_step=f"Fitting {estimator_name} on {source_name}...",
             )
             await asyncio.sleep(0.01)
+
 
             loop = asyncio.get_event_loop()
             fit_result = await loop.run_in_executor(
