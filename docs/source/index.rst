@@ -24,6 +24,7 @@ The Semantic Engine for Time-Series Forecasting with LLMs.
    :caption: Features
 
    usage-examples
+   agent-workflow-tests
    data-sources
    background-jobs
 
