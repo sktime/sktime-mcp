@@ -259,6 +259,15 @@ class TestTools:
 class TestSearchEstimatorsLimit:
     """Tests for the limit parameter validation in search_estimators_tool."""
 
+    def test_limit_true_returns_error(self):
+        """limit=True should be rejected, not treated as 1."""
+        from sktime_mcp.tools.describe_estimator import search_estimators_tool
+
+        result = search_estimators_tool("NaiveForecaster", limit=True)
+
+        assert not result["success"]
+        assert result["error"] == "limit must be a positive integer."
+
     def test_limit_zero_returns_error(self):
         """limit=0 should return an error, not an empty list."""
         from sktime_mcp.tools.describe_estimator import search_estimators_tool
@@ -297,6 +306,28 @@ class TestSearchEstimatorsLimit:
         assert "results" in result
         assert len(result["results"]) <= 3
         assert result["count"] <= 3
+
+
+class TestListEstimatorsPaginationValidation:
+    """Tests for pagination validation in list_estimators_tool."""
+
+    def test_limit_true_returns_error(self):
+        """limit=True should be rejected, not treated as 1."""
+        from sktime_mcp.tools.list_estimators import list_estimators_tool
+
+        result = list_estimators_tool(limit=True)
+
+        assert not result["success"]
+        assert result["error"] == "limit must be a positive integer."
+
+    def test_offset_true_returns_error(self):
+        """offset=True should be rejected, not treated as 1."""
+        from sktime_mcp.tools.list_estimators import list_estimators_tool
+
+        result = list_estimators_tool(limit=2, offset=True)
+
+        assert not result["success"]
+        assert result["error"] == "offset must be a non-negative integer."
 
 
 if __name__ == "__main__":

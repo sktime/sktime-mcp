@@ -78,13 +78,13 @@ def list_estimators_tool(
 
         total = len(estimators)
 
-        if offset < 0:
+        if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
             return {
                 "success": False,
                 "error": "offset must be a non-negative integer.",
             }
 
-        if limit < 1:
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
             return {
                 "success": False,
                 "error": "limit must be a positive integer.",

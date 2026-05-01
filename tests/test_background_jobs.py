@@ -160,6 +160,16 @@ def test_list_jobs_tool_accepts_case_insensitive_status():
     job_manager.delete_job(job_id)
 
 
+def test_list_jobs_tool_rejects_boolean_limit():
+    """limit=True should be rejected, not treated as 1."""
+    from sktime_mcp.tools.job_tools import list_jobs_tool
+
+    result = list_jobs_tool(limit=True)
+
+    assert result["success"] is False
+    assert result["error"] == "limit must be a positive integer."
+
+
 def test_cleanup_old_jobs():
     """Test cleaning up old jobs."""
     job_manager = get_job_manager()

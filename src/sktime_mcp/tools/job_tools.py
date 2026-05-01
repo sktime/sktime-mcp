@@ -72,7 +72,7 @@ def list_jobs_tool(
                 "error": f"Invalid status '{status}'. Valid values: pending, running, completed, failed, cancelled",
             }
 
-    if limit < 1:
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
         return {
             "success": False,
             "error": "limit must be a positive integer.",
