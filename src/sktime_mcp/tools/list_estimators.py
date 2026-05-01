@@ -9,6 +9,15 @@ from typing import Any
 from sktime_mcp.registry.interface import get_registry
 
 
+def _suggest_tag(key: str, valid_tag_keys: set) -> list:
+    """Suggest valid tag keys for an invalid key using difflib and substring fallback."""
+    close = difflib.get_close_matches(key, valid_tag_keys, n=2, cutoff=0.6)
+    if close:
+        return close
+    # fallback: substring match e.g. "pred_int" -> "capability:pred_int"
+    return [t for t in valid_tag_keys if key in t]
+
+
 def list_estimators_tool(
     task: str | None = None,
     tags: dict[str, Any] | None = None,
@@ -23,7 +32,9 @@ def list_estimators_tool(
     are applied on top.
 
     Args:
-        task: Filter by task type. Options: "forecasting", "classification", "regression", "transformation", "clustering", "detection"
+        task: Filter by task type. Options: "forecasting", "classification",
+            "regression", "transformation", "clustering", "detection",
+            "parameter_estimation", "splitting", "network"
         tags: Filter by capability tags. Example: {"capability:pred_int": True}
         query: Search by name or description (substring, case-insensitive).
         limit: Maximum number of results to return (default: 50)
@@ -45,7 +56,9 @@ def list_estimators_tool(
         if task is not None:
             valid_tasks = registry.get_available_tasks()
             if task not in valid_tasks:
-                suggestions = difflib.get_close_matches(task, valid_tasks, n=3, cutoff=0.6)
+                suggestions = difflib.get_close_matches(
+                    task, valid_tasks, n=3, cutoff=0.6
+                )
                 return {
                     "success": False,
                     "error": f"Invalid task: '{task}'. Valid options: {valid_tasks}."
@@ -58,13 +71,14 @@ def list_estimators_tool(
             invalid_keys = [k for k in tags if k not in valid_tag_keys]
             if invalid_keys:
                 suggestions = {
-                    k: difflib.get_close_matches(k, valid_tag_keys, n=1, cutoff=0.6)
-                    for k in invalid_keys
+                    k: _suggest_tag(k, valid_tag_keys) for k in invalid_keys
                 }
                 return {
                     "success": False,
                     "error": f"Invalid tag key(s): {invalid_keys}. Use get_available_tags to see valid keys.",
-                    "suggestions": {k: v[0] if v else None for k, v in suggestions.items()},
+                    "suggestions": {
+                        k: v if v else None for k, v in suggestions.items()
+                    },
                 }
 
         if query:
