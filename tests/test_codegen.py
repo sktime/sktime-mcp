@@ -242,6 +242,26 @@ class TestExportCodeTool:
         finally:
             self._cleanup_handle(handle)
 
+    def test_include_fit_example_supported_dataset(self):
+        """Supported forecasting demo datasets should still produce example code."""
+        handle = self._create_handle()
+        try:
+            result = export_code_tool(handle, include_fit_example=True, dataset="airline")
+            assert result["success"]
+            assert "load_airline" in result["code"]
+        finally:
+            self._cleanup_handle(handle)
+
+    def test_include_fit_example_rejects_unsupported_demo_dataset(self):
+        """Supervised demo datasets should be rejected for forecasting example generation."""
+        handle = self._create_handle()
+        try:
+            result = export_code_tool(handle, include_fit_example=True, dataset="basic_motions")
+            assert result["success"] is False
+            assert "not supported for forecasting fit examples" in result["error"]
+        finally:
+            self._cleanup_handle(handle)
+
     def test_custom_var_name(self):
         """Custom var_name should appear in the generated code."""
         handle = self._create_handle()

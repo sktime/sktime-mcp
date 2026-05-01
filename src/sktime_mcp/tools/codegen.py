@@ -4,6 +4,7 @@ Code generation tool for sktime MCP.
 Generates Python code to recreate estimators and pipelines.
 """
 
+import inspect
 import keyword
 from typing import Any
 
@@ -49,6 +50,21 @@ def _get_estimator_module(estimator_name: str) -> str | None:
 def _is_valid_var_name(var_name: str) -> bool:
     """Return True when var_name is a valid non-keyword Python identifier."""
     return isinstance(var_name, str) and var_name.isidentifier() and not keyword.iskeyword(var_name)
+
+
+def _supports_forecasting_fit_example(dataset: str) -> bool:
+    """Return whether a demo dataset is compatible with the forecasting example template."""
+    module_path = DEMO_DATASETS.get(dataset)
+    if module_path is None:
+        return False
+
+    module_parts = module_path.rsplit(".", 1)
+    module = __import__(module_parts[0], fromlist=[module_parts[1]])
+    loader = getattr(module, module_parts[1])
+    signature = inspect.signature(loader)
+
+    # Supervised/classification/regression demo loaders typically expose return_X_y.
+    return "return_X_y" not in signature.parameters
 
 
 def _generate_single_estimator_code(
@@ -254,7 +270,23 @@ def export_code_tool(
     # Optionally add fit/predict example
     if include_fit_example:
         # Resolve the dataset loader from DEMO_DATASETS
-        if dataset and dataset in DEMO_DATASETS:
+        if dataset and dataset not in DEMO_DATASETS:
+            return {
+                "success": False,
+                "error": f"Unknown dataset: {dataset}",
+                "available": sorted(DEMO_DATASETS.keys()),
+            }
+
+        if dataset and not _supports_forecasting_fit_example(dataset):
+            return {
+                "success": False,
+                "error": (
+                    f"Dataset '{dataset}' is not supported for forecasting fit examples. "
+                    "Please use a forecasting-compatible demo dataset such as 'airline'."
+                ),
+            }
+
+        if dataset:
             module_path = DEMO_DATASETS[dataset]
             module_parts = module_path.rsplit(".", 1)
             loader_module = module_parts[0]
