@@ -144,6 +144,23 @@ def test_list_jobs_tool_rejects_non_string_status():
         assert "Invalid status type" in result["error"]
 
 
+def test_cancel_job_tool_rejects_non_boolean_delete():
+    """delete must be a real boolean, not a truthy string or integer."""
+    from sktime_mcp.tools.job_tools import cancel_job_tool
+
+    job_manager = get_job_manager()
+    job_id = job_manager.create_job("fit_predict", "handle", "ARIMA")
+    job_manager.update_job(job_id, status=JobStatus.COMPLETED)
+
+    result = cancel_job_tool(job_id, delete="false")
+
+    assert result["success"] is False
+    assert result["error"] == "Invalid delete type 'str'. Expected a boolean value."
+    assert job_manager.get_job(job_id) is not None
+
+    job_manager.delete_job(job_id)
+
+
 def test_list_jobs_tool_accepts_case_insensitive_status():
     """Valid status strings should still work regardless of case."""
     from sktime_mcp.tools.job_tools import list_jobs_tool
