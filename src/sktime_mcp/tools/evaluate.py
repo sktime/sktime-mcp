@@ -49,9 +49,20 @@ def evaluate_estimator_tool(
     y = data_result["data"]
     X = data_result.get("exog")
 
+    if isinstance(cv_folds, bool):
+        return {"success": False, "error": "cv_folds must be a positive integer."}
+
+    try:
+        requested_folds = int(cv_folds)
+    except (TypeError, ValueError):
+        return {"success": False, "error": "cv_folds must be a positive integer."}
+
+    if requested_folds < 1:
+        return {"success": False, "error": "cv_folds must be a positive integer."}
+
     try:
         n = len(y)
-        folds = max(1, min(int(cv_folds), max(1, n - 1)))
+        folds = min(requested_folds, max(1, n - 1))
         # Exactly `folds` backtest windows: train grows, last fold uses n-1 obs before last point.
         initial_window = max(1, n - folds)
         cv = ExpandingWindowSplitter(initial_window=initial_window, step_length=1, fh=[1])
@@ -69,7 +80,7 @@ def evaluate_estimator_tool(
             "success": True,
             "results": metrics,
             "cv_folds_run": len(metrics),
-            "cv_folds_requested": int(cv_folds),
+            "cv_folds_requested": requested_folds,
         }
     except Exception as e:
         logger.exception("Error during evaluate")

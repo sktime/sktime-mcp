@@ -38,5 +38,25 @@ def test_evaluate_estimator_tool():
         executor._handle_manager.release_handle(handle)
 
 
+@pytest.mark.parametrize("cv_folds", [0, -1, "abc", True])
+def test_evaluate_estimator_tool_rejects_invalid_cv_folds(cv_folds):
+    """Invalid fold counts should fail fast instead of being coerced."""
+    from sktime.forecasting.naive import NaiveForecaster
+
+    from sktime_mcp.runtime.executor import get_executor
+    from sktime_mcp.tools.evaluate import evaluate_estimator_tool
+
+    executor = get_executor()
+    handle = executor._handle_manager.create_handle("NaiveForecaster", NaiveForecaster(), {})
+
+    try:
+        result = evaluate_estimator_tool(handle, "airline", cv_folds=cv_folds)
+
+        assert result["success"] is False
+        assert result["error"] == "cv_folds must be a positive integer."
+    finally:
+        executor._handle_manager.release_handle(handle)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
