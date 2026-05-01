@@ -42,6 +42,16 @@ def _discover_demo_datasets() -> dict:
 DEMO_DATASETS = _discover_demo_datasets()
 
 
+def _looks_like_non_forecasting_xy_tuple(data: tuple[Any, ...]) -> bool:
+    """Heuristically detect supervised `(X, y)` demo datasets exposed via auto-discovery."""
+    if len(data) < 2:
+        return False
+
+    first, second = data[0], data[1]
+
+    return isinstance(first, pd.DataFrame) and not isinstance(second, (pd.DataFrame, pd.Series))
+
+
 class Executor:
     """
     Execution runtime for sktime estimators.
@@ -102,6 +112,15 @@ class Executor:
             data = loader()
 
             if isinstance(data, tuple):
+                if _looks_like_non_forecasting_xy_tuple(data):
+                    return {
+                        "success": False,
+                        "error": (
+                            f"Dataset '{name}' appears to be a supervised/non-forecasting demo "
+                            "dataset returned as (X, y). The current high-level workflows only "
+                            "support forecasting-style demo datasets."
+                        ),
+                    }
                 y, X = data[0], data[1] if len(data) > 1 else None
             else:
                 y, X = data, None
