@@ -188,6 +188,9 @@ Discover estimators by task type and capability tags.
 
 **Returns:** List of matching estimators with name, task, and summary info.
 
+Use `get_available_tasks` to discover valid task filter values before calling
+`list_estimators`.
+
 ---
 
 #### 2. `list_estimators` (query mode)

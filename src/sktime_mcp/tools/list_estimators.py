@@ -115,9 +115,12 @@ def list_estimators_tool(
 def get_available_tasks() -> dict[str, Any]:
     """Get list of available task types."""
     registry = get_registry()
+    tasks = registry.get_available_tasks()
     return {
         "success": True,
-        "tasks": registry.get_available_tasks(),
+        "tasks": tasks,
+        "count": len(tasks),
+        "next_step_hint": ("Use one of these values as the task argument in list_estimators."),
     }
 
 
