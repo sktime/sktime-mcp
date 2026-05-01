@@ -66,6 +66,7 @@ The `sktime-mcp` server exposes a suite of tools that your AI assistant uses on 
 |----------------------|-------------------------------|----------------|
 | **Find models** | The assistant searches the sktime registry by task, tags, or keywords. | *"What forecasting models are available?"* |
 | **Create a model or pipeline** | An estimator or multi-step pipeline is instantiated with your chosen parameters. | *"Set up an ARIMA(1,1,1) model"* |
+| **Inspect valid pipeline steps** | The assistant checks what types of estimators can come before or after a component. | *"What can I compose after Detrender?"* |
 | **Run a forecast** | The model is fitted on your data and predictions are generated. | *"Forecast the airline dataset 12 months ahead"* |
 | **Cross-validate a model** | The model is evaluated across multiple folds using an expanding window to get metrics like MAE and RMSE. | *"Evaluate ARIMA using 3-fold cross-validation"* |
 | **Run async background jobs** | Heavy training operations run in the background without blocking the client. | *"Fit this model in the background"* |

@@ -187,6 +187,45 @@ class TestTools:
         assert not result["success"]
         assert "error" in result
 
+    def test_get_valid_compositions_tool(self):
+        """Test valid composition metadata for a known transformer."""
+        from sktime_mcp.tools.composition import get_valid_compositions_tool
+
+        result = get_valid_compositions_tool("Detrender")
+
+        assert result["success"]
+        assert result["estimator"] == "Detrender"
+        assert "forecasting" in result["can_precede"]
+        assert "transformation" in result["can_follow"]
+        assert "next_step_hint" in result
+
+    def test_get_valid_compositions_tool_unknown_estimator(self):
+        """Unknown estimators should return a structured error."""
+        from sktime_mcp.tools.composition import get_valid_compositions_tool
+
+        result = get_valid_compositions_tool("NotARealEstimator12345")
+
+        assert not result["success"]
+        assert result["can_precede"] == []
+        assert result["can_follow"] == []
+        assert "Unknown estimator" in result["error"]
+
+    async def test_get_valid_compositions_registered_and_callable(self):
+        """Test get_valid_compositions is exposed through the MCP server."""
+        import json
+
+        from sktime_mcp.server import call_tool, list_tools
+
+        tools = await list_tools()
+        assert "get_valid_compositions" in {tool.name for tool in tools}
+
+        response = await call_tool("get_valid_compositions", {"estimator": "ARIMA"})
+        payload = json.loads(response[0].text)
+
+        assert payload["success"]
+        assert payload["estimator"] == "ARIMA"
+        assert "forecasting" in payload["can_follow"]
+
     def test_list_available_data_no_filter(self):
         """list_available_data with no args returns both system_demos and active_handles."""
         from sktime_mcp.tools.list_available_data import list_available_data_tool
