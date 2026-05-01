@@ -57,6 +57,20 @@ For development (editable install from source):
 pip install -e ".[dev]"
 ```
 
+## Testing sktime-mcp Workflows
+
+This project is in active development, and contributors are encouraged to test
+core MCP workflows across different clients such as Claude Desktop, Gemini, and
+other MCP-compatible tools.
+
+### 1. Run the MCP server
+
+After installing the project, start the server with:
+
+```bash
+python -m sktime_mcp.server
+
+
 For a more detailed first-time setup flow, including MCP server verification and troubleshooting, see [Beginner Setup](#-beginner-setup-firsttime-users).
 
 ## 🧭 Beginner Setup (First‑Time Users)
