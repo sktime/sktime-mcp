@@ -916,6 +916,160 @@ class Executor:
             }
 
 
+
+    def _resolve_data(self, dataset: str | None, data_handle: str | None) -> dict:
+        if dataset and data_handle:
+            return {"success": False, "error": "Provide either 'dataset' or 'data_handle', not both."}
+        if data_handle is None and (not dataset or not str(dataset).strip()):
+            return {"success": False, "error": "Either 'dataset' or 'data_handle' is required."}
+            
+        if data_handle is not None:
+            if data_handle not in self._data_handles:
+                return {"success": False, "error": f"Unknown data handle: {data_handle}"}
+            data_info = self._data_handles[data_handle]
+            return {"success": True, "y": data_info["y"], "X": data_info.get("X")}
+        else:
+            load_result = self.load_dataset(dataset)
+            if not load_result["success"]:
+                return load_result
+            return {"success": True, "y": load_result["data"], "X": load_result.get("exog")}
+
+    def describe_data(self, dataset: str | None = None, data_handle: str | None = None) -> dict[str, Any]:
+        """Return fingerprinting statistics for a dataset."""
+        import pandas as pd
+        import numpy as np
+        
+        res = self._resolve_data(dataset, data_handle)
+        if not res["success"]: return res
+        
+        y = res["y"]
+        stats = {"success": True, "type": str(type(y).__name__)}
+        
+        if hasattr(y, "__len__"):
+            stats["length"] = len(y)
+        
+        if hasattr(y, "index") and hasattr(y.index, "freqstr"):
+            stats["frequency"] = y.index.freqstr
+            
+        if isinstance(y, pd.Series) or isinstance(y, pd.DataFrame):
+            stats["n_missing"] = int(y.isna().sum().sum() if isinstance(y, pd.DataFrame) else y.isna().sum())
+            try:
+                stats["mean"] = float(y.mean().iloc[0] if isinstance(y, pd.DataFrame) else y.mean())
+                stats["std"] = float(y.std().iloc[0] if isinstance(y, pd.DataFrame) else y.std())
+            except Exception:
+                pass
+                
+            # Quick trend slope proxy: fit a line to the first series
+            try:
+                if isinstance(y, pd.DataFrame):
+                    y_vals = y.iloc[:, 0].dropna().values
+                else:
+                    y_vals = y.dropna().values
+                    
+                if len(y_vals) > 1:
+                    x_vals = np.arange(len(y_vals))
+                    slope, _ = np.polyfit(x_vals, y_vals, 1)
+                    stats["trend_slope_per_step"] = float(slope)
+            except Exception:
+                pass
+                
+        return stats
+
+    def score_on_holdout(self, estimator_handle: str, dataset: str | None = None, data_handle: str | None = None, holdout_size: int = 12, metric: str = "MeanAbsoluteError") -> dict[str, Any]:
+        """Fit on train, score on holdout tail, return scalar metric."""
+        from sktime.split import temporal_train_test_split
+        from sktime.performance_metrics.forecasting import mean_absolute_error, mean_squared_error, mean_absolute_percentage_error
+        
+        res = self._resolve_data(dataset, data_handle)
+        if not res["success"]: return res
+        y = res["y"]
+        X = res["X"]
+        
+        if estimator_handle not in self._handles:
+            return {"success": False, "error": f"Unknown handle: {estimator_handle}"}
+            
+        est_info = self._handles[estimator_handle]
+        if est_info.task != "forecasting":
+            return {"success": False, "error": "score_on_holdout only supports forecasting tasks"}
+            
+        try:
+            from sktime_mcp.registry.interface import get_registry
+            registry = get_registry()
+            node = registry.get_estimator_by_name(est_info.estimator_name)
+            est_class = node.class_ref
+            model = est_class(**est_info.params)
+            
+            # Split
+            if X is not None:
+                y_train, y_test, X_train, X_test = temporal_train_test_split(y, X, test_size=holdout_size)
+            else:
+                y_train, y_test = temporal_train_test_split(y, test_size=holdout_size)
+                X_train, X_test = None, None
+                
+            # Fit
+            model.fit(y=y_train, X=X_train)
+            
+            # Predict
+            fh = list(range(1, holdout_size + 1))
+            y_pred = model.predict(fh=fh, X=X_test)
+            
+            # Score
+            if metric == "MeanSquaredError":
+                score = mean_squared_error(y_test, y_pred)
+            elif metric == "MeanAbsolutePercentageError":
+                score = mean_absolute_percentage_error(y_test, y_pred)
+            else:
+                score = mean_absolute_error(y_test, y_pred)
+                
+            return {
+                "success": True,
+                "estimator": est_info.estimator_name,
+                "metric": metric,
+                "score": float(score),
+                "holdout_size": holdout_size
+            }
+        except Exception as e:
+            import traceback
+            return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+
+    def commit_estimator(self, estimator_handle: str, dataset: str | None = None, data_handle: str | None = None, rationale: str | None = None) -> dict[str, Any]:
+        """Fit estimator on the FULL dataset and mark it as fitted in the handle manager."""
+        res = self._resolve_data(dataset, data_handle)
+        if not res["success"]: return res
+        y = res["y"]
+        X = res["X"]
+        
+        if estimator_handle not in self._handles:
+            return {"success": False, "error": f"Unknown handle: {estimator_handle}"}
+            
+        est_info = self._handles[estimator_handle]
+        
+        try:
+            # Recreate model
+            from sktime_mcp.registry.interface import get_registry
+            registry = get_registry()
+            node = registry.get_estimator_by_name(est_info.estimator_name)
+            est_class = node.class_ref
+            model = est_class(**est_info.params)
+            
+            # Fit on full data
+            model.fit(y=y, X=X)
+            
+            # Update handle state
+            est_info.fitted = True
+            est_info.instance = model
+            
+            return {
+                "success": True,
+                "message": f"Successfully committed {est_info.estimator_name}",
+                "handle": estimator_handle,
+                "rationale": rationale
+            }
+        except Exception as e:
+            import traceback
+            return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+
+
 _executor_instance: Executor | None = None
 
 

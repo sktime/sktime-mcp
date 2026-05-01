@@ -61,6 +61,7 @@ from sktime_mcp.tools.list_estimators import (
     list_estimators_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
+from sktime_mcp.tools.agentic_iterative import describe_data_tool, score_on_holdout_tool, commit_estimator_tool
 
 # ---------------------------------------------------------------------------
 # Server configuration via environment variables
@@ -521,7 +522,47 @@ async def list_tools() -> list[Tool]:
                 "required": ["handle"],
             },
         ),
+                Tool(
+            name="commit_estimator",
+            description="Commit a forecaster by refitting on the full dataset.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {"type": "string", "description": "The handle of the estimator"},
+                    "dataset": {"type": "string", "description": "Dataset name"},
+                    "data_handle": {"type": "string", "description": "Loaded data handle"},
+                    "rationale": {"type": "string", "description": "Optional rationale"}
+                },
+                "required": ["estimator_handle"],
+            },
+        ),
         Tool(
+            name="score_on_holdout",
+            description="Score an estimator on a holdout tail.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {"type": "string", "description": "The handle of the estimator"},
+                    "dataset": {"type": "string", "description": "Dataset name"},
+                    "data_handle": {"type": "string", "description": "Loaded data handle"},
+                    "holdout_size": {"type": "integer", "description": "Holdout size", "default": 12},
+                    "metric": {"type": "string", "description": "Metric name", "default": "MeanAbsoluteError"}
+                },
+                "required": ["estimator_handle"],
+            },
+        ),
+        Tool(
+            name="describe_data",
+            description="Returns statistical fingerprint of a dataset.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "dataset": {"type": "string", "description": "Dataset name"},
+                    "data_handle": {"type": "string", "description": "Loaded data handle"}
+                },
+            },
+        ),
+Tool(
             name="save_model",
             description="Save an estimator/pipeline handle using sktime MLflow integration",
             inputSchema={
@@ -748,6 +789,30 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("dataset"),
             )
 
+        elif name == "describe_data":
+            dataset = arguments.get("dataset")
+            data_handle = arguments.get("data_handle")
+            result = describe_data_tool(dataset, data_handle)
+            return [TextContent(type="text", text=json.dumps(result, default=str))]
+            
+        elif name == "score_on_holdout":
+            result = score_on_holdout_tool(
+                arguments.get("estimator_handle"),
+                arguments.get("dataset"),
+                arguments.get("data_handle"),
+                arguments.get("holdout_size", 12),
+                arguments.get("metric", "MeanAbsoluteError")
+            )
+            return [TextContent(type="text", text=json.dumps(result, default=str))]
+            
+        elif name == "commit_estimator":
+            result = commit_estimator_tool(
+                arguments.get("estimator_handle"),
+                arguments.get("dataset"),
+                arguments.get("data_handle"),
+                arguments.get("rationale")
+            )
+            return [TextContent(type="text", text=json.dumps(result, default=str))]
         elif name == "save_model":
             result = save_model_tool(
                 arguments["estimator_handle"],
