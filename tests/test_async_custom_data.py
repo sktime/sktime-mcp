@@ -43,13 +43,14 @@ class TestAsyncCustomData:
 
     def test_async_with_dataset(self):
         """Async with a demo dataset should return a job_id."""
-        from sktime_mcp.tools.fit_predict import fit_predict_async_tool
+        from sktime_mcp.tools.fit_predict import fit_predict_tool
 
         handle = self._get_estimator_handle()
-        result = fit_predict_async_tool(
+        result = fit_predict_tool(
             estimator_handle=handle,
             dataset="airline",
             horizon=3,
+            background=True,
         )
 
         assert result["success"], f"Expected success, got: {result}"
@@ -58,15 +59,16 @@ class TestAsyncCustomData:
 
     def test_async_with_data_handle(self):
         """Async with a custom data handle should return a job_id."""
-        from sktime_mcp.tools.fit_predict import fit_predict_async_tool
+        from sktime_mcp.tools.fit_predict import fit_predict_tool
 
         handle = self._get_estimator_handle()
         data_handle = self._load_custom_data()
 
-        result = fit_predict_async_tool(
+        result = fit_predict_tool(
             estimator_handle=handle,
             data_handle=data_handle,
             horizon=5,
+            background=True,
         )
 
         assert result["success"], f"Expected success, got: {result}"
@@ -75,14 +77,15 @@ class TestAsyncCustomData:
 
     def test_async_both_provided_error(self):
         """Providing both dataset and data_handle should fail."""
-        from sktime_mcp.tools.fit_predict import fit_predict_async_tool
+        from sktime_mcp.tools.fit_predict import fit_predict_tool
 
         handle = self._get_estimator_handle()
-        result = fit_predict_async_tool(
+        result = fit_predict_tool(
             estimator_handle=handle,
             dataset="airline",
             data_handle="data_fake123",
             horizon=3,
+            background=True,
         )
 
         assert not result["success"]
@@ -91,12 +94,13 @@ class TestAsyncCustomData:
 
     def test_async_neither_provided_error(self):
         """Omitting both dataset and data_handle should fail."""
-        from sktime_mcp.tools.fit_predict import fit_predict_async_tool
+        from sktime_mcp.tools.fit_predict import fit_predict_tool
 
         handle = self._get_estimator_handle()
-        result = fit_predict_async_tool(
+        result = fit_predict_tool(
             estimator_handle=handle,
             horizon=3,
+            background=True,
         )
 
         assert not result["success"]
@@ -104,13 +108,14 @@ class TestAsyncCustomData:
 
     def test_async_invalid_data_handle(self):
         """An invalid data_handle should fail at the executor level."""
-        from sktime_mcp.tools.fit_predict import fit_predict_async_tool
+        from sktime_mcp.tools.fit_predict import fit_predict_tool
 
         handle = self._get_estimator_handle()
-        result = fit_predict_async_tool(
+        result = fit_predict_tool(
             estimator_handle=handle,
             data_handle="data_nonexistent",
             horizon=3,
+            background=True,
         )
 
         # The tool succeeds in scheduling the job (returns job_id),

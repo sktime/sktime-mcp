@@ -41,24 +41,26 @@ def _validate_horizon(horizon: int) -> dict[str, Any]:
 
 def fit_predict_tool(
     estimator_handle: str,
-    dataset: str,
+    dataset: str | None = None,
     horizon: int = 12,
     data_handle: str | None = None,
+    background: bool = False,
 ) -> dict[str, Any]:
     """
-    Execute a complete fit-predict workflow.
+    Execute a complete fit-predict workflow (Sync or Async).
 
     Args:
         estimator_handle: Handle from instantiate_estimator
         dataset: Name of demo dataset (e.g., "airline", "sunspots")
         horizon: Forecast horizon (default: 12)
         data_handle: Optional handle from load_data_source for custom data
+        background: If True, runs the job in the background and returns a job_id
 
     Returns:
-        Dictionary with:
-        - success: bool
-        - predictions: Forecast values
-        - horizon: Number of steps predicted
+        If background=False (default):
+            Dictionary with predictions and success status.
+        If background=True:
+            Dictionary with success status, job_id, and tracking message.
 
     Example:
         >>> fit_predict_tool("est_abc123", "airline", horizon=12)
@@ -80,101 +82,7 @@ def fit_predict_tool(
             "error": "Provide either 'dataset' or 'data_handle', not both.",
         }
 
-    if data_handle is None and (not dataset or not str(dataset).strip()):
-        return {
-            "success": False,
-            "error": (
-                "Either 'dataset' (e.g. 'airline') or "
-                "'data_handle' (from load_data_source) is required."
-            ),
-        }
-    executor = get_executor()
-    return executor.fit_predict(estimator_handle, dataset, horizon, data_handle=data_handle)
-
-
-def predict_tool(
-    estimator_handle: str,
-    horizon: int = 12,
-) -> dict[str, Any]:
-    """
-    Generate predictions from a fitted estimator.
-
-    Args:
-        estimator_handle: Handle of a fitted estimator
-        horizon: Forecast horizon
-
-    Returns:
-        Dictionary with predictions
-    """
-    validation = _validate_horizon(horizon)
-    if not validation["valid"]:
-        return {
-            "success": False,
-            "error": validation["error"],
-        }
-    executor = get_executor()
-    fh = list(range(1, horizon + 1))
-    return executor.predict(estimator_handle, fh=fh)
-
-
-def list_datasets_tool() -> dict[str, Any]:
-    """
-    List available demo datasets.
-
-    Returns:
-        Dictionary with list of dataset names
-    """
-    executor = get_executor()
-    return {
-        "success": True,
-        "datasets": executor.list_datasets(),
-    }
-
-
-def fit_predict_async_tool(
-    estimator_handle: str,
-    dataset: str | None = None,
-    data_handle: str | None = None,
-    horizon: int = 12,
-) -> dict[str, Any]:
-    """
-    Execute a fit-predict workflow in the background (non-blocking).
-
-    Schedules the training as a background job and returns immediately
-    with a job_id. Use check_job_status to monitor progress.
-
-    Accepts either a demo dataset name or a data handle from
-    load_data_source -- exactly one must be provided.
-
-    Args:
-        estimator_handle: Handle from instantiate_estimator
-        dataset: Name of demo dataset (e.g., "airline", "sunspots")
-        data_handle: Handle from load_data_source (e.g., "data_abc123")
-        horizon: Forecast horizon (default: 12)
-
-    Returns:
-        Dictionary with:
-        - success: bool
-        - job_id: Job ID for tracking progress
-        - message: Information about the job
-
-    Example:
-        >>> fit_predict_async_tool("est_abc123", dataset="airline", horizon=12)
-        >>> fit_predict_async_tool("est_abc123", data_handle="data_xyz", horizon=5)
-    """
-    validation = _validate_horizon(horizon)
-    if not validation["valid"]:
-        return {
-            "success": False,
-            "error": validation["error"],
-        }
-    if dataset and data_handle:
-        return {
-            "success": False,
-            "error": "Provide either 'dataset' or 'data_handle', not both.",
-        }
-
-    if not dataset and not data_handle:
+    if not data_handle and (not dataset or not str(dataset).strip()):
         return {
             "success": False,
             "error": (
@@ -183,14 +91,21 @@ def fit_predict_async_tool(
             ),
         }
 
+    executor = get_executor()
+
+    if not background:
+        return executor.fit_predict(
+            estimator_handle, str(dataset) if dataset else "", horizon, data_handle=data_handle
+        )
+
+    # --- Async Logic ---
     import asyncio
 
     from sktime_mcp.runtime.jobs import get_job_manager
 
-    executor = get_executor()
     job_manager = get_job_manager()
 
-    # Get estimator info
+    # Get estimator info for better logging
     try:
         handle_info = executor._handle_manager.get_info(estimator_handle)
         estimator_name = handle_info.estimator_name
@@ -237,3 +152,44 @@ def fit_predict_async_tool(
         "data_source": source_name,
         "horizon": horizon,
     }
+
+
+def predict_tool(
+    estimator_handle: str,
+    horizon: int = 12,
+) -> dict[str, Any]:
+    """
+    Generate predictions from a fitted estimator.
+
+    Args:
+        estimator_handle: Handle of a fitted estimator
+        horizon: Forecast horizon
+
+    Returns:
+        Dictionary with predictions
+    """
+    validation = _validate_horizon(horizon)
+    if not validation["valid"]:
+        return {
+            "success": False,
+            "error": validation["error"],
+        }
+    executor = get_executor()
+    fh = list(range(1, horizon + 1))
+    return executor.predict(estimator_handle, fh=fh)
+
+
+def list_datasets_tool() -> dict[str, Any]:
+    """
+    List available demo datasets.
+
+    Returns:
+        Dictionary with list of dataset names
+    """
+    executor = get_executor()
+    return {
+        "success": True,
+        "datasets": executor.list_datasets(),
+    }
+
+

@@ -13,7 +13,7 @@ sys.path.insert(0, "src")
 
 from sktime_mcp.runtime.executor import get_executor
 from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
-from sktime_mcp.tools.data_tools import load_data_source_async_tool
+from sktime_mcp.tools.data_tools import load_data_source_tool
 
 
 class TestAsyncDataLoadingTool(unittest.TestCase):
@@ -27,7 +27,7 @@ class TestAsyncDataLoadingTool(unittest.TestCase):
             "time_column": "date",
             "target_column": "value",
         }
-        result = load_data_source_async_tool(config)
+        result = load_data_source_tool(config, background=True)
         self.assertTrue(result["success"])
         self.assertIn("job_id", result)
         self.assertEqual(result["source_type"], "pandas")
