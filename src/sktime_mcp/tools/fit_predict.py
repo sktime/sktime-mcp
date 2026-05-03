@@ -194,9 +194,11 @@ def fit_predict_async_tool(
     try:
         handle_info = executor._handle_manager.get_info(estimator_handle)
         estimator_name = handle_info.estimator_name
-    except Exception as e:
-        logger.warning(f"Could not get estimator name: {e}")
-        estimator_name = "Unknown"
+    except Exception:
+        return {
+            "success": False,
+            "error": f"Unknown estimator handle: {estimator_handle}",
+        }
 
     source_name = dataset if dataset else data_handle
 
