@@ -163,6 +163,17 @@ If you are using a virtual environment, or if `sktime-mcp` is not on your `PATH`
 }
 ```
 
+## ⚙️ Configuration
+
+The server can be configured via environment variables:
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| `SKTIME_MCP_LOG_LEVEL` | Logging verbosity (e.g. `INFO`, `DEBUG`, `WARNING`) | `"WARNING"` |
+| `SKTIME_MCP_AUTO_FORMAT` | Automatically format time series data on load (`true`/`false`) | `"true"` |
+| `SKTIME_MCP_JOB_MAX_AGE_HOURS` | Maximum age in hours before background jobs are cleared | `24` |
+| `SKTIME_MCP_JOB_CLEANUP_INTERVAL` | Interval in seconds for periodic job cleanup checks | `3600` |
+
 ## 📚 Available Tools
 
 ### Discovery & Search

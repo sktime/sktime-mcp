@@ -62,16 +62,11 @@ from sktime_mcp.tools.list_estimators import (
 )
 from sktime_mcp.tools.save_model import save_model_tool
 
-# ---------------------------------------------------------------------------
-# Server configuration via environment variables
-# ---------------------------------------------------------------------------
-JOB_MAX_AGE_HOURS = int(os.environ.get("SKTIME_MCP_JOB_MAX_AGE_HOURS", "24"))
-JOB_CLEANUP_INTERVAL_SECS = int(os.environ.get("SKTIME_MCP_JOB_CLEANUP_INTERVAL", "3600"))
+from sktime_mcp.config import settings
 
 # Configure logging to stderr with detailed format
-_LOG_LEVEL = os.environ.get("SKTIME_MCP_LOG_LEVEL", "WARNING").upper()
 logging.basicConfig(
-    level=getattr(logging, _LOG_LEVEL, logging.WARNING),
+    level=getattr(logging, settings.log_level, logging.WARNING),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler()],
 )
@@ -810,10 +805,10 @@ async def _periodic_job_cleanup():
     from sktime_mcp.runtime.jobs import get_job_manager
 
     while True:
-        await asyncio.sleep(JOB_CLEANUP_INTERVAL_SECS)
+        await asyncio.sleep(settings.job_cleanup_interval_secs)
         try:
             job_manager = get_job_manager()
-            removed = job_manager.cleanup_old_jobs(JOB_MAX_AGE_HOURS)
+            removed = job_manager.cleanup_old_jobs(settings.job_max_age_hours)
             if removed:
                 logger.info(f"Periodic cleanup: removed {removed} old job(s)")
         except Exception:

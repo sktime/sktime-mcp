@@ -54,9 +54,8 @@ class Executor:
         self._handle_manager = get_handle_manager()
         self._job_manager = get_job_manager()
         self._data_handles = {}  # Store data handles
-        self._auto_format_enabled = (
-            os.environ.get("SKTIME_MCP_AUTO_FORMAT", "true").lower() == "true"
-        )
+        from sktime_mcp.config import settings
+        self._auto_format_enabled = settings.auto_format
 
     def instantiate(
         self,
