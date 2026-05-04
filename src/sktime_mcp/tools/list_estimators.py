@@ -9,6 +9,33 @@ from typing import Any
 from sktime_mcp.registry.interface import get_registry
 
 
+def _validate_discovery_filters(
+    task: str | None,
+    tags: dict[str, Any] | None,
+    query: str | None,
+) -> dict[str, Any]:
+    """Validate top-level discovery tool filters."""
+    if task is not None and not isinstance(task, str):
+        return {
+            "valid": False,
+            "error": f"'task' must be a string or None, got {type(task).__name__}.",
+        }
+
+    if tags is not None and not isinstance(tags, dict):
+        return {
+            "valid": False,
+            "error": f"'tags' must be a dictionary or None, got {type(tags).__name__}.",
+        }
+
+    if query is not None and not isinstance(query, str):
+        return {
+            "valid": False,
+            "error": f"'query' must be a string or None, got {type(query).__name__}.",
+        }
+
+    return {"valid": True}
+
+
 def list_estimators_tool(
     task: str | None = None,
     tags: dict[str, Any] | None = None,
@@ -39,6 +66,13 @@ def list_estimators_tool(
         - limit: Current limit (for pagination)
         - has_more: True if more results exist beyond this page
     """
+    validation = _validate_discovery_filters(task=task, tags=tags, query=query)
+    if not validation["valid"]:
+        return {
+            "success": False,
+            "error": validation["error"],
+        }
+
     registry = get_registry()
     try:
         # Validate task

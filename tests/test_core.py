@@ -187,6 +187,51 @@ class TestTools:
         assert not result["success"]
         assert "error" in result
 
+    def test_describe_estimator_rejects_non_string_input(self):
+        """describe_estimator should return a validation error for non-strings."""
+        from sktime_mcp.tools.describe_estimator import describe_estimator_tool
+
+        result = describe_estimator_tool(["ARIMA"])
+
+        assert result["success"] is False
+        assert "'estimator' must be a non-empty string" in result["error"]
+
+    def test_search_estimators_rejects_non_string_query(self):
+        """search_estimators should return a validation error for non-string queries."""
+        from sktime_mcp.tools.describe_estimator import search_estimators_tool
+
+        result = search_estimators_tool(["ARIMA"])
+
+        assert result["success"] is False
+        assert "'query' must be a non-empty string" in result["error"]
+
+    def test_list_estimators_rejects_non_string_task(self):
+        """list_estimators should validate task filter type."""
+        from sktime_mcp.tools.list_estimators import list_estimators_tool
+
+        result = list_estimators_tool(task=["forecasting"])
+
+        assert result["success"] is False
+        assert "'task' must be a string or None" in result["error"]
+
+    def test_list_estimators_rejects_non_dict_tags(self):
+        """list_estimators should validate tag filter type."""
+        from sktime_mcp.tools.list_estimators import list_estimators_tool
+
+        result = list_estimators_tool(tags=["capability:pred_int"])
+
+        assert result["success"] is False
+        assert "'tags' must be a dictionary or None" in result["error"]
+
+    def test_list_estimators_rejects_non_string_query(self):
+        """list_estimators should validate query filter type."""
+        from sktime_mcp.tools.list_estimators import list_estimators_tool
+
+        result = list_estimators_tool(query=["ARIMA"])
+
+        assert result["success"] is False
+        assert "'query' must be a string or None" in result["error"]
+
     def test_list_available_data_no_filter(self):
         """list_available_data with no args returns both system_demos and active_handles."""
         from sktime_mcp.tools.list_available_data import list_available_data_tool

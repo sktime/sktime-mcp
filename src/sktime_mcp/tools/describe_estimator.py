@@ -10,6 +10,26 @@ from sktime_mcp.registry.interface import get_registry
 from sktime_mcp.registry.tag_resolver import get_tag_resolver
 
 
+def _validate_non_empty_string(value: Any, arg_name: str, example: str) -> dict[str, Any]:
+    """Validate a top-level string tool argument."""
+    if not isinstance(value, str):
+        return {
+            "valid": False,
+            "error": (
+                f"'{arg_name}' must be a non-empty string, got {type(value).__name__}. "
+                f'Example: "{example}"'
+            ),
+        }
+
+    if not value.strip():
+        return {
+            "valid": False,
+            "error": f"'{arg_name}' must be a non-empty string.",
+        }
+
+    return {"valid": True}
+
+
 def describe_estimator_tool(estimator: str) -> dict[str, Any]:
     """
     Get detailed information about a specific estimator.
@@ -39,6 +59,13 @@ def describe_estimator_tool(estimator: str) -> dict[str, Any]:
             ...
         }
     """
+    validation = _validate_non_empty_string(estimator, "estimator", "ARIMA")
+    if not validation["valid"]:
+        return {
+            "success": False,
+            "error": validation["error"],
+        }
+
     registry = get_registry()
     tag_resolver = get_tag_resolver()
 
@@ -84,6 +111,13 @@ def search_estimators_tool(query: str, limit: int = 20) -> dict[str, Any]:
     Returns:
         Dictionary with matching estimators
     """
+    validation = _validate_non_empty_string(query, "query", "ARIMA")
+    if not validation["valid"]:
+        return {
+            "success": False,
+            "error": validation["error"],
+        }
+
     if limit < 1:
         return {
             "success": False,
