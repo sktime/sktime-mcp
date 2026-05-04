@@ -245,7 +245,7 @@ job_id = job_result["job_id"]
 datasets = list_available_data(is_demo=True)
 
 # Search for other estimators
-estimators = search_estimators("prophet")
+estimators = list_estimators(query="prophet")
 
 # 4. Check training progress
 status = check_job_status(job_id)
