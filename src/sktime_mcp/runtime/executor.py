@@ -58,6 +58,43 @@ class Executor:
             os.environ.get("SKTIME_MCP_AUTO_FORMAT", "true").lower() == "true"
         )
 
+    @staticmethod
+    def _get_index_type(index: Any) -> str:
+        """Return a compact, agent-friendly label for the time index."""
+        if isinstance(index, pd.DatetimeIndex):
+            return "datetime"
+        if isinstance(index, pd.PeriodIndex):
+            return "period"
+        if isinstance(index, pd.RangeIndex):
+            return "range"
+        if pd.api.types.is_integer_dtype(index.dtype):
+            return "integer"
+        return type(index).__name__.lower()
+
+    def _build_data_metadata(
+        self,
+        base_metadata: dict[str, Any],
+        data: pd.DataFrame,
+        y: pd.Series,
+        X: pd.DataFrame | None,
+    ) -> dict[str, Any]:
+        """Augment adapter metadata with agent-facing shape semantics."""
+        metadata = base_metadata.copy()
+        metadata["columns"] = [y.name if hasattr(y, "name") and y.name else "target"]
+        if X is not None:
+            metadata["exog_columns"] = list(X.columns)
+        metadata["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
+        metadata["target_scitype"] = "Series"
+        metadata["target_variates"] = "multivariate" if getattr(y, "ndim", 1) > 1 else "univariate"
+        metadata["has_exog"] = X is not None
+        metadata["exog_variates"] = (
+            "none" if X is None else ("multivariate" if len(X.columns) > 1 else "univariate")
+        )
+        metadata["index_type"] = self._get_index_type(y.index)
+        metadata["n_target_columns"] = 1
+        metadata["n_exog_columns"] = 0 if X is None else len(X.columns)
+        return metadata
+
     def instantiate(
         self,
         estimator_name: str,
@@ -571,12 +608,7 @@ class Executor:
             y, X = adapter.to_sktime_format(data)
 
             # Update metadata to reflect the target and used columns
-            metadata = adapter.get_metadata().copy()
-            metadata["columns"] = [y.name if hasattr(y, "name") and y.name else "target"]
-            if X is not None:
-                metadata["exog_columns"] = list(X.columns)
-            # Inject column dtypes so LLMs can distinguish time index vs target
-            metadata["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
+            metadata = self._build_data_metadata(adapter.get_metadata(), data, y, X)
             # Generate handle
             data_handle = f"data_{uuid.uuid4().hex[:8]}"
 
@@ -609,8 +641,7 @@ class Executor:
                 except Exception as e:
                     logger.warning(f"Auto-formatting failed: {e}")
                     # Continue with unformatted data if formatting fails
-            _final_meta = adapter.get_metadata().copy()
-            _final_meta["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
+            _final_meta = self._build_data_metadata(adapter.get_metadata(), data, y, X)
             return {
                 "success": True,
                 "data_handle": data_handle,
@@ -694,12 +725,7 @@ class Executor:
 
             y, X = adapter.to_sktime_format(data)
 
-            metadata = adapter.get_metadata().copy()
-            metadata["columns"] = [y.name if hasattr(y, "name") and y.name else "target"]
-            if X is not None:
-                metadata["exog_columns"] = list(X.columns)
-            # Inject column dtypes so LLMs can distinguish time index vs target
-            metadata["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
+            metadata = self._build_data_metadata(adapter.get_metadata(), data, y, X)
             data_handle = f"data_{uuid.uuid4().hex[:8]}"
 
             self._data_handles[data_handle] = {

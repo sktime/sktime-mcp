@@ -103,3 +103,59 @@ class TestExecutorDataIntegration:
 
         cleanup = executor.release_data_handle(result["data_handle"])
         assert cleanup["success"]
+
+    def test_load_data_source_exposes_agent_friendly_metadata(self):
+        executor = get_executor()
+
+        config = {
+            "type": "pandas",
+            "data": {
+                "date": pd.date_range(start="2020-01-01", periods=12, freq="D"),
+                "sales": [100 + i for i in range(12)],
+                "promo": [0, 1] * 6,
+                "temp": [20 + i for i in range(12)],
+            },
+            "time_column": "date",
+            "target_column": "sales",
+            "exog_columns": ["promo", "temp"],
+        }
+
+        result = executor.load_data_source(config)
+        assert result["success"]
+
+        metadata = result["metadata"]
+        assert metadata["target_scitype"] == "Series"
+        assert metadata["target_variates"] == "univariate"
+        assert metadata["has_exog"] is True
+        assert metadata["exog_variates"] == "multivariate"
+        assert metadata["index_type"] == "datetime"
+        assert metadata["n_target_columns"] == 1
+        assert metadata["n_exog_columns"] == 2
+
+        cleanup = executor.release_data_handle(result["data_handle"])
+        assert cleanup["success"]
+
+    def test_load_data_source_range_index_metadata(self):
+        executor = get_executor()
+
+        config = {
+            "type": "pandas",
+            "data": {
+                "y": [1, 2, 3, 4, 5],
+            },
+        }
+
+        result = executor.load_data_source(config)
+        assert result["success"]
+
+        metadata = result["metadata"]
+        assert metadata["target_scitype"] == "Series"
+        assert metadata["target_variates"] == "univariate"
+        assert metadata["has_exog"] is False
+        assert metadata["exog_variates"] == "none"
+        assert metadata["index_type"] == "range"
+        assert metadata["n_target_columns"] == 1
+        assert metadata["n_exog_columns"] == 0
+
+        cleanup = executor.release_data_handle(result["data_handle"])
+        assert cleanup["success"]
