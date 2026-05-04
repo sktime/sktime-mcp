@@ -20,6 +20,15 @@ class Settings:
         """
         return os.environ.get("SKTIME_MCP_LOG_LEVEL", "WARNING").upper()
 
+    @property
+    def log_path(self) -> str | None:
+        """
+        Optional file path to output logs to in addition to stderr.
+        Env Var: SKTIME_MCP_LOG_PATH
+        Default: None
+        """
+        return os.environ.get("SKTIME_MCP_LOG_PATH")
+
     # -- Data Formatting --
     @property
     def auto_format(self) -> bool:

@@ -8,7 +8,11 @@ that exposes sktime's registry and execution capabilities to LLMs.
 import asyncio
 import json
 import logging
+import sys
+from io import TextIOWrapper
 from typing import Any
+
+import anyio
 
 try:
     import numpy as np
@@ -63,10 +67,14 @@ from sktime_mcp.tools.list_estimators import (
 from sktime_mcp.tools.save_model import save_model_tool
 
 # Configure logging to stderr with detailed format
+_handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
+if settings.log_path:
+    _handlers.append(logging.FileHandler(settings.log_path))
+
 logging.basicConfig(
     level=getattr(logging, settings.log_level, logging.WARNING),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],
+    handlers=_handlers,
 )
 logger = logging.getLogger(__name__)
 
@@ -815,9 +823,17 @@ async def _periodic_job_cleanup():
 
 async def run_server():
     """Run the MCP server."""
+    # Stdio safety: redirect stdout to stderr to protect MCP JSON-RPC
+    # streams from being corrupted by stray prints in third-party libraries.
+    original_stdout = sys.stdout
+    sys.stdout = sys.stderr
+
+    # Explicitly wrap the original stdout buffer for the MCP server output
+    mcp_stdout = anyio.wrap_file(TextIOWrapper(original_stdout.buffer, encoding="utf-8"))
+
     asyncio.create_task(_periodic_job_cleanup())
 
-    async with stdio_server() as (read_stream, write_stream):
+    async with stdio_server(stdout=mcp_stdout) as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
 
