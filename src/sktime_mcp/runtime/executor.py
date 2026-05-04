@@ -8,7 +8,6 @@ and running fit/predict operations.
 import asyncio
 import inspect
 import logging
-import os
 import uuid
 from typing import Any
 
@@ -55,6 +54,7 @@ class Executor:
         self._job_manager = get_job_manager()
         self._data_handles = {}  # Store data handles
         from sktime_mcp.config import settings
+
         self._auto_format_enabled = settings.auto_format
 
     def instantiate(

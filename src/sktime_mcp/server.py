@@ -8,7 +8,6 @@ that exposes sktime's registry and execution capabilities to LLMs.
 import asyncio
 import json
 import logging
-import os
 from typing import Any
 
 try:
@@ -30,6 +29,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 from sktime_mcp.composition.validator import get_composition_validator
+from sktime_mcp.config import settings
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_async_tool,
@@ -61,8 +61,6 @@ from sktime_mcp.tools.list_estimators import (
     list_estimators_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
-
-from sktime_mcp.config import settings
 
 # Configure logging to stderr with detailed format
 logging.basicConfig(
