@@ -92,7 +92,14 @@ class DataSourceAdapter(ABC):
         target_col = self.config.get("target_column")
         exog_cols = self.config.get("exog_columns", [])
 
-        if target_col and target_col in data.columns:
+        if target_col is not None and target_col not in data.columns:
+            available_columns = ", ".join(repr(col) for col in data.columns)
+            raise ValueError(
+                f"Target column {target_col!r} not found in data. "
+                f"Available columns: [{available_columns}]"
+            )
+
+        if target_col is not None:
             y = data[target_col]
 
             # Get exogenous variables if specified

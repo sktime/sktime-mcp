@@ -77,7 +77,6 @@ logging.basicConfig(
     handlers=_handlers,
 )
 logger = logging.getLogger(__name__)
-
 # Create MCP server instance
 server = Server("sktime-mcp")
 
