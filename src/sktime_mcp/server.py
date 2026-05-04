@@ -62,11 +62,30 @@ from sktime_mcp.tools.list_estimators import (
 )
 from sktime_mcp.tools.save_model import save_model_tool
 
+
 # ---------------------------------------------------------------------------
 # Server configuration via environment variables
 # ---------------------------------------------------------------------------
-JOB_MAX_AGE_HOURS = int(os.environ.get("SKTIME_MCP_JOB_MAX_AGE_HOURS", "24"))
-JOB_CLEANUP_INTERVAL_SECS = int(os.environ.get("SKTIME_MCP_JOB_CLEANUP_INTERVAL", "3600"))
+def _get_int_env(name: str, default: int) -> int:
+    """Return an integer env var value, falling back to default on parse errors."""
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        logging.getLogger(__name__).warning(
+            "Invalid %s=%r; using default value %d instead.",
+            name,
+            raw_value,
+            default,
+        )
+        return default
+
+
+JOB_MAX_AGE_HOURS = _get_int_env("SKTIME_MCP_JOB_MAX_AGE_HOURS", 24)
+JOB_CLEANUP_INTERVAL_SECS = _get_int_env("SKTIME_MCP_JOB_CLEANUP_INTERVAL", 3600)
 
 # Configure logging to stderr with detailed format
 _LOG_LEVEL = os.environ.get("SKTIME_MCP_LOG_LEVEL", "WARNING").upper()
