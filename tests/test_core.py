@@ -256,6 +256,73 @@ class TestTools:
         assert calls["serialization_format"] == "pickle"
 
 
+class TestRangeIndexFormatting:
+    """Tests for RangeIndex (integer-indexed) time series formatting (issue #390)."""
+
+    def test_format_data_handle_rangeindex_no_crash(self):
+        """format_data_handle should not crash on integer-indexed data."""
+        import pandas as pd
+
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+
+        # Manually store a RangeIndex series as if load_data_source created it
+        y = pd.Series([1, 2, 3, 4, 5], name="target")
+        handle = "data_test_int"
+        executor._data_handles[handle] = {
+            "y": y,
+            "X": None,
+            "metadata": {"columns": ["target"]},
+            "validation": {},
+            "config": {},
+        }
+
+        result = executor.format_data_handle(handle, auto_infer_freq=True)
+
+        assert result["success"], f"Expected success but got: {result}"
+        assert result["changes_made"]["frequency"] == "Integer"
+        assert result["changes_made"]["frequency_set"] is True
+
+    def test_format_data_handle_rangeindex_metadata(self):
+        """Metadata should contain 'Integer' as the frequency for RangeIndex data."""
+        import pandas as pd
+
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+
+        y = pd.Series([10, 20, 30], name="value")
+        handle = "data_test_meta"
+        executor._data_handles[handle] = {
+            "y": y,
+            "X": None,
+            "metadata": {"columns": ["value"]},
+            "validation": {},
+            "config": {},
+        }
+
+        result = executor.format_data_handle(handle)
+
+        assert result["success"]
+        assert result["metadata"]["frequency"] == "Integer"
+
+    def test_load_data_source_rangeindex_end_to_end(self):
+        """load_data_source with integer-indexed inline data should succeed."""
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+
+        config = {
+            "type": "pandas",
+            "data": {"y": [1, 2, 3, 4]},
+        }
+
+        result = executor.load_data_source(config)
+
+        assert result["success"], f"Expected success but got: {result}"
+
+
 class TestSearchEstimatorsLimit:
     """Tests for the limit parameter validation in search_estimators_tool."""
 
