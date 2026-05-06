@@ -217,6 +217,14 @@ def fit_predict_async_tool(
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
+    # If the event loop is not running (e.g. when called from a plain script
+    # rather than from within the MCP server), start it in a background thread
+    # so that run_coroutine_threadsafe has a live loop to schedule work on.
+    if not loop.is_running():
+        import threading
+        thread = threading.Thread(target=loop.run_forever, daemon=True)
+        thread.start()
+
     coro = executor.fit_predict_async(
         estimator_handle,
         dataset=dataset,
