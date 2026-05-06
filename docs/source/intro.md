@@ -46,12 +46,14 @@ Get up and running in seconds. Use with **Claude Desktop**, **Cursor**, or any M
 
 ### 1. Install
 
+**Zero-install via uvx (recommended):** if you have [uv](https://github.com/astral-sh/uv) installed, skip this step — uvx fetches and runs the package automatically when your MCP client starts.
+
 ```bash
-# Install directly from PyPI (with all optional dependencies recommended)
-pip install "sktime-mcp[all]"
+# Or install explicitly with pip
+pip install sktime-mcp
 ```
 
-Alternatively, when contributing, use GitHub to install from source:
+When contributing, install from source:
 
 ```bash
 git clone https://github.com/sktime/sktime-mcp.git
@@ -61,13 +63,22 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-### 2. Run
-```bash
-sktime-mcp
+### 2. Connect (Claude Desktop / Claude Code Config)
+Add this to your `claude_desktop_config.json`:
+
+**With uvx (no prior install needed):**
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "uvx",
+      "args": ["sktime-mcp"]
+    }
+  }
+}
 ```
 
-### 3. Connect (Claude Desktop Config)
-Add this to your `claude_desktop_config.json`:
+**With pip-installed package:**
 ```json
 {
   "mcpServers": {

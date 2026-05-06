@@ -11,31 +11,63 @@ Welcome to the **sktime-mcp** User Guide. This guide walks you through installin
 Before you begin, ensure you have:
 
 - **Python 3.10+** installed.
-- **pip** package manager.
-- A compatible MCP client (like **Claude Desktop**, **Cursor**, or compatible **VS Code extensions** like Cline).
+- A compatible MCP client (like **Claude Desktop**, **Cursor**, or **VS Code with Copilot**).
 
 ### Installation
 
-Install the package directly from the source. We recommend installing with all dependencies to unlock full functionality.
+**Zero-install via uvx (recommended):** if you have [uv](https://github.com/astral-sh/uv) installed, no install step is needed. Just configure your MCP client (see below) and `uvx` handles everything automatically.
 
 ```bash
-# Standard installation
-pip install -e .
+# Or install with pip
+pip install sktime-mcp
 
-# Recommended: Install with all optional extras (SQL, Forecasting, Files)
-pip install -e ".[all]"
+# With all optional extras (SQL, forecasting models, file formats)
+pip install "sktime-mcp[all]"
 ```
 
-### Running the Server
+### MCP Client Configuration
 
-Start the MCP server to begin listening for connections:
+**With uvx (recommended — no prior install needed):**
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "uvx",
+      "args": ["sktime-mcp"]
+    }
+  }
+}
+```
+
+**With optional extras:**
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "uvx",
+      "args": ["sktime-mcp[forecasting,sql]"]
+    }
+  }
+}
+```
+
+**With pip-installed package:**
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "sktime-mcp"
+    }
+  }
+}
+```
+
+### Running the Server manually
 
 ```bash
 sktime-mcp
-```
 
-*Or manually via Python:*
-```bash
+# Or via Python
 python -m sktime_mcp.server
 ```
 
