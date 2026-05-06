@@ -44,6 +44,7 @@ from sktime_mcp.tools.fit_predict import (
 )
 from sktime_mcp.tools.format_tools import format_time_series_tool
 from sktime_mcp.tools.instantiate import (
+    clone_estimator_tool,
     instantiate_estimator_tool,
     instantiate_pipeline_tool,
     list_handles_tool,
@@ -610,6 +611,25 @@ async def list_tools() -> list[Tool]:
                 "required": ["job_id"],
             },
         ),
+        Tool(
+            name="clone_estimator",
+            description=(
+                "Clone an existing estimator handle, creating a fresh "
+                "unfitted copy with identical hyperparameters. Useful for "
+                "A/B testing the same model on different data, or preserving "
+                "the original unfitted state while fitting a copy."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "handle": {
+                        "type": "string",
+                        "description": "Handle ID of the estimator to clone",
+                    },
+                },
+                "required": ["handle"],
+            },
+        ),
     ]
 
 
@@ -782,6 +802,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
 
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
+
+        # -- Cloning --------------------------------------------------------
+        elif name == "clone_estimator":
+            result = clone_estimator_tool(arguments["handle"])
 
         else:
             result = {"error": f"Unknown tool: {name}"}
