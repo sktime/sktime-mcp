@@ -50,6 +50,86 @@ def _get_demo_datasets() -> dict:
     return _DEMO_DATASETS
 
 
+def _apply_calendar_frequency_and_gap_fill(
+    y: pd.Series,
+    X: pd.DataFrame | None,
+    changes_made: dict[str, Any],
+) -> tuple[pd.Series, pd.DataFrame | None]:
+    """
+    Infer frequency and reindex to a full calendar range when safe.
+
+    Only ``DatetimeIndex`` and ``PeriodIndex`` support this path. Other index
+    types (e.g. ``RangeIndex``) are left unchanged: inferring a daily frequency
+    and calling ``pd.date_range`` on non-datetime bounds corrupts or empties
+    the series while still appearing to succeed.
+    """
+    idx = y.index
+
+    if isinstance(idx, pd.DatetimeIndex):
+        freq = idx.freq
+
+        if freq is None:
+            try:
+                freq = pd.infer_freq(idx)
+            except (ValueError, TypeError):
+                freq = None
+
+            if freq is None:
+                time_diffs = idx.to_series().diff().dropna()
+                if len(time_diffs) > 0:
+                    most_common_diff = time_diffs.mode()[0]
+
+                    if most_common_diff == pd.Timedelta(days=1):
+                        freq = "D"
+                    elif most_common_diff == pd.Timedelta(hours=1):
+                        freq = "h"
+                    elif most_common_diff == pd.Timedelta(minutes=1):
+                        freq = "min"
+                    elif most_common_diff == pd.Timedelta(seconds=1):
+                        freq = "s"
+                    elif most_common_diff == pd.Timedelta(days=7):
+                        freq = "W"
+                    elif most_common_diff.days >= 28 and most_common_diff.days <= 31:
+                        freq = "MS"
+                    else:
+                        freq = "D"
+
+            if freq:
+                full_range = pd.date_range(start=idx.min(), end=idx.max(), freq=freq)
+
+                n_gaps = len(full_range) - len(y)
+
+                y = y.reindex(full_range)
+                if X is not None:
+                    X = X.reindex(full_range)
+
+                changes_made["gaps_filled"] = n_gaps
+                changes_made["frequency_set"] = True
+                changes_made["frequency"] = freq
+
+    elif isinstance(idx, pd.PeriodIndex):
+        try:
+            freq = idx.freq or pd.infer_freq(idx)
+        except (ValueError, TypeError):
+            freq = idx.freq
+        if freq:
+            full_range = pd.period_range(start=idx.min(), end=idx.max(), freq=freq)
+            n_gaps = len(full_range) - len(y)
+            y = y.reindex(full_range)
+            if X is not None:
+                X = X.reindex(full_range)
+            changes_made["gaps_filled"] = n_gaps
+            changes_made["frequency_set"] = True
+            changes_made["frequency"] = freq
+    else:
+        changes_made["calendar_gap_fill_skipped"] = True
+        changes_made["calendar_gap_fill_reason"] = (
+            f"Unsupported index type {type(idx).__name__} for calendar frequency inference"
+        )
+
+    return y, X
+
+
 class Executor:
     """
     Execution runtime for sktime estimators.
@@ -795,48 +875,9 @@ class Executor:
         if X is not None:
             X = X.sort_index()
 
-        # 3. Infer and set frequency
+        # 3. Infer and set frequency (calendar gap-fill only for DatetimeIndex / PeriodIndex)
         if auto_infer_freq:
-            freq = y.index.freq
-
-            if freq is None:
-                # Try to infer
-                freq = pd.infer_freq(y.index)
-
-                if freq is None:
-                    # Manual inference
-                    time_diffs = y.index.to_series().diff().dropna()
-                    if len(time_diffs) > 0:
-                        most_common_diff = time_diffs.mode()[0]
-
-                        if most_common_diff == pd.Timedelta(days=1):
-                            freq = "D"
-                        elif most_common_diff == pd.Timedelta(hours=1):
-                            freq = "h"
-                        elif most_common_diff == pd.Timedelta(minutes=1):
-                            freq = "min"
-                        elif most_common_diff == pd.Timedelta(seconds=1):
-                            freq = "s"
-                        elif most_common_diff == pd.Timedelta(days=7):
-                            freq = "W"
-                        elif most_common_diff.days >= 28 and most_common_diff.days <= 31:
-                            freq = "MS"
-                        else:
-                            freq = "D"
-
-                # Create complete date range
-                if freq:
-                    full_range = pd.date_range(start=y.index.min(), end=y.index.max(), freq=freq)
-
-                    n_gaps = len(full_range) - len(y)
-
-                    y = y.reindex(full_range)
-                    if X is not None:
-                        X = X.reindex(full_range)
-
-                    changes_made["gaps_filled"] = n_gaps
-                    changes_made["frequency_set"] = True
-                    changes_made["frequency"] = freq
+            y, X = _apply_calendar_frequency_and_gap_fill(y, X, changes_made)
 
         # 4. Fill missing values
         if fill_missing and y.isna().any():
@@ -862,7 +903,11 @@ class Executor:
             "metadata": {
                 **data_info["metadata"],
                 "formatted": True,
-                "frequency": str(y.index.freq) if y.index.freq else changes_made.get("frequency"),
+                "frequency": (
+                    str(ix_freq)
+                    if (ix_freq := getattr(y.index, "freq", None)) is not None
+                    else changes_made.get("frequency")
+                ),
                 "rows": len(y),
                 "start_date": str(y.index.min()),
                 "end_date": str(y.index.max()),
