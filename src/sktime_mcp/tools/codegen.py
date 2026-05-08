@@ -51,6 +51,24 @@ def _is_valid_var_name(var_name: str) -> bool:
     return isinstance(var_name, str) and var_name.isidentifier() and not keyword.iskeyword(var_name)
 
 
+def _resolve_task(
+    estimator_name: str, is_pipeline: bool, params: dict[str, Any]
+) -> str:
+    """Determine the task type for an estimator or pipeline handle."""
+    registry = get_registry()
+    if is_pipeline:
+        components = params.get("components", [])
+        if components:
+            last = registry.get_estimator_by_name(components[-1])
+            if last:
+                return last.task
+    else:
+        node = registry.get_estimator_by_name(estimator_name)
+        if node:
+            return node.task
+    return "forecasting"
+
+
 def _generate_single_estimator_code(
     estimator_name: str, params: dict[str, Any], var_name: str = "model"
 ) -> dict[str, Any]:
@@ -253,19 +271,30 @@ def export_code_tool(
 
     # Optionally add fit/predict example
     if include_fit_example:
-        # Resolve the dataset loader from demo datasets
-        _demo_datasets = _get_demo_datasets()
-        if dataset and dataset in _demo_datasets:
-            module_path = _demo_datasets[dataset]
-            module_parts = module_path.rsplit(".", 1)
-            loader_module = module_parts[0]
-            loader_func = module_parts[1]
-        else:
-            # Default to airline for backward compatibility
-            loader_module = "sktime.datasets"
-            loader_func = "load_airline"
+        task = _resolve_task(estimator_name, is_pipeline, params)
+        if task in ("classification", "regression"):
+            example_code = f"""
 
-        example_code = f"""
+# Example usage:
+# Prepare your panel data X and labels y, then:
+# {var_name}.fit(X, y)
+# predictions = {var_name}.predict(X_test)
+# print(predictions)
+"""
+        elif task == "forecasting":
+            # Resolve the dataset loader from demo datasets.
+            _demo_datasets = _get_demo_datasets()
+            if dataset and dataset in _demo_datasets:
+                module_path = _demo_datasets[dataset]
+                module_parts = module_path.rsplit(".", 1)
+                loader_module = module_parts[0]
+                loader_func = module_parts[1]
+            else:
+                # Default to airline for backward compatibility.
+                loader_module = "sktime.datasets"
+                loader_func = "load_airline"
+
+            example_code = f"""
 
 # Example usage:
 # Load data
@@ -279,6 +308,12 @@ y = {loader_func}()
 fh = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]  # 12-step ahead forecast
 predictions = {var_name}.predict(fh=fh)
 print(predictions)
+"""
+        else:
+            example_code = f"""
+
+# Example usage:
+# See sktime docs for the '{task}' task API.
 """
         code += example_code
 
