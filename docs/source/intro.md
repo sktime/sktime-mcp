@@ -26,7 +26,7 @@ sktime‑mcp is designed for:
 - **Data scientists** who want to expose sktime workflows to language models without unsafe code generation.
 - **Platform teams** integrating forecasting capabilities into tools like Claude Desktop, Cursor, or custom MCP clients.
 
-If you are new to MCP‑based workflows, start with the **Quick Start** below, then explore the **Use Cases** and **User Guide** for deeper examples.
+If you are new to MCP‑based workflows, start with the **Quick Start** below, then explore the **Client Setup Guide**, **Use Cases**, and **User Guide** for deeper examples.
 
 ---
 
@@ -89,6 +89,8 @@ Add this to your `claude_desktop_config.json`:
 }
 ```
 
+If you want a more practical setup guide with troubleshooting notes for Claude Desktop, Cursor, VS Code style clients, and custom local agents, see [Client Setup Guide](client-setup.md).
+
 ---
 
 
@@ -97,6 +99,7 @@ Add this to your `claude_desktop_config.json`:
 | Section | Description |
 | :--- | :--- |
 | [**Use Cases**](use-cases.md) | Step-by-step workflows for coders and business users. |
+| [**Client Setup Guide**](client-setup.md) | Practical MCP client configuration and troubleshooting. |
 | [**User Guide**](user-guide.md) | Comprehensive manual on using tools, workflows, and best practices. |
 | [**Usage Examples**](usage-examples.md) | Example scripts and advanced usage patterns. |
 | [**Background Jobs**](background-jobs.md) | Running long operations asynchronously. |

@@ -74,6 +74,8 @@ python -m sktime_mcp.server
 !!! tip "Client Configuration"
     Ensure your MCP client (e.g., Claude Desktop) is configured to run this command. See the [official VSCode guidelines](https://code.visualstudio.com/docs/copilot/customization/mcp-servers#_configure-the-mcpjson-file) for configuration examples.
 
+For a more practical setup and troubleshooting guide across Claude Desktop, Cursor, VS Code style clients, and custom local agents, see [Client Setup Guide](client-setup.md).
+
 ---
 
 ## How It Works

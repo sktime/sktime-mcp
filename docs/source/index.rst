@@ -16,6 +16,7 @@ The Semantic Engine for Time-Series Forecasting with LLMs.
    :caption: Getting Started
 
    intro
+   client-setup
    use-cases
    user-guide
 
