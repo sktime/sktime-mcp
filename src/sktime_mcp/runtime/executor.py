@@ -333,7 +333,7 @@ class Executor:
                         status=JobStatus.FAILED,
                         errors=[f"Failed to load dataset: {data_result.get('error')}"],
                     )
-                    return data_result
+                    return {**data_result, "job_id": job_id}
 
                 y = data_result["data"]
                 X = data_result.get("exog")
@@ -359,7 +359,7 @@ class Executor:
                     status=JobStatus.FAILED,
                     errors=[f"Fit failed: {fit_result.get('error')}"],
                 )
-                return fit_result
+                return {**fit_result, "job_id": job_id}
 
             # Step 3: Generate predictions
             self._job_manager.update_job(
@@ -379,7 +379,7 @@ class Executor:
                     status=JobStatus.FAILED,
                     errors=[f"Prediction failed: {predict_result.get('error')}"],
                 )
-                return predict_result
+                return {**predict_result, "job_id": job_id}
 
             # Mark as completed
             self._job_manager.update_job(
@@ -390,7 +390,7 @@ class Executor:
                 result=predict_result,
             )
 
-            return predict_result
+            return {**predict_result, "job_id": job_id}
 
         except Exception as e:
             logger.exception(f"Error in async fit_predict for job {job_id}")
