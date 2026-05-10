@@ -1,5 +1,6 @@
 """Tools module for sktime MCP."""
 
+from sktime_mcp.tools.analyze_data import analyze_data_tool
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_async_tool,
@@ -33,6 +34,7 @@ from sktime_mcp.tools.list_estimators import (
 from sktime_mcp.tools.save_model import save_model_tool
 
 __all__ = [
+    "analyze_data_tool",
     "list_estimators_tool",
     "get_available_tags",
     "describe_estimator_tool",

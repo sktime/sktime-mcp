@@ -30,6 +30,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 from sktime_mcp.composition.validator import get_composition_validator
+from sktime_mcp.tools.analyze_data import analyze_data_tool
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_async_tool,
@@ -486,6 +487,34 @@ async def list_tools() -> list[Tool]:
                 "required": ["data_handle"],
             },
         ),
+        Tool(
+            name="analyze_data",
+            description=(
+                "Analyze a loaded time series and compute statistical characteristics. "
+                "Returns stationarity (ADF test), trend (linear regression), "
+                "and seasonality (ACF analysis) to guide model selection."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Handle from load_data_source",
+                    },
+                    "include_acf": {
+                        "type": "boolean",
+                        "description": "Include full ACF/PACF values in output (default: True)",
+                        "default": True,
+                    },
+                    "max_acf_lags": {
+                        "type": "integer",
+                        "description": "Maximum lags for ACF analysis (default: 24)",
+                        "default": 24,
+                    },
+                },
+                "required": ["data_handle"],
+            },
+        ),
         # -- Export / Persistence --------------------------------------------
         Tool(
             name="export_code",
@@ -726,6 +755,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("fill_missing", True),
                 arguments.get("remove_duplicates", True),
             )
+
+        elif name == "analyze_data":
+            result = analyze_data_tool(
+                arguments["data_handle"],
+                arguments.get("include_acf", True),
+                arguments.get("max_acf_lags", 24),
+            )
+            result = sanitize_for_json(result)
 
         elif name == "auto_format_on_load":
             # Deprecated — now controlled via SKTIME_MCP_AUTO_FORMAT env var
