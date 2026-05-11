@@ -57,6 +57,44 @@ For development (editable install from source):
 pip install -e ".[dev]"
 ```
 
+### 🐳 Docker
+
+Run without installing anything locally (only Docker required):
+
+```bash
+# Build the image
+docker build -t sktime-mcp .
+
+# Run the MCP server (stdio transport)
+docker run -i sktime-mcp
+```
+
+Or use Docker Compose:
+
+```bash
+docker compose build
+docker compose run sktime-mcp
+```
+
+**Claude Desktop** — use Docker as the MCP server command:
+
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "sktime-mcp"]
+    }
+  }
+}
+```
+
+Environment variables can be passed at runtime:
+
+```bash
+docker run -i -e SKTIME_MCP_LOG_LEVEL=DEBUG sktime-mcp
+```
+
 For a more detailed first-time setup flow, including MCP server verification and troubleshooting, see [Beginner Setup](#-beginner-setup-firsttime-users).
 
 ## 🧭 Beginner Setup (First‑Time Users)
@@ -527,7 +565,10 @@ sktime-mcp/
 │   └── tools/              # MCP tool implementations
 ├── docs/                   # Sphinx documentation source
 ├── examples/               # Usage examples
-└── tests/                  # Test suite
+├── tests/                  # Test suite
+├── Dockerfile              # Multi-stage container build
+├── docker-compose.yml      # Compose service definition
+└── .dockerignore           # Docker build context filter
 ```
 
 ## 🧪 Running Tests
