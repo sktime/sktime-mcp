@@ -253,7 +253,7 @@ if __name__ == "__main__":
 
 
 class TestDocstringTruncation:
-    """Regression test for issue #335 — bump the docstring truncation
+    """Regression test for issue #335, bump the docstring truncation
     cap so the numpydoc ``Parameters`` section, which appears past
     the first 500 chars in many sktime estimators, survives the
     EstimatorNode.to_dict serialisation."""

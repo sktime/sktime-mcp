@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 # Maximum characters of docstring to expose to LLMs in to_dict() output.
 # Earlier versions truncated at 500 chars, but sktime's numpydoc-style
-# docstrings put the "Parameters" section — the most useful information
-# for an agent reasoning about hyperparameters — past the first 500
+# docstrings put the "Parameters" section, the most useful information
+# for an agent reasoning about hyperparameters, past the first 500
 # chars in many estimators (issue #335). Bumping the cap to 4000 keeps
 # the response compact enough for an MCP tool result while preserving
 # the Parameters section for the vast majority of sktime estimators.
