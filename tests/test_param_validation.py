@@ -34,7 +34,7 @@ class TestValidateParams:
 
     def test_params_valid_dict(self):
         """A normal dict with primitive values should be valid."""
-        result = _validate_params({"order": [1, 1, 1], "suppress_warnings": True})
+        result = _validate_params({"strategy": "last"}, estimator_name="NaiveForecaster")
         assert result["valid"] is True
 
     @pytest.mark.parametrize(
@@ -54,15 +54,16 @@ class TestValidateParams:
         assert result["valid"] is False
         assert expected_error in result["error"]
 
-    def test_unknown_key_produces_warning(self):
-        """Unknown param key should pass validation but produce a warning."""
+    def test_unknown_key_produces_error(self):
+        """Unknown param key should fail validation with a hard error."""
         result = _validate_params(
             {"nonexistent_param_xyz": 1},
             estimator_name="NaiveForecaster",
         )
-        assert result["valid"] is True
-        assert len(result["warnings"]) > 0
-        assert "nonexistent_param_xyz" in result["warnings"][0]
+        assert result["valid"] is False
+        assert "Invalid parameter(s) for estimator" in result["error"]
+        assert "nonexistent_param_xyz" in result["error"]
+        assert "Valid parameters are:" in result["error"]
 
 
 class TestInstantiateEstimatorValidation:
@@ -85,6 +86,13 @@ class TestInstantiateEstimatorValidation:
         result = instantiate_estimator_tool("NaiveForecaster", {"fn": print})
         assert result["success"] is False
         assert "Unsupported type" in result["error"]
+        
+    def test_invalid_key_returns_error(self):
+        """Invalid parameter keys should return success=False with a descriptive error."""
+        result = instantiate_estimator_tool("NaiveForecaster", {"made_up_key": True})
+        assert result["success"] is False
+        assert "Invalid parameter(s)" in result["error"]
+        assert "made_up_key" in result["error"]
 
 
 class TestPipelineParamsValidation:
