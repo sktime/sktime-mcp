@@ -28,7 +28,17 @@ except ImportError:
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.types import (
+    GetPromptResult,
+    Prompt,
+    PromptMessage,
+    Resource,
+    ResourceTemplate,
+    TextContent,
+    TextResourceContents,
+    Tool,
+)
+from pydantic import AnyUrl
 
 from sktime_mcp.composition.validator import get_composition_validator
 from sktime_mcp.tools.codegen import export_code_tool
@@ -796,6 +806,163 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     except Exception as e:
         logger.exception(f"Error in tool {name}")
         return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
+
+
+# ===================================================================
+# Resources
+# ===================================================================
+
+
+@server.list_resources()
+async def list_resources() -> list[Resource]:
+    """List static sktime resources."""
+    return [
+        Resource(
+            uri="sktime://tags",
+            name="Tag Catalog",
+            description="All queryable capability tags with descriptions and allowed values",
+            mimeType="application/json",
+        ),
+        Resource(
+            uri="sktime://datasets",
+            name="Demo Datasets",
+            description="Available built-in demo datasets for forecasting",
+            mimeType="application/json",
+        ),
+    ]
+
+
+@server.list_resource_templates()
+async def list_resource_templates() -> list[ResourceTemplate]:
+    """List URI templates for dynamic sktime resources."""
+    return [
+        ResourceTemplate(
+            uriTemplate="sktime://estimators/{name}",
+            name="Estimator Documentation",
+            description="Full documentation for a named sktime estimator (e.g. sktime://estimators/ARIMA)",
+            mimeType="application/json",
+        ),
+    ]
+
+
+@server.read_resource()
+async def read_resource(uri: AnyUrl) -> list[TextResourceContents]:
+    """Return content for a sktime resource URI."""
+    uri_str = str(uri)
+
+    if uri_str == "sktime://tags":
+        result = get_available_tags()
+        text = json.dumps(result.get("tags", result), indent=2)
+    elif uri_str == "sktime://datasets":
+        from sktime_mcp.runtime.executor import get_executor
+        executor = get_executor()
+        datasets = executor.list_datasets()
+        text = json.dumps({"datasets": datasets, "count": len(datasets)}, indent=2)
+    elif uri_str.startswith("sktime://estimators/"):
+        name = uri_str[len("sktime://estimators/"):]
+        result = describe_estimator_tool(name)
+        text = json.dumps({k: v for k, v in result.items() if k != "success"}, indent=2)
+    else:
+        raise ValueError(f"Unknown resource URI: {uri_str}")
+
+    return [TextResourceContents(uri=uri, text=text, mimeType="application/json")]
+
+
+# ===================================================================
+# Prompts
+# ===================================================================
+
+
+@server.list_prompts()
+async def list_prompts() -> list[Prompt]:
+    """List available sktime workflow prompt templates."""
+    return [
+        Prompt(
+            name="forecast_univariate",
+            description="Step-by-step workflow for forecasting a univariate time series with sktime-mcp",
+        ),
+        Prompt(
+            name="compare_forecasters",
+            description="Workflow for evaluating and comparing multiple forecasters on the same dataset",
+        ),
+        Prompt(
+            name="build_pipeline",
+            description="Workflow for composing transformers and a forecaster into a pipeline",
+        ),
+    ]
+
+
+@server.get_prompt()
+async def get_prompt(name: str, arguments: dict[str, str] | None = None) -> GetPromptResult:
+    """Return a sktime workflow prompt template."""
+    if name == "forecast_univariate":
+        return GetPromptResult(
+            description="Step-by-step univariate forecasting workflow",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text="Walk me through forecasting a univariate time series with sktime-mcp."),
+                ),
+                PromptMessage(
+                    role="assistant",
+                    content=TextContent(type="text", text=(
+                        "To forecast a univariate series with sktime-mcp:\n\n"
+                        "1. **Load your data** — use `load_data_source` with a file path, URL, or demo dataset name.\n"
+                        "2. **Discover estimators** — call `list_estimators` with `task: forecasting` to see available forecasters.\n"
+                        "3. **Instantiate** — call `instantiate_estimator` with your chosen estimator and any hyperparameters.\n"
+                        "4. **Fit and predict** — call `fit_predict` with the estimator handle, data handle or dataset name, and forecast horizon.\n"
+                        "5. **Evaluate** — optionally call `evaluate_estimator` to see cross-validation metrics.\n"
+                        "6. **Export** — call `export_code` to get a standalone Python script reproducing the workflow."
+                    )),
+                ),
+            ],
+        )
+    elif name == "compare_forecasters":
+        return GetPromptResult(
+            description="Workflow for comparing multiple forecasters",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text="How do I compare multiple forecasters on the same dataset?"),
+                ),
+                PromptMessage(
+                    role="assistant",
+                    content=TextContent(type="text", text=(
+                        "To compare forecasters with sktime-mcp:\n\n"
+                        "1. **Load data once** — call `load_data_source` and reuse the same data handle for all models.\n"
+                        "2. **Instantiate each model** — call `instantiate_estimator` for each forecaster (e.g. NaiveForecaster, ARIMA, ExponentialSmoothing).\n"
+                        "3. **Evaluate each** — call `evaluate_estimator` for each handle with the same dataset and `cv_folds` setting.\n"
+                        "4. **Compare metrics** — inspect MAPE or other metrics across results to identify the best model.\n"
+                        "5. **Predict with the winner** — call `fit_predict` with the best-performing handle and your desired horizon."
+                    )),
+                ),
+            ],
+        )
+    elif name == "build_pipeline":
+        return GetPromptResult(
+            description="Workflow for building a transformer + forecaster pipeline",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text="How do I build a pipeline with a transformer and a forecaster?"),
+                ),
+                PromptMessage(
+                    role="assistant",
+                    content=TextContent(type="text", text=(
+                        "To build a forecasting pipeline with sktime-mcp:\n\n"
+                        "1. **Find components** — use `list_estimators` with `task: transformation` for transformers "
+                        "and `task: forecasting` for forecasters.\n"
+                        "2. **Validate** — call `validate_pipeline` with your component names in order "
+                        "(e.g. `['Detrender', 'ARIMA']`) to confirm compatibility before instantiating.\n"
+                        "3. **Instantiate** — call `instantiate_pipeline` with the component names and any per-component params.\n"
+                        "4. **Fit and predict** — call `fit_predict` with the pipeline handle, your data, and horizon.\n"
+                        "5. **Export** — call `export_code` to get the full pipeline as a standalone Python script."
+                    )),
+                ),
+            ],
+        )
+
+    raise ValueError(f"Unknown prompt: {name}")
 
 
 # ===================================================================
