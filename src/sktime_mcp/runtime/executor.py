@@ -605,11 +605,11 @@ class Executor:
                         data_handle, auto_infer_freq=True, fill_missing=True, remove_duplicates=True
                     )
                     if format_result["success"]:
-                        # Return the NEW handle (formatted)
+                        # Free the raw handle — the formatted copy supersedes it
+                        del self._data_handles[data_handle]
                         return {
                             "success": True,
                             "data_handle": format_result["data_handle"],
-                            "original_handle": data_handle,
                             "metadata": format_result["metadata"],
                             "validation": validation_report,
                             "formatted": True,
