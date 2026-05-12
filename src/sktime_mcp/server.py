@@ -31,6 +31,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 from sktime_mcp.composition.validator import get_composition_validator
+from sktime_mcp.tools.batch import run_tools_batch_tool
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_async_tool,
@@ -124,11 +125,11 @@ def sanitize_for_json(obj):
     # --- Standard Python containers ---
     if isinstance(obj, dict):
         return {str(k): sanitize_for_json(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
+    if isinstance(obj, list | tuple):
         return [sanitize_for_json(item) for item in obj]
 
     # --- Already JSON-safe scalars ---
-    if isinstance(obj, (str, int, float, bool, type(None))):
+    if isinstance(obj, str | int | float | bool | type(None)):
         return obj
 
     # --- Fallback: objects with __dict__ or anything else ---
@@ -210,6 +211,35 @@ async def list_tools() -> list[Tool]:
                 "using tags in list_estimators to ensure correct tag names and values."
             ),
             inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="run_tools_batch",
+            description=(
+                "Run multiple read-only MCP tool calls in a single request to reduce "
+                "agent round-trips. Supported tools in MVP: list_estimators, "
+                "describe_estimator, get_available_tags, list_available_data."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "operations": {
+                        "type": "array",
+                        "description": (
+                            "Ordered list of tool invocations. Each entry must contain "
+                            "'tool' and optional 'arguments'."
+                        ),
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "tool": {"type": "string"},
+                                "arguments": {"type": "object"},
+                            },
+                            "required": ["tool"],
+                        },
+                    }
+                },
+                "required": ["operations"],
+            },
         ),
         # -- Instantiation ---------------------------------------------------
         Tool(
@@ -649,6 +679,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         elif name == "get_available_tags":
             result = get_available_tags()
+
+        elif name == "run_tools_batch":
+            result = run_tools_batch_tool(arguments["operations"])
 
         # -- Instantiation ---------------------------------------------------
         elif name == "instantiate_estimator":
