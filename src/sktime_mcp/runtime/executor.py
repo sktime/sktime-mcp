@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # load_* function in sktime.datasets to the MCP server.
 def _discover_demo_datasets() -> dict:
     """Return a mapping of dataset name -> dotted module path for every
-    ``load_*`` function exported by ``sktime.datasets``."""
+    zero-argument ``load_*`` function exported by ``sktime.datasets``."""
     try:
         import sktime.datasets as _ds_module
 
@@ -34,6 +34,11 @@ def _discover_demo_datasets() -> dict:
             name.removeprefix("load_"): f"sktime.datasets.{name}"
             for name, obj in inspect.getmembers(_ds_module, inspect.isfunction)
             if name.startswith("load_")
+            and all(
+                p.default is not inspect.Parameter.empty
+                for p in inspect.signature(obj).parameters.values()
+                if p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)
+            )
         }
     except Exception:  # pragma: no cover
         return {}  # fallback: empty dict if sktime not installed
