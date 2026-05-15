@@ -119,6 +119,8 @@ class TestFitPredictValidation:
         "invalid_horizon, expected_error",
         [
             ("five", "must be an integer"),
+            (True, "must be an integer"),
+            (False, "must be an integer"),
             (0, "greater than 0"),
             (-3, "greater than 0"),
             (None, "must be an integer"),

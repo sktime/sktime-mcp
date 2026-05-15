@@ -19,7 +19,7 @@ def _validate_horizon(horizon: int) -> dict[str, Any]:
     Checks if the horizon parameter is greater than 0 or not
     """
     warnings = []
-    if not isinstance(horizon, int):
+    if isinstance(horizon, bool) or not isinstance(horizon, int):
         return {
             "valid": False,
             "error": (

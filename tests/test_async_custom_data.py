@@ -186,6 +186,40 @@ class TestSyncCustomData:
             == "Either 'dataset' (e.g. 'airline') or 'data_handle' (from load_data_source) is required."
         )
 
+    def test_sync_rejects_boolean_horizon(self):
+        """Boolean horizon values should be rejected before execution."""
+        from sktime_mcp.tools.fit_predict import fit_predict_tool
+
+        result = fit_predict_tool(
+            estimator_handle="fake_handle",
+            dataset="airline",
+            horizon=True,
+        )
+
+        assert not result["success"]
+        assert (
+            result["error"] == "'horizon' must be an integer, got bool. Example: {\"horizon\": 12}"
+        )
+
+
+class TestAsyncHorizonValidation:
+    """Tests for horizon validation parity in async forecasting tools."""
+
+    def test_async_rejects_boolean_horizon(self):
+        """Boolean horizon values should be rejected before job scheduling."""
+        from sktime_mcp.tools.fit_predict import fit_predict_async_tool
+
+        result = fit_predict_async_tool(
+            estimator_handle="fake_handle",
+            dataset="airline",
+            horizon=True,
+        )
+
+        assert not result["success"]
+        assert (
+            result["error"] == "'horizon' must be an integer, got bool. Example: {\"horizon\": 12}"
+        )
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
