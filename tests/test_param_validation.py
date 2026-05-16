@@ -54,15 +54,38 @@ class TestValidateParams:
         assert result["valid"] is False
         assert expected_error in result["error"]
 
-    def test_unknown_key_produces_warning(self):
-        """Unknown param key should pass validation but produce a warning."""
+    def test_unknown_key_returns_error(self):
+        """Unknown param key must return valid=False with a helpful error (issue #219)."""
         result = _validate_params(
             {"nonexistent_param_xyz": 1},
             estimator_name="NaiveForecaster",
         )
+        assert result["valid"] is False
+        assert "nonexistent_param_xyz" in result["error"]
+        assert "Valid parameters" in result["error"]
+
+    def test_valid_key_passes(self):
+        """Known param key for NaiveForecaster should pass deep validation."""
+        result = _validate_params(
+            {"strategy": "last"},
+            estimator_name="NaiveForecaster",
+        )
         assert result["valid"] is True
-        assert len(result["warnings"]) > 0
-        assert "nonexistent_param_xyz" in result["warnings"][0]
+
+    def test_typo_in_key_returns_error_with_valid_list(self):
+        """Typo'd param key should fail and list valid alternatives."""
+        result = _validate_params(
+            {"window_leangth": 5},  # typo: leangth vs length
+            estimator_name="NaiveForecaster",
+        )
+        assert result["valid"] is False
+        assert "window_leangth" in result["error"]
+        assert "Valid parameters" in result["error"]
+
+    def test_no_estimator_name_skips_deep_validation(self):
+        """Without estimator_name, any string-keyed dict is valid."""
+        result = _validate_params({"anything": 1})
+        assert result["valid"] is True
 
 
 class TestInstantiateEstimatorValidation:
@@ -85,6 +108,15 @@ class TestInstantiateEstimatorValidation:
         result = instantiate_estimator_tool("NaiveForecaster", {"fn": print})
         assert result["success"] is False
         assert "Unsupported type" in result["error"]
+
+    def test_unknown_key_returns_error_with_valid_list(self):
+        """Unknown param key should return error listing valid params (issue #219)."""
+        result = instantiate_estimator_tool(
+            "NaiveForecaster", {"nonexistent_param_xyz": 1}
+        )
+        assert result["success"] is False
+        assert "nonexistent_param_xyz" in result["error"]
+        assert "Valid parameters" in result["error"]
 
 
 class TestPipelineParamsValidation:
