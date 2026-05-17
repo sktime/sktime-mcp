@@ -259,6 +259,17 @@ class CompositionValidator:
         errors = []
         warnings = []
 
+        # Forecasters cannot be chained sequentially regardless of composition rules
+        if first.task == "forecasting" and second.task == "forecasting":
+            errors.append(
+                f"Cannot chain forecasters '{first.name}' → '{second.name}' directly. "
+                "Use an ensemble or multiplexer instead."
+            )
+            tag_errors, tag_warnings = self._check_tag_compatibility(first, second)
+            errors.extend(tag_errors)
+            warnings.extend(tag_warnings)
+            return False, errors, warnings
+
         # Find applicable rule
         applicable_rule = None
         for rule in self.COMPOSITION_RULES:
@@ -266,18 +277,14 @@ class CompositionValidator:
                 rule.source_task == first.task
                 and rule.target_task == second.task
                 and rule.position in ("before", "any")
+                and rule.composition_type != CompositionType.ENSEMBLE
             ):
                 applicable_rule = rule
                 break
 
         if applicable_rule is None:
             # No rule found - check if it's an obvious error
-            if first.task == second.task == "forecasting":
-                errors.append(
-                    f"Cannot chain forecasters '{first.name}' → '{second.name}' directly. "
-                    "Use an ensemble or multiplexer instead."
-                )
-            elif first.task in ("classification", "regression") and second.task != first.task:
+            if first.task in ("classification", "regression") and second.task != first.task:
                 errors.append(
                     f"Invalid composition: {first.task} '{first.name}' → {second.task} '{second.name}'"
                 )
