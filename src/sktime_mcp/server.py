@@ -315,6 +315,10 @@ async def list_tools() -> list[Tool]:
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
                     },
+                    "exog_handle": {
+                        "type": "string",
+                        "description": "Optional handle for exogenous variables (X) from load_data_source",
+                    },
                 },
                 "required": ["estimator_handle"],
             },
@@ -345,6 +349,10 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
+                    },
+                    "exog_handle": {
+                        "type": "string",
+                        "description": "Optional handle for exogenous variables (X) from load_data_source",
                     },
                 },
                 "required": ["estimator_handle"],
@@ -673,9 +681,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         elif name == "fit_predict":
             result = fit_predict_tool(
                 arguments["estimator_handle"],
-                arguments.get("dataset", ""),
+                arguments.get("dataset"),
                 arguments.get("horizon", 12),
                 data_handle=arguments.get("data_handle"),
+                exog_handle=arguments.get("exog_handle"),
             )
 
         elif name == "fit_predict_async":
@@ -683,6 +692,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 estimator_handle=arguments["estimator_handle"],
                 dataset=arguments.get("dataset"),
                 data_handle=arguments.get("data_handle"),
+                exog_handle=arguments.get("exog_handle"),
                 horizon=arguments.get("horizon", 12),
             )
 
