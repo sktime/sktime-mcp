@@ -172,7 +172,33 @@ class TestTools:
 
         assert result["success"]
         assert "estimators" in result
+        assert result["estimators"]
         assert len(result["estimators"]) <= 5
+        assert "description" in result["estimators"][0]
+        assert isinstance(result["estimators"][0]["description"], str)
+        assert len(result["estimators"][0]["description"]) <= 200
+
+    def test_estimator_summary_includes_compact_description(self):
+        """Test estimator summaries include normalized docstring context."""
+        from sktime_mcp.registry.interface import EstimatorNode
+
+        class DummyEstimator:
+            """First line.
+
+            More detail on another line.
+            """
+
+        node = EstimatorNode(
+            name="DummyEstimator",
+            task="forecasting",
+            class_ref=DummyEstimator,
+            module="tests.DummyEstimator",
+            docstring=DummyEstimator.__doc__,
+        )
+
+        summary = node.to_summary()
+
+        assert summary["description"] == "First line. More detail on another line."
 
     def test_list_estimators_detection_task(self):
         """Test that detection estimators are returned when filtering by detection task."""

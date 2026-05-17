@@ -33,7 +33,7 @@ def list_estimators_tool(
     Returns:
         Dictionary with:
         - success: bool
-        - estimators: List of estimator summaries
+        - estimators: List of estimator summaries, each with a short description
         - count: Number of results returned in this page
         - total: Total matching estimators (before limit/offset)
         - offset: Current offset (for pagination)

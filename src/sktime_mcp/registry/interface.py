@@ -39,6 +39,17 @@ class EstimatorNode:
     hyperparameters: dict[str, Any] = field(default_factory=dict)
     docstring: str | None = None
 
+    def _description(self, max_length: int = 200) -> str:
+        """Return a compact, single-line description for list responses."""
+        if not self.docstring:
+            return ""
+
+        description = " ".join(self.docstring.split())
+        if len(description) <= max_length:
+            return description
+
+        return description[: max_length - 3].rstrip() + "..."
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -58,6 +69,7 @@ class EstimatorNode:
             "name": self.name,
             "task": self.task,
             "module": self.module,
+            "description": self._description(),
             "tags": self.tags,
         }
 

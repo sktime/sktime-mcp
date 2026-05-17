@@ -190,7 +190,7 @@ Discover estimators by task type and capability tags.
 }
 ```
 
-**Returns:** List of matching estimators with name, task, and summary info.
+**Returns:** List of matching estimators with name, task, short description, and summary info.
 
 ---
 
