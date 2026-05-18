@@ -5,7 +5,7 @@ Executes cross-validation on an estimator.
 """
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from sktime.forecasting.model_evaluation import evaluate
 
@@ -21,16 +21,18 @@ logger = logging.getLogger(__name__)
 
 def evaluate_estimator_tool(
     estimator_handle: str,
-    dataset: str,
+    dataset: str = "",
     cv_folds: int = 3,
+    data_handle: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Evaluate an estimator using cross-validation.
 
     Args:
         estimator_handle: Handle from instantiate_estimator
-        dataset: Name of demo dataset
+        dataset: Name of demo dataset (e.g. 'airline'). Ignored if data_handle is provided.
         cv_folds: Number of folds for Splitter
+        data_handle: Handle from load_data_source for custom data. Takes priority over dataset.
 
     Returns:
         Dictionary with cross-validation results
@@ -42,12 +44,20 @@ def evaluate_estimator_tool(
     except KeyError:
         return {"success": False, "error": f"Handle not found: {estimator_handle}"}
 
-    data_result = executor.load_dataset(dataset)
-    if not data_result["success"]:
-        return data_result
-
-    y = data_result["data"]
-    X = data_result.get("exog")
+    if data_handle is not None:
+        if data_handle not in executor._data_handles:
+            return {"success": False, "error": f"Unknown data handle: {data_handle}"}
+        data_info = executor._data_handles[data_handle]
+        y = data_info["y"]
+        X = data_info.get("X")
+    else:
+        if not dataset:
+            return {"success": False, "error": "Provide either 'dataset' (demo name) or 'data_handle'"}
+        data_result = executor.load_dataset(dataset)
+        if not data_result["success"]:
+            return data_result
+        y = data_result["data"]
+        X = data_result.get("exog")
 
     try:
         n = len(y)
