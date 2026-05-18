@@ -9,8 +9,11 @@ import asyncio
 import sys
 import json
 import logging
-import os
+import sys
+from io import TextIOWrapper
 from typing import Any
+
+import anyio
 
 try:
     import numpy as np
@@ -31,6 +34,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 from sktime_mcp.composition.validator import get_composition_validator
+from sktime_mcp.config import settings
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_async_tool,
@@ -63,19 +67,15 @@ from sktime_mcp.tools.list_estimators import (
 )
 from sktime_mcp.tools.save_model import save_model_tool
 
-# ---------------------------------------------------------------------------
-# Server configuration via environment variables
-# ---------------------------------------------------------------------------
-JOB_MAX_AGE_HOURS = int(os.environ.get("SKTIME_MCP_JOB_MAX_AGE_HOURS", "24"))
-JOB_CLEANUP_INTERVAL_SECS = int(os.environ.get("SKTIME_MCP_JOB_CLEANUP_INTERVAL", "3600"))
-
 # Configure logging to stderr with detailed format
-_LOG_LEVEL = os.environ.get("SKTIME_MCP_LOG_LEVEL", "WARNING").upper()
+_handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
+if settings.log_path:
+    _handlers.append(logging.FileHandler(settings.log_path))
 
 logging.basicConfig(
-    level=getattr(logging, _LOG_LEVEL, logging.WARNING),
+    level=getattr(logging, settings.log_level, logging.WARNING),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],
+    handlers=_handlers,
 )
 logger = logging.getLogger(__name__)
 # Create MCP server instance
@@ -808,10 +808,10 @@ async def _periodic_job_cleanup():
     from sktime_mcp.runtime.jobs import get_job_manager
 
     while True:
-        await asyncio.sleep(JOB_CLEANUP_INTERVAL_SECS)
+        await asyncio.sleep(settings.job_cleanup_interval_secs)
         try:
             job_manager = get_job_manager()
-            removed = job_manager.cleanup_old_jobs(JOB_MAX_AGE_HOURS)
+            removed = job_manager.cleanup_old_jobs(settings.job_max_age_hours)
             if removed:
                 logger.info(f"Periodic cleanup: removed {removed} old job(s)")
         except Exception:
@@ -820,9 +820,17 @@ async def _periodic_job_cleanup():
 
 async def run_server():
     """Run the MCP server."""
+    # Stdio safety: redirect stdout to stderr to protect MCP JSON-RPC
+    # streams from being corrupted by stray prints in third-party libraries.
+    original_stdout = sys.stdout
+    sys.stdout = sys.stderr
+
+    # Explicitly wrap the original stdout buffer for the MCP server output
+    mcp_stdout = anyio.wrap_file(TextIOWrapper(original_stdout.buffer, encoding="utf-8"))
+
     asyncio.create_task(_periodic_job_cleanup())
 
-    async with stdio_server() as (read_stream, write_stream):
+    async with stdio_server(stdout=mcp_stdout) as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
 

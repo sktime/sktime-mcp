@@ -50,4 +50,3 @@ def test_load_data_source_returns_error_for_missing_explicit_target_column():
     assert result["error_type"] == "ValueError"
     assert "Target column 'sales' not found" in result["error"]
     assert "value" in result["error"]
-
