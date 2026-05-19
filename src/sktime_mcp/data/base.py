@@ -104,8 +104,15 @@ class DataSourceAdapter(ABC):
 
             # Get exogenous variables if specified
             if exog_cols:
-                valid_exog_cols = [col for col in exog_cols if col in data.columns]
-                X = data[valid_exog_cols] if valid_exog_cols else None
+                missing_exog_cols = [col for col in exog_cols if col not in data.columns]
+                if missing_exog_cols:
+                    available_columns = ", ".join(repr(col) for col in data.columns)
+                    raise ValueError(
+                        f"Exogenous column(s) not found in data: {missing_exog_cols!r}. "
+                        f"Available columns: [{available_columns}]"
+                    )
+
+                X = data[exog_cols]
             else:
                 # Use all columns except target as exogenous
                 other_cols = [col for col in data.columns if col != target_col]
