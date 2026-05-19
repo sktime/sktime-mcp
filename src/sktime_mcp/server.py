@@ -66,6 +66,7 @@ from sktime_mcp.tools.list_estimators import (
     list_estimators_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
+from sktime_mcp.tools.ts_metadata import extract_ts_metadata_tool
 
 # Configure logging to stderr with detailed format
 _handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
@@ -611,6 +612,29 @@ async def list_tools() -> list[Tool]:
                 "required": ["job_id"],
             },
         ),
+        Tool(
+            name="extract_ts_metadata",
+            description=(
+                "Extract rich statistical metadata from a time series for LLM-driven model selection. "
+                "Returns trend direction, stationarity (ADF test), seasonality detection, "
+                "autocorrelation, registry-matched recommended models, and actionable agent hints. "
+                "ALWAYS call this after load_data_source and before instantiate_estimator to guide "
+                "model selection — this closes the prompt → model → evaluation agentic loop."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Handle from load_data_source (for custom data)",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Demo dataset name (e.g. 'airline', 'sunspots', 'lynx')",
+                    },
+                },
+            },
+        ),
     ]
 
 
@@ -783,6 +807,12 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
 
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
+
+        elif name == "extract_ts_metadata":
+            result = extract_ts_metadata_tool(
+                data_handle=arguments.get("data_handle"),
+                dataset=arguments.get("dataset"),
+            )
 
         else:
             result = {"error": f"Unknown tool: {name}"}
