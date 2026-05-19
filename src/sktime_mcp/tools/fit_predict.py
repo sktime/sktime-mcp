@@ -68,6 +68,7 @@ def fit_predict_tool(
             "horizon": 12
         }
     """
+
     validation = _validate_horizon(horizon)
     if not validation["valid"]:
         return {
@@ -106,6 +107,7 @@ def predict_tool(
     Returns:
         Dictionary with predictions
     """
+
     validation = _validate_horizon(horizon)
     if not validation["valid"]:
         return {
@@ -162,6 +164,7 @@ def fit_predict_async_tool(
         >>> fit_predict_async_tool("est_abc123", dataset="airline", horizon=12)
         >>> fit_predict_async_tool("est_abc123", data_handle="data_xyz", horizon=5)
     """
+
     validation = _validate_horizon(horizon)
     if not validation["valid"]:
         return {
