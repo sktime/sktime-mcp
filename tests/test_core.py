@@ -316,5 +316,34 @@ class TestSearchEstimatorsLimit:
         assert result["count"] <= 3
 
 
+class TestServerImports:
+    """Verify server.py imports the right symbols from the right modules."""
+
+    def test_fit_predict_tool_importable_from_fit_predict(self):
+        """fit_predict_tool must live in tools.fit_predict, not tools.data_tools."""
+        from sktime_mcp.tools.fit_predict import fit_predict_tool
+
+        assert callable(fit_predict_tool)
+
+    def test_fit_predict_tool_not_in_data_tools(self):
+        """data_tools must not expose fit_predict_tool (it never defined it)."""
+        import sktime_mcp.tools.data_tools as data_tools
+
+        assert not hasattr(data_tools, "fit_predict_tool")
+
+    def test_server_imports_fit_predict_tool_from_correct_module(self):
+        """Importing server must not raise ImportError for fit_predict_tool."""
+        import importlib
+
+        try:
+            importlib.import_module("sktime_mcp.server")
+        except ImportError as exc:
+            if "fit_predict_tool" in str(exc):
+                pytest.fail(f"server.py still imports fit_predict_tool from wrong module: {exc}")
+            # Other ImportErrors (e.g. mcp not installed) are fine — not our bug
+        except Exception:
+            pass
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
