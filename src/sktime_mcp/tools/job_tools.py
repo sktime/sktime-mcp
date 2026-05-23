@@ -100,6 +100,12 @@ def cancel_job_tool(job_id: str, delete: bool = False) -> dict[str, Any]:
     Returns:
         Dictionary with success status and message
     """
+    if not isinstance(delete, bool):
+        return {
+            "success": False,
+            "error": (f"Invalid delete type '{type(delete).__name__}'. Expected a boolean value."),
+        }
+
     job_manager = get_job_manager()
 
     job = job_manager.get_job(job_id)
