@@ -48,6 +48,7 @@ from sktime_mcp.tools.fit_predict import (
     fit_predict_tool,
 )
 from sktime_mcp.tools.format_tools import format_time_series_tool
+from sktime_mcp.tools.health import get_server_health_tool
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
     instantiate_pipeline_tool,
@@ -645,6 +646,17 @@ async def list_tools() -> list[Tool]:
                 "required": ["job_id"],
             },
         ),
+        Tool(
+            name="get_server_health",
+            description=(
+                "Get a snapshot of the sktime-mcp server health: "
+                "versions (server, Python, sktime), active estimator and data "
+                "handle counts, job summary statistics, uptime, and optional "
+                "dependency availability. Useful for diagnostics and capacity "
+                "checks before scheduling heavy operations."
+            ),
+            inputSchema={"type": "object", "properties": {}},
+        ),
     ]
 
 
@@ -817,6 +829,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
 
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
+
+        # -- Health ----------------------------------------------------------
+        elif name == "get_server_health":
+            result = get_server_health_tool()
 
         else:
             result = {"error": f"Unknown tool: {name}"}
