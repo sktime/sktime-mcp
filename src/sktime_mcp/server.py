@@ -48,6 +48,7 @@ from sktime_mcp.tools.fit_predict import (
     fit_predict_tool,
 )
 from sktime_mcp.tools.format_tools import format_time_series_tool
+from sktime_mcp.tools.inspect_estimator import get_estimator_params_tool
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
     instantiate_pipeline_tool,
@@ -645,6 +646,26 @@ async def list_tools() -> list[Tool]:
                 "required": ["job_id"],
             },
         ),
+        Tool(
+            name="get_estimator_params",
+            description=(
+                "Inspect the current state of a managed estimator handle. "
+                "Returns hyperparameters via get_params() and, if fitted, "
+                "the fitted attributes (e.g., aic_, coef_, order_). "
+                "Useful for debugging, model comparison, and explaining "
+                "model internals without exporting code."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "handle": {
+                        "type": "string",
+                        "description": "Estimator handle ID to inspect",
+                    },
+                },
+                "required": ["handle"],
+            },
+        ),
     ]
 
 
@@ -817,6 +838,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
 
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
+
+        # -- Introspection ---------------------------------------------------
+        elif name == "get_estimator_params":
+            result = get_estimator_params_tool(arguments["handle"])
 
         else:
             result = {"error": f"Unknown tool: {name}"}
