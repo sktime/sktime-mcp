@@ -24,41 +24,33 @@ This MCP is **not** just documentation or static code analysis. It is a **semant
 
 3. **Minimal MCP Surface** - Exposes only what an LLM needs: Discovery, Description, Instantiation, Execution, and model persistence.
 
-## 🛠️ Prerequisites
-
-- **Python 3.10+**
-- **pip** package manager
-
 ## 🛠️ Installation
 
-### Virtual Environment Setup
+### Zero-install via uvx (recommended)
 
-It is recommended to use a virtual environment:
+If you have [uv](https://github.com/astral-sh/uv) installed, no separate installation step is needed. Just update your MCP client config (see [Connecting from an LLM Client](#connecting-from-an-llm-client) below) and `uvx` will handle the rest automatically.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+# Verify uv is available
+uvx sktime-mcp --help
 ```
 
-### Package Installation
-
-Install from PyPI (recommended for users):
+### pip
 
 ```bash
 pip install sktime-mcp
 
-# With all optional dependencies
+# With optional extras (SQL, forecasting models, file formats)
 pip install "sktime-mcp[all]"
 ```
 
-For development (editable install from source):
+### Development installation
 
 ```bash
-pip install -e ".[dev]"
+git clone https://github.com/sktime/sktime-mcp
+cd sktime-mcp
+python3 -m pip install -e ".[dev]"
 ```
-
-For a more detailed first-time setup flow, including MCP server verification and troubleshooting, see [Beginner Setup](#-beginner-setup-firsttime-users).
-
 ## 🧭 Beginner Setup (First‑Time Users)
 
 If you are new to sktime‑mcp or to MCP‑based workflows, this section provides a minimal starting point to help you verify that your setup is working correctly.
@@ -126,7 +118,14 @@ After completing the steps above, confirm the server starts with `sktime-mcp`. S
 sktime-mcp
 ```
 
-If `sktime-mcp` is not on your `PATH`, use `python -m sktime_mcp.server` instead (see [Beginner Setup](#-beginner-setup-firsttime-users) for details).
+### Configuration (Environment Variables)
+
+You can configure the server's behavior at runtime using environment variables:
+
+- `SKTIME_MCP_MAX_RESPONSE_TOKENS`: Maximum tokens allowed per tool response (e.g., `10000`). If a response exceeds this limit, it is truncated and appended with a notice. Set to `0` (default) for unlimited.
+- `SKTIME_MCP_LOG_LEVEL`: Server logging verbosity level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Defaults to `WARNING`.
+- `SKTIME_MCP_AUTO_FORMAT`: Enables or disables automatic time-series formatting during data loading.
+- `SKTIME_MCP_JOB_MAX_AGE_HOURS`: Maximum hours before completed background jobs are automatically pruned. Defaults to `24`.
 
 ### Connecting from an LLM Client
 
@@ -140,6 +139,31 @@ The server uses stdio transport by default, compatible with Claude Desktop, Clau
 | Linux    | `~/.config/claude/claude_desktop_config.json` |
 | Windows  | `%APPDATA%\Claude\claude_desktop_config.json` |
 
+**With uvx (recommended — no prior install needed):**
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "uvx",
+      "args": ["sktime-mcp"]
+    }
+  }
+}
+```
+
+**With optional extras:**
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "uvx",
+      "args": ["sktime-mcp[forecasting,sql]"]
+    }
+  }
+}
+```
+
+**With pip-installed package:**
 ```json
 {
   "mcpServers": {
@@ -150,18 +174,17 @@ The server uses stdio transport by default, compatible with Claude Desktop, Clau
 }
 ```
 
-If you are using a virtual environment, or if `sktime-mcp` is not on your `PATH`, point the client directly at the environment's Python executable — this ensures the correct packages are used:
+## ⚙️ Configuration
 
-```json
-{
-  "mcpServers": {
-    "sktime": {
-      "command": "<project-root>/.venv/bin/python",
-      "args": ["-m", "sktime_mcp.server"]
-    }
-  }
-}
-```
+The server can be configured via environment variables:
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| `SKTIME_MCP_LOG_LEVEL` | Logging verbosity (e.g. `INFO`, `DEBUG`, `WARNING`) | `"WARNING"` |
+| `SKTIME_MCP_LOG_PATH` | Optional file path to output logs to in addition to stderr | (None) |
+| `SKTIME_MCP_AUTO_FORMAT` | Automatically format time series data on load (`true`/`false`) | `"true"` |
+| `SKTIME_MCP_JOB_MAX_AGE_HOURS` | Maximum age in hours before background jobs are cleared | `24` |
+| `SKTIME_MCP_JOB_CLEANUP_INTERVAL` | Interval in seconds for periodic job cleanup checks | `3600` |
 
 ## 📚 Available Tools
 
@@ -171,7 +194,7 @@ If you are using a virtual environment, or if `sktime-mcp` is not on your `PATH`
 Discover estimators by task type and capability tags.
 
 **Arguments:**
-- `task` (optional): Task type filter (`"forecasting"`, `"classification"`, `"regression"`, `"transformation"`, `"clustering"`)
+- `task` (optional): Task type filter (`"forecasting"`, `"classification"`, `"regression"`, `"transformation"`, `"clustering"`, `"detection"`)
 - `tags` (optional): Filter by capability tags (e.g., `{"capability:pred_int": true}`)
 - `limit` (optional): Maximum results (default: 50)
 

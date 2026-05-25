@@ -30,6 +30,23 @@ class TestRegistryInterface:
 
         assert all(e.task == "forecasting" for e in forecasters)
 
+    def test_detection_estimators_in_registry(self):
+        """Registry loads sktime `detector` scitype as MCP task `detection`."""
+        from sktime_mcp.registry.interface import get_registry
+        from sktime_mcp.tools.describe_estimator import search_estimators_tool
+
+        registry = get_registry()
+        detectors = registry.get_all_estimators(task="detection")
+
+        assert len(detectors) > 0
+        assert all(e.task == "detection" for e in detectors)
+        names = {e.name for e in detectors}
+        assert "PyODDetector" in names or "BinarySegmentation" in names
+
+        anomaly_search = search_estimators_tool("anomaly", limit=50)
+        assert anomaly_search["success"]
+        assert anomaly_search["count"] > 2
+
     def test_get_estimator_by_name(self):
         """Test getting a specific estimator."""
         from sktime_mcp.registry.interface import get_registry

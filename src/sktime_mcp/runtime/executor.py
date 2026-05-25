@@ -8,7 +8,6 @@ and running fit/predict operations.
 import asyncio
 import inspect
 import logging
-import os
 import uuid
 from typing import Any
 
@@ -21,7 +20,7 @@ from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 logger = logging.getLogger(__name__)
 
 
-# Dynamically discover all available sktime demo datasets at import time.
+# Dynamically discover all available sktime demo datasets on first access.
 # This replaces the old hardcoded dictionary and automatically exposes every
 # load_* function in sktime.datasets to the MCP server.
 def _discover_demo_datasets() -> dict:
@@ -39,7 +38,15 @@ def _discover_demo_datasets() -> dict:
         return {}  # fallback: empty dict if sktime not installed
 
 
-DEMO_DATASETS = _discover_demo_datasets()
+_DEMO_DATASETS: dict | None = None
+
+
+def _get_demo_datasets() -> dict:
+    """Lazy singleton — discovers datasets only on first call."""
+    global _DEMO_DATASETS
+    if _DEMO_DATASETS is None:
+        _DEMO_DATASETS = _discover_demo_datasets()
+    return _DEMO_DATASETS
 
 
 class Executor:
@@ -54,9 +61,9 @@ class Executor:
         self._handle_manager = get_handle_manager()
         self._job_manager = get_job_manager()
         self._data_handles = {}  # Store data handles
-        self._auto_format_enabled = (
-            os.environ.get("SKTIME_MCP_AUTO_FORMAT", "true").lower() == "true"
-        )
+        from sktime_mcp.config import settings
+
+        self._auto_format_enabled = settings.auto_format
 
     def instantiate(
         self,
@@ -87,15 +94,16 @@ class Executor:
     # L-7: We can also add custom load_dataset functions here
     def load_dataset(self, name: str) -> dict[str, Any]:
         """Load a demo dataset."""
-        if name not in DEMO_DATASETS:
+        demo_datasets = _get_demo_datasets()
+        if name not in demo_datasets:
             return {
                 "success": False,
                 "error": f"Unknown dataset: {name}",
-                "available": list(DEMO_DATASETS.keys()),
+                "available": list(demo_datasets.keys()),
             }
 
         try:
-            module_path = DEMO_DATASETS[name]
+            module_path = demo_datasets[name]
             parts = module_path.rsplit(".", 1)
             module = __import__(parts[0], fromlist=[parts[1]])
             loader = getattr(module, parts[1])
@@ -529,7 +537,7 @@ class Executor:
 
     def list_datasets(self) -> list[str]:
         """List available demo datasets."""
-        return list(DEMO_DATASETS.keys())
+        return list(_get_demo_datasets().keys())
 
     def load_data_source(self, config: dict[str, Any]) -> dict[str, Any]:
         """
