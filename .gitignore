@@ -6,4 +6,6 @@ TODO.md
 dist/
 docs/_build/
 docs/build/
+venv/
+agentic_forecaster/data/train.csv
 .ignore/

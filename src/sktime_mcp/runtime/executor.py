@@ -195,9 +195,10 @@ class Executor:
     def fit_predict(
         self,
         handle_id: str,
-        dataset: str,
+        dataset: str | None = None,
         horizon: int = 12,
         data_handle: str | None = None,
+        exog_handle: str | None = None,
     ) -> dict[str, Any]:
         """Convenience method: load data, fit, and predict."""
         if dataset and data_handle:
@@ -214,6 +215,10 @@ class Executor:
                     "'data_handle' (from load_data_source) is required."
                 ),
             }
+        
+        y = None
+        X = None
+
         if data_handle is not None:
             # Use custom loaded data
             if data_handle not in self._data_handles:
@@ -233,6 +238,16 @@ class Executor:
             y = data_result["data"]
             X = data_result.get("exog")
 
+        # Override X if exog_handle is provided separately
+        if exog_handle is not None:
+            if exog_handle not in self._data_handles:
+                return {
+                    "success": False,
+                    "error": f"Unknown exog handle: {exog_handle}",
+                }
+            exog_info = self._data_handles[exog_handle]
+            X = exog_info["y"]  # Treat the target of the exog handle as X
+
         fh = list(range(1, horizon + 1))
 
         fit_result = self.fit(handle_id, y, X=X, fh=fh)
@@ -246,6 +261,7 @@ class Executor:
         handle_id: str,
         dataset: str | None = None,
         data_handle: str | None = None,
+        exog_handle: str | None = None,
         horizon: int = 12,
         job_id: str | None = None,
     ) -> dict[str, Any]:
@@ -260,6 +276,7 @@ class Executor:
             handle_id: Estimator handle
             dataset: Demo dataset name
             data_handle: Data handle from load_data_source
+            exog_handle: Optional exogenous data handle
             horizon: Forecast horizon
             job_id: Optional job ID for tracking (created if not provided)
 
@@ -335,9 +352,21 @@ class Executor:
                     return data_result
 
                 y = data_result["data"]
-                X = data_result.get("exog")
+            X = data_result.get("exog")
 
-            fh = list(range(1, horizon + 1))
+        # Override X if exog_handle is provided separately
+        if exog_handle is not None:
+            if exog_handle not in self._data_handles:
+                self._job_manager.update_job(
+                    job_id,
+                    status=JobStatus.FAILED,
+                    errors=[f"Unknown exog handle: {exog_handle}"],
+                )
+                return {"success": False, "error": f"Unknown exog handle: {exog_handle}"}
+            exog_info = self._data_handles[exog_handle]
+            X = exog_info["y"]
+
+        fh = list(range(1, horizon + 1))
 
             # Step 2: Fit model
             self._job_manager.update_job(
