@@ -1,0 +1,1519 @@
+{
+  "get_available_tags": {
+    "success": true,
+    "tags": [
+      {
+        "tag": "X-y-must-have-same-index",
+        "description": "do X/y in fit/update and X/fh in predict have to be same indices?",
+        "value_type": "bool",
+        "applies_to": [
+          "forecaster",
+          "regressor",
+          "transformer"
+        ]
+      },
+      {
+        "tag": "X_inner_mtype",
+        "description": "which machine type(s) is the internal _fit/_predict able to deal with?",
+        "value_type": "('list', 'str')",
+        "applies_to": [
+          "estimator"
+        ]
+      },
+      {
+        "tag": "alignment_type",
+        "description": "does aligner produce a full or partial alignment?",
+        "value_type": "('str', ['full', 'partial'])",
+        "applies_to": [
+          "aligner"
+        ]
+      },
+      {
+        "tag": "approx_energy_spl",
+        "description": "sample size used in approximating generative energy if not available",
+        "value_type": "int",
+        "applies_to": [
+          "distribution"
+        ]
+      },
+      {
+        "tag": "approx_mean_spl",
+        "description": "sample size used in approximating generative mean if not available",
+        "value_type": "int",
+        "applies_to": [
+          "distribution"
+        ]
+      },
+      {
+        "tag": "approx_spl",
+        "description": "sample size used in approximating other statistics if not available",
+        "value_type": "int",
+        "applies_to": [
+          "distribution"
+        ]
+      },
+      {
+        "tag": "approx_var_spl",
+        "description": "sample size used in approximating generative variance if not available",
+        "value_type": "int",
+        "applies_to": [
+          "distribution"
+        ]
+      },
+      {
+        "tag": "authors",
+        "description": "list of authors of the object, each author a GitHub handle",
+        "value_type": "('list', 'str')",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "bisect_iter",
+        "description": "max iters for bisection method in ppf",
+        "value_type": "int",
+        "applies_to": [
+          "distribution"
+        ]
+      },
+      {
+        "tag": "capabilities:approx",
+        "description": "methods provided by the distribution that return approximate results",
+        "value_type": "('list', 'str')",
+        "applies_to": [
+          "distribution"
+        ]
+      },
+      {
+        "tag": "capabilities:exact",
+        "description": "methods provided by the distribution that return numerically exact results",
+        "value_type": "('list', 'str')",
+        "applies_to": [
+          "distribution"
+        ]
+      },
+      {
+        "tag": "capability:bootstrap_index",
+        "description": "can the bootstrap return the index of bootstraped time series?",
+        "value_type": "bool",
+        "applies_to": [
+          "transformer"
+        ]
+      },
+      {
+        "tag": "capability:categorical_in_X",
+        "description": "can the estimator handle categorical data in X arguments?",
+        "value_type": "bool",
+        "applies_to": [
+          "forecaster",
+          "transformer",
+          "regressor",
+          "classifier"
+        ]
+      },
+      {
+        "tag": "capability:categorical_in_y",
+        "description": "can the estimator handle categorical data in y arguments?",
+        "value_type": "bool",
+        "applies_to": [
+          "forecaster",
+          "transformer",
+          "regressor",
+          "classifier"
+        ]
+      },
+      {
+        "tag": "capability:class_weight",
+        "description": "can the classifier use class weights to handle imbalanced data",
+        "value_type": "bool",
+        "applies_to": [
+          "classifier"
+        ]
+      },
+      {
+        "tag": "capability:contractable",
+        "description": "contract time setting, does the estimator support limiting max fit time?",
+        "value_type": "bool",
+        "applies_to": [
+          "estimator"
+        ]
+      },
+      {
+        "tag": "capability:distance",
+        "description": "can aligner return overall distance between aligned series?",
+        "value_type": "bool",
+        "applies_to": [
+          "aligner"
+        ]
+      },
+      {
+        "tag": "capability:distance-matrix",
+        "description": "can aligner return pairwise distance matrix between aligned series?",
+        "value_type": "bool",
+        "applies_to": [
+          "aligner"
+        ]
+      },
+      {
+        "tag": "capability:exogenous",
+        "description": "does forecaster make use of exogenous data?",
+        "value_type": "bool",
+        "applies_to": [
+          "forecaster"
+        ]
+      },
+      {
+        "tag": "capability:feature_importance",
+        "description": "Can the estimator provide feature importance?",
+        "value_type": "bool",
+        "applies_to": [
+          "estimator"
+        ]
+      },
+      {
+        "tag": "capability:global_forecasting",
+        "description": "can the estimator make global forecasting?",
+        "value_type": "bool",
+        "applies_to": [
+          "forecaster"
+        ]
+      },
+      {
+        "tag": "capability:hierarchical_reconciliation",
+        "description": "does the transformer reconcile hierarchical series?",
+        "value_type": "bool",
+        "applies_to": [
+          "transformer"
+        ]
+      },
+      {
+        "tag": "capability:insample",
+        "description": "can the forecaster make in-sample predictions?",
+        "value_type": "bool",
+        "applies_to": [
+          "forecaster"
+        ]
+      },
+      {
+        "tag": "capability:inverse_transform",
+        "description": "is the transformer capable of carrying out an inverse transform?",
+        "value_type": "bool",
+        "applies_to": [
+          "transformer"
+        ]
+      },
+      {
+        "tag": "capability:inverse_transform:exact",
+        "description": "whether inverse_transform is expected to be an exact inverse to transform",
+        "value_type": "bool",
+        "applies_to": [
+          "transformer"
+        ]
+      },
+      {
+        "tag": "capability:inverse_transform:range",
+        "description": "domain of invertibility of transform, must be list [lower, upper] of float",
+        "value_type": "list",
+        "applies_to": [
+          "transformer"
+        ]
+      },
+      {
+        "tag": "capability:missing_values",
+        "description": "can the estimator handle missing data (NA, np.nan) in inputs?",
+        "value_type": "bool",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "capability:missing_values:removes",
+        "description": "is the transformer result guaranteed to have no missing values?",
+        "value_type": "bool",
+        "applies_to": [
+          "transformer"
+        ]
+      },
+      {
+        "tag": "capability:multioutput",
+        "description": "can the estimator handle multi-output time series?",
+        "value_type": "bool",
+        "applies_to": [
+          "classifier",
+          "regressor"
+        ]
+      },
+      {
+        "tag": "capability:multiple-alignment",
+        "description": "is aligner capable of aligning multiple series (True) or only two (False)?",
+        "value_type": "bool",
+        "applies_to": [
+          "aligner"
+        ]
+      },
+      {
+        "tag": "capability:multithreading",
+        "description": "can the classifier set n_jobs to use multiple threads?",
+        "value_type": "bool",
+        "applies_to": [
+          "classifier",
+          "early_classifier"
+        ]
+      },
+      {
+        "tag": "capability:multivariate",
+        "description": "does the object natively support time series with 2 or more variables?",
+        "value_type": "bool",
+        "applies_to": [
+          "classifier",
+          "clusterer",
+          "early_classifier",
+          "metric",
+          "param_est",
+          "regressor",
+          "transformer",
+          "transformer-pairwise",
+          "transformer-pairwise-panel"
+        ]
+      },
+      {
+        "tag": "capability:out_of_sample",
+        "description": "can the clusterer make out-of-sample predictions, i.e., compute cluster assignments on new data?",
+        "value_type": "bool",
+        "applies_to": [
+          "clusterer"
+        ]
+      },
+      {
+        "tag": "capability:pairwise",
+        "description": "does the estimator support pairwise parameter estimation?",
+        "value_type": "bool",
+        "applies_to": [
+          "param_est"
+        ]
+      },
+      {
+        "tag": "capability:pred_int",
+        "description": "does the forecaster implement predict_interval or predict_quantiles?",
+        "value_type": "bool",
+        "applies_to": [
+          "forecaster"
+        ]
+      },
+      {
+        "tag": "capability:pred_int:insample",
+        "description": "can the forecaster make in-sample predictions in predict_interval/quantiles?",
+        "value_type": "bool",
+        "applies_to": [
+          "forecaster"
+        ]
+      },
+      {
+        "tag": "capability:pred_var",
+        "description": "does the forecaster implement predict_variance?",
+        "value_type": "bool",
+        "applies_to": [
+          "forecaster"
+        ]
+      },
+      {
+        "tag": "capability:predict",
+        "description": "can the clusterer predict cluster assignments for new data points?",
+        "value_type": "bool",
+        "applies_to": [
+          "clusterer"
+        ]
+      },
+      {
+        "tag": "capability:predict_proba",
+        "description": "does the estimator implement a non-default predict_proba method? i.e., not just 0/1 probabilities obtained from predict?",
+        "value_type": "bool",
+        "applies_to": [
+          "classifier",
+          "clusterer"
+        ]
+      },
+      {
+        "tag": "capability:random_state",
+        "description": "does the object have a random_state parameter for derandomization?",
+        "value_type": "bool",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "capability:sample_weight",
+        "description": "can the estimator handle sample weights?",
+        "value_type": "bool",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "capability:train_estimate",
+        "description": "can the estimator estimate its performance on the training set?",
+        "value_type": "bool",
+        "applies_to": [
+          "estimator"
+        ]
+      },
+      {
+        "tag": "capability:unequal_length",
+        "description": "can the estimator handle unequal length time series?",
+        "value_type": "bool",
+        "applies_to": [
+          "aligner",
+          "classifier",
+          "clusterer",
+          "early_classifier",
+          "regressor",
+          "transformer",
+          "transformer-pairwise-panel"
+        ]
+      },
+      {
+        "tag": "capability:unequal_length:adds",
+        "description": "can outputs be unequal length even if inputs are equal length?",
+        "value_type": "bool",
+        "applies_to": [
+          "transformer"
+        ]
+      },
+      {
+        "tag": "capability:unequal_length:removes",
+        "description": "does the transformer output have equal length time series?",
+        "value_type": "bool",
+        "applies_to": [
+          "transformer"
+        ]
+      },
+      {
+        "tag": "capability:update",
+        "description": "does the estimator provided stream/on-line capabilities via the update method?",
+        "value_type": "bool",
+        "applies_to": [
+          "transformer",
+          "detector"
+        ]
+      },
+      {
+        "tag": "capability:variable_identification",
+        "description": "Can the detector identify the variables causing each detection?",
+        "value_type": "bool",
+        "applies_to": [
+          "detector"
+        ]
+      },
+      {
+        "tag": "classifier_type",
+        "description": "which type the classifier falls under in the taxonomy of time series classification algorithms.",
+        "value_type": "('list', ['dictionary', 'distance', 'feature', 'hybrid', 'interval', 'kernel', 'shapelet'])",
+        "applies_to": [
+          "classifier"
+        ]
+      },
+      {
+        "tag": "distr:measuretype",
+        "description": "class the distribution measure belongs to - abs.continuous, discrete, mixed",
+        "value_type": "('str', ['continuous', 'discrete', 'mixed'])",
+        "applies_to": [
+          "distribution"
+        ]
+      },
+      {
+        "tag": "distribution_type",
+        "description": "distribution type of data as str",
+        "value_type": "str",
+        "applies_to": [
+          "estimator"
+        ]
+      },
+      {
+        "tag": "distribution_type",
+        "description": "distribution type of data as str",
+        "value_type": "str",
+        "applies_to": [
+          "estimator"
+        ]
+      },
+      {
+        "tag": "distribution_type",
+        "description": "what data distribution type is assumed by the detector",
+        "value_type": "str",
+        "applies_to": [
+          "detector"
+        ]
+      },
+      {
+        "tag": "enforce_index_type",
+        "description": "passed to input checks, input conversion index type to enforce",
+        "value_type": "type",
+        "applies_to": [
+          "forecaster",
+          "regressor"
+        ]
+      },
+      {
+        "tag": "env_marker",
+        "description": "environment marker (PEP 508) requirement for estimator, or None = no marker",
+        "value_type": "str",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "fit_is_empty",
+        "description": "does the estimator have an empty fit method?",
+        "value_type": "bool",
+        "applies_to": [
+          "estimator"
+        ]
+      },
+      {
+        "tag": "frequency",
+        "description": "frequency of the time series in the dataset",
+        "value_type": "str",
+        "applies_to": [
+          "dataset"
+        ]
+      },
+      {
+        "tag": "handles-missing-data",
+        "description": "can the estimator handle missing data (NA, np.nan) in inputs?",
+        "value_type": "bool",
+        "applies_to": [
+          "estimator"
+        ]
+      },
+      {
+        "tag": "has_exogenous",
+        "description": "does the dataset contain exogenous variables?",
+        "value_type": "bool",
+        "applies_to": [
+          "dataset_forecasting"
+        ]
+      },
+      {
+        "tag": "has_nans",
+        "description": "does the dataset contain nans?",
+        "value_type": "bool",
+        "applies_to": [
+          "dataset"
+        ]
+      },
+      {
+        "tag": "ignores-exogeneous-X",
+        "description": "deprecated tag for exogenous capability",
+        "value_type": "bool",
+        "applies_to": [
+          "forecaster"
+        ]
+      },
+      {
+        "tag": "inner_implements_multilevel",
+        "description": "does the metric implement multilevel evaluation internally?",
+        "value_type": "bool",
+        "applies_to": [
+          "metric"
+        ]
+      },
+      {
+        "tag": "is_empty",
+        "description": "is the dataset empty?",
+        "value_type": "bool",
+        "applies_to": [
+          "dataset"
+        ]
+      },
+      {
+        "tag": "is_equal_index",
+        "description": "do the series in the dataset have equal index set?",
+        "value_type": "bool",
+        "applies_to": [
+          "dataset"
+        ]
+      },
+      {
+        "tag": "is_equal_length",
+        "description": "are the series in the dataset of equal length?",
+        "value_type": "bool",
+        "applies_to": [
+          "dataset"
+        ]
+      },
+      {
+        "tag": "is_equally_spaced",
+        "description": "are the series in the dataset equally spaced?",
+        "value_type": "bool",
+        "applies_to": [
+          "dataset"
+        ]
+      },
+      {
+        "tag": "is_one_panel",
+        "description": "does the dataset consist of a single panel?",
+        "value_type": "bool",
+        "applies_to": [
+          "dataset"
+        ]
+      },
+      {
+        "tag": "is_one_series",
+        "description": "does the data consist of a single series?",
+        "value_type": "bool",
+        "applies_to": [
+          "dataset"
+        ]
+      },
+      {
+        "tag": "is_univariate",
+        "description": "is the dataset univariate?",
+        "value_type": "bool",
+        "applies_to": [
+          "dataset"
+        ]
+      },
+      {
+        "tag": "learning_type",
+        "description": "type of learning, e.g., 'supervised', 'unsupervised'",
+        "value_type": "str",
+        "applies_to": [
+          "detector"
+        ]
+      },
+      {
+        "tag": "learning_type",
+        "description": "What is the learning type used by the detector?",
+        "value_type": "('str', ['supervised', 'unsupervised'])",
+        "applies_to": [
+          "detector"
+        ]
+      },
+      {
+        "tag": "lower_is_better",
+        "description": "is lower value of the metric better?",
+        "value_type": "bool",
+        "applies_to": [
+          "metric"
+        ]
+      },
+      {
+        "tag": "maintainers",
+        "description": "current maintainers of the object, each maintainer a GitHub handle",
+        "value_type": "('list', 'str')",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "n_classes",
+        "description": "number of classes in the dataset",
+        "value_type": "int",
+        "applies_to": [
+          "dataset_classification"
+        ]
+      },
+      {
+        "tag": "n_dimensions",
+        "description": "Equivalent to number of columns in `y`",
+        "value_type": "int",
+        "applies_to": [
+          "dataset_forecasting"
+        ]
+      },
+      {
+        "tag": "n_hierarchy_levels",
+        "description": "number of hierarchy levels in the dataset",
+        "value_type": "int",
+        "applies_to": [
+          "dataset"
+        ]
+      },
+      {
+        "tag": "n_instances",
+        "description": "number of instances in the dataset",
+        "value_type": "int",
+        "applies_to": [
+          "dataset"
+        ]
+      },
+      {
+        "tag": "n_instances_test",
+        "description": "number of test instances in the dataset",
+        "value_type": "int",
+        "applies_to": [
+          "dataset"
+        ]
+      },
+      {
+        "tag": "n_instances_train",
+        "description": "number of training instances in the dataset",
+        "value_type": "int",
+        "applies_to": [
+          "dataset"
+        ]
+      },
+      {
+        "tag": "n_panels",
+        "description": "number of panels in the dataset",
+        "value_type": "int",
+        "applies_to": [
+          "dataset"
+        ]
+      },
+      {
+        "tag": "n_splits",
+        "description": "number of cross validation splits of the dataset",
+        "value_type": "int",
+        "applies_to": [
+          "dataset"
+        ]
+      },
+      {
+        "tag": "n_timepoints",
+        "description": "number of timepoints in the dataset",
+        "value_type": "int",
+        "applies_to": [
+          "dataset_forecasting"
+        ]
+      },
+      {
+        "tag": "n_timepoints_test",
+        "description": "number of timepoints in the test set of the dataset",
+        "value_type": "int",
+        "applies_to": [
+          "dataset_forecasting"
+        ]
+      },
+      {
+        "tag": "n_timepoints_train",
+        "description": "number of timepoints in the training set of the dataset",
+        "value_type": "int",
+        "applies_to": [
+          "dataset_forecasting"
+        ]
+      },
+      {
+        "tag": "name",
+        "description": "name of the dataset",
+        "value_type": "str",
+        "applies_to": [
+          "dataset"
+        ]
+      },
+      {
+        "tag": "object_type",
+        "description": "type of object: estimator, transformer, regressor, etc",
+        "value_type": "str",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "property:randomness",
+        "description": "does the object behave deterministically or stochastically?",
+        "value_type": "str",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "pwtrafo_type",
+        "description": "mathematical type of pairwise transformer - distance, kernel, or other",
+        "value_type": "('str', ['distance', 'kernel', 'other'])",
+        "applies_to": [
+          "transformer-pairwise",
+          "transformer-pairwise-panel"
+        ]
+      },
+      {
+        "tag": "python_dependencies",
+        "description": "python dependencies of estimator as str or list of str (PEP 440)",
+        "value_type": "('list', 'str')",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "python_dependencies_alias",
+        "description": "deprecated tag for dependency import aliases",
+        "value_type": "dict",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "python_version",
+        "description": "python version specifier (PEP 440) for estimator, or None = all versions ok",
+        "value_type": "str",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "remember_data",
+        "description": "whether estimator remembers all data seen as self._X, self._y, etc",
+        "value_type": "bool",
+        "applies_to": [
+          "forecaster",
+          "transformer"
+        ]
+      },
+      {
+        "tag": "requires-fh-in-fit",
+        "description": "does the forecaster require the forecasting horizon in fit?",
+        "value_type": "bool",
+        "applies_to": [
+          "forecaster"
+        ]
+      },
+      {
+        "tag": "requires-y-pred-benchmark",
+        "description": "does the metric require y_pred_benchmark to be passed in evaluate?",
+        "value_type": "bool",
+        "applies_to": [
+          "metric"
+        ]
+      },
+      {
+        "tag": "requires-y-train",
+        "description": "does the metric require y_train to be passed in evaluate?",
+        "value_type": "bool",
+        "applies_to": [
+          "metric"
+        ]
+      },
+      {
+        "tag": "requires_X",
+        "description": "does the transformer require X to be passed in fit and transform?",
+        "value_type": "bool",
+        "applies_to": [
+          "transformer"
+        ]
+      },
+      {
+        "tag": "requires_cython",
+        "description": "whether the object requires a C compiler present such as libomp, gcc",
+        "value_type": "bool",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "requires_y",
+        "description": "does the transformer require y to be passed in fit and transform?",
+        "value_type": "bool",
+        "applies_to": [
+          "transformer"
+        ]
+      },
+      {
+        "tag": "requires_y_true",
+        "description": "does the metric require y_true to be passed in evaluate?",
+        "value_type": "bool",
+        "applies_to": [
+          "metric"
+        ]
+      },
+      {
+        "tag": "reserved_params",
+        "description": "parameters reserved by the base class and present in all child estimators",
+        "value_type": "('list', 'str')",
+        "applies_to": [
+          "estimator"
+        ]
+      },
+      {
+        "tag": "scitype:X",
+        "description": "which scitypes does X internally support?",
+        "value_type": "str",
+        "applies_to": [
+          "param_est"
+        ]
+      },
+      {
+        "tag": "scitype:instancewise",
+        "description": "does the transformer transform instances independently?",
+        "value_type": "bool",
+        "applies_to": [
+          "transformer"
+        ]
+      },
+      {
+        "tag": "scitype:transform-input",
+        "description": "what is the scitype of the transformer input X?",
+        "value_type": "('str', ['Series', 'Panel'])",
+        "applies_to": [
+          "transformer"
+        ]
+      },
+      {
+        "tag": "scitype:transform-labels",
+        "description": "what is the scitype of the target labels y, if required?",
+        "value_type": "('str', ['None', 'Series', 'Primitives', 'Panel'])",
+        "applies_to": [
+          "transformer"
+        ]
+      },
+      {
+        "tag": "scitype:transform-output",
+        "description": "what is the scitype of the transformer output, the transformed X",
+        "value_type": "('str', ['Series', 'Panel', 'Primitives'])",
+        "applies_to": [
+          "transformer"
+        ]
+      },
+      {
+        "tag": "scitype:y",
+        "description": "which series type does the forecaster support? multivariate means >1 vars",
+        "value_type": "('str', ['univariate', 'multivariate', 'both'])",
+        "applies_to": [
+          "forecaster"
+        ]
+      },
+      {
+        "tag": "scitype:y_pred",
+        "description": "what is the scitype of the predicted target data y_pred?",
+        "value_type": "str",
+        "applies_to": [
+          "metric"
+        ]
+      },
+      {
+        "tag": "skip-inverse-transform",
+        "description": "behaviour flag: skips inverse_transform when called yes/no",
+        "value_type": "bool",
+        "applies_to": [
+          "transformer"
+        ]
+      },
+      {
+        "tag": "sktime_version",
+        "description": "sktime version from which this estimator class originates",
+        "value_type": "str",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "split_hierarchical",
+        "description": "whether _split is natively implemented for hierarchical y types",
+        "value_type": "bool",
+        "applies_to": [
+          "splitter"
+        ]
+      },
+      {
+        "tag": "split_series_uses",
+        "description": "whether split_series uses split (iloc) or split_loc (loc) to split series",
+        "value_type": "('str', ['iloc', 'loc', 'custom'])",
+        "applies_to": [
+          "splitter"
+        ]
+      },
+      {
+        "tag": "split_type",
+        "description": "whether the splitter splits by time or by instance (panel/hierarchy index)",
+        "value_type": "('str', ['temporal', 'instance'])",
+        "applies_to": [
+          "splitter"
+        ]
+      },
+      {
+        "tag": "symmetric",
+        "description": "is the transformer symmetric, i.e., t(x,y)=t(y,x) always?",
+        "value_type": "bool",
+        "applies_to": [
+          "transformer-pairwise",
+          "transformer-pairwise-panel"
+        ]
+      },
+      {
+        "tag": "task",
+        "description": "subtype of series annotator, e.g., 'anomaly_detection', 'segmentation'",
+        "value_type": "str",
+        "applies_to": [
+          "detector"
+        ]
+      },
+      {
+        "tag": "task",
+        "description": "what is the category of the detection task?",
+        "value_type": "('str', ['change_point_detection', 'anomaly_detection', 'segmentation'])",
+        "applies_to": [
+          "detector"
+        ]
+      },
+      {
+        "tag": "task_type",
+        "description": "task type of the dataset",
+        "value_type": "str",
+        "applies_to": [
+          "dataset"
+        ]
+      },
+      {
+        "tag": "tests:core",
+        "description": "whether framework changes trigger estimator tests",
+        "value_type": "bool",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "tests:libs",
+        "description": "Core libraries used by the estimator, to trigger tests.",
+        "value_type": "list",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "tests:skip_all",
+        "description": "whether to skip all tests for the object",
+        "value_type": "bool",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "tests:skip_by_name",
+        "description": "list of names of tests that should be skipped for this object",
+        "value_type": "list",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "tests:vm",
+        "description": "whether to test the object in its own VM",
+        "value_type": "bool",
+        "applies_to": [
+          "object"
+        ]
+      },
+      {
+        "tag": "transform-returns-same-time-index",
+        "description": "does transform return same time index as input?",
+        "value_type": "bool",
+        "applies_to": [
+          "transformer"
+        ]
+      },
+      {
+        "tag": "univariate-metric",
+        "description": "Does the metric only work on univariate y data?",
+        "value_type": "bool",
+        "applies_to": [
+          "metric"
+        ]
+      },
+      {
+        "tag": "univariate-only",
+        "description": "can transformer handle multivariate series? True = no",
+        "value_type": "bool",
+        "applies_to": [
+          "transformer"
+        ]
+      },
+      {
+        "tag": "visual_block_kind",
+        "description": "how to display html representation of a meta-estimator in jupyter notebook",
+        "value_type": "('str', ['single', 'serial', 'parallel'])",
+        "applies_to": [
+          "estimator"
+        ]
+      },
+      {
+        "tag": "y_inner_mtype",
+        "description": "which machine type(s) is the internal _fit/_predict able to deal with?",
+        "value_type": "('list', 'str')",
+        "applies_to": [
+          "estimator"
+        ]
+      }
+    ]
+  },
+  "list_estimators": {
+    "success": true,
+    "estimators": [
+      {
+        "name": "ARARForecaster",
+        "task": "forecasting",
+        "module": "sktime.forecasting.arar._arar_forecaster.ARARForecaster",
+        "tags": {
+          "python_version": null,
+          "python_dependencies": null,
+          "env_marker": null,
+          "sktime_version": "0.40.1",
+          "property:randomness": "deterministic",
+          "capability:random_state": false,
+          "tests:core": false,
+          "tests:vm": false,
+          "tests:libs": null,
+          "tests:skip_all": false,
+          "tests:skip_by_name": null,
+          "authors": [
+            "Akai01"
+          ],
+          "maintainers": [
+            "Akai01"
+          ],
+          "object_type": "forecaster",
+          "scitype:y": "univariate",
+          "capability:exogenous": false,
+          "capability:insample": false,
+          "capability:pred_int": true,
+          "capability:pred_int:insample": true,
+          "capability:missing_values": false,
+          "y_inner_mtype": "pd.Series",
+          "X_inner_mtype": "pd.DataFrame",
+          "requires-fh-in-fit": false,
+          "X-y-must-have-same-index": true,
+          "enforce_index_type": null,
+          "fit_is_empty": false,
+          "capability:categorical_in_X": true,
+          "capability:pred_var": false,
+          "handles-missing-data": false,
+          "ignores-exogeneous-X": true
+        }
+      },
+      {
+        "name": "ARCH",
+        "task": "forecasting",
+        "module": "sktime.forecasting.arch._uarch.ARCH",
+        "tags": {
+          "python_version": null,
+          "python_dependencies": "arch",
+          "env_marker": null,
+          "sktime_version": "0.40.1",
+          "property:randomness": "derandomized",
+          "capability:random_state": true,
+          "tests:core": false,
+          "tests:vm": false,
+          "tests:libs": null,
+          "tests:skip_all": false,
+          "tests:skip_by_name": null,
+          "authors": [
+            "bashtage",
+            "Vasudeva-bit"
+          ],
+          "maintainers": "Vasudeva-bit",
+          "object_type": "forecaster",
+          "scitype:y": "univariate",
+          "capability:exogenous": false,
+          "capability:insample": true,
+          "capability:pred_int": true,
+          "capability:pred_int:insample": true,
+          "capability:missing_values": false,
+          "y_inner_mtype": "pd.Series",
+          "X_inner_mtype": "pd.DataFrame",
+          "requires-fh-in-fit": false,
+          "X-y-must-have-same-index": true,
+          "enforce_index_type": null,
+          "fit_is_empty": false,
+          "capability:categorical_in_X": true,
+          "handles-missing-data": false,
+          "ignores-exogeneous-X": true
+        }
+      },
+      {
+        "name": "ARDL",
+        "task": "forecasting",
+        "module": "sktime.forecasting.ardl.ARDL",
+        "tags": {
+          "python_version": null,
+          "python_dependencies": "statsmodels>=0.13.0",
+          "env_marker": null,
+          "sktime_version": "0.40.1",
+          "property:randomness": "deterministic",
+          "capability:random_state": false,
+          "tests:core": false,
+          "tests:vm": false,
+          "tests:libs": null,
+          "tests:skip_all": false,
+          "tests:skip_by_name": [
+            "test_predict_time_index_with_X"
+          ],
+          "authors": [
+            "bashtage",
+            "kcc-lion"
+          ],
+          "maintainers": "kcc-lion",
+          "object_type": "forecaster",
+          "scitype:y": "univariate",
+          "capability:exogenous": true,
+          "capability:insample": true,
+          "capability:pred_int": false,
+          "capability:pred_int:insample": true,
+          "capability:missing_values": false,
+          "y_inner_mtype": "pd.Series",
+          "X_inner_mtype": "pd.DataFrame",
+          "requires-fh-in-fit": false,
+          "X-y-must-have-same-index": true,
+          "enforce_index_type": null,
+          "fit_is_empty": false,
+          "capability:categorical_in_X": true,
+          "handles-missing-data": false,
+          "ignores-exogeneous-X": false
+        }
+      }
+    ],
+    "count": 3,
+    "total": 128,
+    "offset": 0,
+    "limit": 3,
+    "has_more": true,
+    "task_filter": "forecasting",
+    "tag_filter": null,
+    "query": null
+  },
+  "describe_estimator": {
+    "success": true,
+    "name": "ARIMA",
+    "task": "forecasting",
+    "module": "sktime.forecasting.arima._pmdarima.ARIMA",
+    "hyperparameters": {
+      "order": {
+        "default": "(1, 0, 0)",
+        "required": false
+      },
+      "seasonal_order": {
+        "default": "(0, 0, 0, 0)",
+        "required": false
+      },
+      "start_params": {
+        "default": null,
+        "required": false
+      },
+      "method": {
+        "default": "lbfgs",
+        "required": false
+      },
+      "maxiter": {
+        "default": 50,
+        "required": false
+      },
+      "suppress_warnings": {
+        "default": false,
+        "required": false
+      },
+      "out_of_sample_size": {
+        "default": 0,
+        "required": false
+      },
+      "scoring": {
+        "default": "mse",
+        "required": false
+      },
+      "scoring_args": {
+        "default": null,
+        "required": false
+      },
+      "trend": {
+        "default": null,
+        "required": false
+      },
+      "with_intercept": {
+        "default": true,
+        "required": false
+      },
+      "time_varying_regression": {
+        "default": false,
+        "required": false
+      },
+      "enforce_stationarity": {
+        "default": true,
+        "required": false
+      },
+      "enforce_invertibility": {
+        "default": true,
+        "required": false
+      },
+      "simple_differencing": {
+        "default": false,
+        "required": false
+      },
+      "measurement_error": {
+        "default": false,
+        "required": false
+      },
+      "mle_regression": {
+        "default": true,
+        "required": false
+      },
+      "hamilton_representation": {
+        "default": false,
+        "required": false
+      },
+      "concentrate_scale": {
+        "default": false,
+        "required": false
+      }
+    },
+    "tags": {
+      "python_version": null,
+      "python_dependencies": [
+        "pmdarima"
+      ],
+      "env_marker": null,
+      "sktime_version": "0.40.1",
+      "property:randomness": "deterministic",
+      "capability:random_state": false,
+      "tests:core": false,
+      "tests:vm": false,
+      "tests:libs": null,
+      "tests:skip_all": false,
+      "tests:skip_by_name": [
+        "test_predict_time_index_with_X"
+      ],
+      "authors": [
+        "tgsmith61591",
+        "charlesdrotar",
+        "aaronreidsmith",
+        "mloning",
+        "hyang1996",
+        "fkiraly",
+        "ilkersigirci"
+      ],
+      "maintainers": [
+        "hyang1996"
+      ],
+      "object_type": "forecaster",
+      "scitype:y": "univariate",
+      "capability:exogenous": true,
+      "capability:insample": true,
+      "capability:pred_int": true,
+      "capability:pred_int:insample": true,
+      "capability:missing_values": true,
+      "y_inner_mtype": "pd.Series",
+      "X_inner_mtype": "pd.DataFrame",
+      "requires-fh-in-fit": false,
+      "X-y-must-have-same-index": true,
+      "enforce_index_type": null,
+      "fit_is_empty": false,
+      "capability:categorical_in_X": true,
+      "handles-missing-data": true,
+      "ignores-exogeneous-X": false
+    },
+    "tag_explanations": {
+      "python_version": "python version specifier (PEP 440) for estimator, or None = all versions ok: None",
+      "python_dependencies": "python dependencies of estimator as str or list of str (PEP 440): ['pmdarima']",
+      "env_marker": "environment marker (PEP 508) requirement for estimator, or None = no marker: None",
+      "sktime_version": "sktime version from which this estimator class originates: 0.40.1",
+      "property:randomness": "does the object behave deterministically or stochastically?: deterministic",
+      "capability:random_state": "does the object have a random_state parameter for derandomization?: No",
+      "tests:core": "whether framework changes trigger estimator tests: No",
+      "tests:vm": "whether to test the object in its own VM: No",
+      "tests:libs": "Core libraries used by the estimator, to trigger tests.: None",
+      "tests:skip_all": "whether to skip all tests for the object: No",
+      "tests:skip_by_name": "list of names of tests that should be skipped for this object: ['test_predict_time_index_with_X']",
+      "authors": "list of authors of the object, each author a GitHub handle: ['tgsmith61591', 'charlesdrotar', 'aaronreidsmith', 'mloning', 'hyang1996', 'fkiraly', 'ilkersigirci']",
+      "maintainers": "current maintainers of the object, each maintainer a GitHub handle: ['hyang1996']",
+      "object_type": "type of object: estimator, transformer, regressor, etc: forecaster",
+      "scitype:y": "which series type does the forecaster support? multivariate means >1 vars: univariate",
+      "capability:exogenous": "does forecaster make use of exogenous data?: Yes",
+      "capability:insample": "can the forecaster make in-sample predictions?: Yes",
+      "capability:pred_int": "does the forecaster implement predict_interval or predict_quantiles?: Yes",
+      "capability:pred_int:insample": "can the forecaster make in-sample predictions in predict_interval/quantiles?: Yes",
+      "capability:missing_values": "can the estimator handle missing data (NA, np.nan) in inputs?: Yes",
+      "y_inner_mtype": "which machine type(s) is the internal _fit/_predict able to deal with?: pd.Series",
+      "X_inner_mtype": "which machine type(s) is the internal _fit/_predict able to deal with?: pd.DataFrame",
+      "requires-fh-in-fit": "does the forecaster require the forecasting horizon in fit?: No",
+      "X-y-must-have-same-index": "do X/y in fit/update and X/fh in predict have to be same indices?: Yes",
+      "enforce_index_type": "passed to input checks, input conversion index type to enforce: None",
+      "fit_is_empty": "does the estimator have an empty fit method?: No",
+      "capability:categorical_in_X": "can the estimator handle categorical data in X arguments?: Yes",
+      "handles-missing-data": "can the estimator handle missing data (NA, np.nan) in inputs?: Yes",
+      "ignores-exogeneous-X": "deprecated tag for exogenous capability: No"
+    },
+    "docstring": "(S)ARIMA(X) forecaster, from pmdarima package.\n\nExposes ``pmdarima.arima.ARIMA`` [1]_ under the ``sktime`` interface.\nSeasonal ARIMA models and exogeneous input is supported, hence this estimator is\ncapable of fitting SARIMA, ARIMAX, and SARIMAX.\nTo additionally fit (S)ARIMA(X) hyper-parameters, use the ``AutoARIMA`` estimator.\n\nAn ARIMA, or autoregressive integrated moving average model, is a\ngeneralization of an autoregressive moving average (ARMA) model, and is fitted to\ntime-series data in a"
+  },
+  "instantiate_estimator": {
+    "success": true,
+    "handle": "est_4ea3e93153c2",
+    "estimator": "NaiveForecaster",
+    "params": {
+      "strategy": "last"
+    }
+  },
+  "list_handles": {
+    "success": true,
+    "handles": [
+      {
+        "handle_id": "est_4ea3e93153c2",
+        "estimator_name": "NaiveForecaster",
+        "params": {
+          "strategy": "last"
+        },
+        "created_at": "2026-05-13T16:17:14.676268",
+        "fitted": false,
+        "metadata": {}
+      }
+    ],
+    "count": 1
+  },
+  "validate_pipeline": {
+    "valid": true,
+    "errors": [],
+    "warnings": [],
+    "suggestions": [],
+    "success": true
+  },
+  "instantiate_pipeline": {
+    "success": true,
+    "handle": "est_e10895f81944",
+    "pipeline": "Detrender \u2192 NaiveForecaster",
+    "components": [
+      "Detrender",
+      "NaiveForecaster"
+    ],
+    "params_list": [
+      {},
+      {}
+    ]
+  },
+  "list_available_data": {
+    "success": true,
+    "system_demos": [
+      "PBS_dataset",
+      "UCR_UEA_dataset",
+      "acsf1",
+      "airline",
+      "arrow_head",
+      "basic_motions",
+      "covid_3month",
+      "electric_devices_segmentation",
+      "forecastingdata",
+      "fpp3",
+      "from_arff_to_dataframe",
+      "from_long_to_dataframe",
+      "from_tsfile",
+      "from_tsfile_to_dataframe",
+      "from_ucr_tsv_to_dataframe",
+      "gun_point_segmentation",
+      "gunpoint",
+      "hierarchical_sales_toydata",
+      "italy_power_demand",
+      "japanese_vowels",
+      "longley",
+      "lynx",
+      "m5",
+      "macroeconomic",
+      "osuleaf",
+      "plaid",
+      "shampoo_sales",
+      "solar",
+      "tecator",
+      "tsf_to_dataframe",
+      "unit_test",
+      "unit_test_tsf",
+      "uschange"
+    ],
+    "active_handles": [],
+    "total": 33
+  },
+  "fit_predict": {
+    "success": true,
+    "predictions": {
+      "1961-01": 432.0,
+      "1961-02": 432.0,
+      "1961-03": 432.0
+    },
+    "horizon": 3
+  },
+  "fit_predict_async": {
+    "success": true,
+    "job_id": "7eaad133-8ff5-402c-9bb5-446b4091ebdf",
+    "message": "Training job started for Detrender \u2192 NaiveForecaster on airline. Use check_job_status('7eaad133-8ff5-402c-9bb5-446b4091ebdf') to monitor progress.",
+    "estimator": "Detrender \u2192 NaiveForecaster",
+    "data_source": "airline",
+    "horizon": 3
+  },
+  "job_final_status": {
+    "success": true,
+    "job_id": "7eaad133-8ff5-402c-9bb5-446b4091ebdf",
+    "job_type": "fit_predict",
+    "estimator_handle": "est_e10895f81944",
+    "estimator_name": "Detrender \u2192 NaiveForecaster",
+    "status": "completed",
+    "created_at": "2026-05-13T16:17:14.700605",
+    "start_time": "2026-05-13T16:17:14.700738",
+    "end_time": "2026-05-13T16:17:14.755653",
+    "total_steps": 3,
+    "completed_steps": 3,
+    "current_step": "Completed",
+    "progress_percentage": 100.0,
+    "elapsed_time": 0.054915,
+    "estimated_time_remaining": null,
+    "estimated_time_remaining_human": null,
+    "dataset_name": "airline",
+    "horizon": 3,
+    "result": {
+      "success": true,
+      "predictions": {
+        "1961-01": 434.65718390804597,
+        "1961-02": 437.31436781609193,
+        "1961-03": 439.97155172413795
+      },
+      "horizon": 3
+    },
+    "errors": []
+  },
+  "list_jobs": {
+    "success": true,
+    "count": 1,
+    "jobs": [
+      {
+        "job_id": "7eaad133-8ff5-402c-9bb5-446b4091ebdf",
+        "job_type": "fit_predict",
+        "estimator_handle": "est_e10895f81944",
+        "estimator_name": "Detrender \u2192 NaiveForecaster",
+        "status": "completed",
+        "created_at": "2026-05-13T16:17:14.700605",
+        "start_time": "2026-05-13T16:17:14.700738",
+        "end_time": "2026-05-13T16:17:14.755653",
+        "total_steps": 3,
+        "completed_steps": 3,
+        "current_step": "Completed",
+        "progress_percentage": 100.0,
+        "elapsed_time": 0.054915,
+        "estimated_time_remaining": null,
+        "estimated_time_remaining_human": null,
+        "dataset_name": "airline",
+        "horizon": 3,
+        "result": {
+          "success": true,
+          "predictions": {
+            "1961-01": 434.65718390804597,
+            "1961-02": 437.31436781609193,
+            "1961-03": 439.97155172413795
+          },
+          "horizon": 3
+        },
+        "errors": []
+      }
+    ]
+  },
+  "export_code": {
+    "success": true,
+    "code": "from sktime.forecasting.naive._naive import NaiveForecaster\n\nmodel = NaiveForecaster(strategy=\"last\")",
+    "estimator_name": "NaiveForecaster",
+    "is_pipeline": false,
+    "handle": "est_4ea3e93153c2"
+  },
+  "save_model": {
+    "success": false,
+    "error": "`mlflow` is an extra dependency and is not included in the base sktime installation. Please run `pip install mlflow` or `pip install sktime[mlflow]` to install the package.To install the requirement 'mlflow' or 'mlflow-skinny', please run: `pip install mlflow` or `pip install mlflow-skinny` "
+  },
+  "load_model": {
+    "success": false,
+    "error": "Failed to load model: `mlflow` is an extra dependency and is not included in the base sktime installation. Please run `pip install mlflow` or `pip install sktime[mlflow]` to install the package.To install the requirement 'mlflow' or 'mlflow-skinny', please run: `pip install mlflow` or `pip install mlflow-skinny` ",
+    "path": "/tmp/tmpo3d83xkj/my_model"
+  },
+  "release_handle": {
+    "success": true,
+    "handle": "est_4ea3e93153c2",
+    "message": "Handle released"
+  }
+}

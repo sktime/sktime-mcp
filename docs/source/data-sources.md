@@ -70,9 +70,9 @@ Load data from any supported source.
 }
 ```
 
-### `fit_predict_with_data`
+### `fit_predict` (custom data)
 
-Fit a model and generate predictions using custom data.
+After `load_data_source`, call `fit_predict` with `data_handle` set (and omit `dataset`, or pass an empty string). This is the same MCP tool used for demo datasets.
 
 **Arguments:**
 - `estimator_handle` (str): Handle from `instantiate_estimator`
@@ -102,8 +102,8 @@ List available data in a single response, including demo datasets and active han
 
 **Arguments (optional):**
 - `is_demo` (bool):
-    - `true` → only demo datasets
-    - `false` → only active data handles
+    - `True` → only demo datasets
+    - `False` → only active data handles
     - omitted → both
 
 **Returns:**
@@ -321,17 +321,17 @@ When using these tools to handle user data, follow these best practices to avoid
 
 ### "No module named 'sqlalchemy'"
 ```bash
-pip install sqlalchemy
+pip install "sktime-mcp[sql]"
 ```
 
 ### "No module named 'openpyxl'" (for Excel files)
 ```bash
-pip install openpyxl
+pip install "sktime-mcp[files]"
 ```
 
 ### "No module named 'pyarrow'" (for Parquet files)
 ```bash
-pip install pyarrow
+pip install "sktime-mcp[files]"
 ```
 
 ### "Could not infer frequency"
