@@ -6,7 +6,10 @@ from sktime_mcp.tools.data_tools import (
     load_data_source_tool,
     release_data_handle_tool,
 )
-from sktime_mcp.tools.describe_estimator import describe_estimator_tool
+from sktime_mcp.tools.describe_estimator import (
+    describe_component_tool,
+    describe_estimator_tool,
+)
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
@@ -29,6 +32,7 @@ from sktime_mcp.tools.list_available_data import list_available_data_tool
 from sktime_mcp.tools.list_estimators import (
     get_available_tags,
     list_estimators_tool,
+    query_registry_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
 
@@ -36,6 +40,8 @@ __all__ = [
     "list_estimators_tool",
     "get_available_tags",
     "describe_estimator_tool",
+    "describe_component_tool",
+    "query_registry_tool",
     "instantiate_estimator_tool",
     "instantiate_pipeline_tool",
     "list_handles_tool",

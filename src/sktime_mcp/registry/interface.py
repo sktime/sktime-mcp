@@ -81,9 +81,12 @@ class RegistryInterface:
         "clusterer": "clustering",
         "param_est": "parameter_estimation",
         "splitter": "splitting",
-        # "alignment": "alignment", L-2: It is failing, but I will investigate it later
+        "aligner": "alignment",
         "network": "network",
         "detector": "detection",
+        "metric": "metric",
+        "transformer-pairwise": "pairwise_transformation",
+        "transformer-pairwise-panel": "pairwise_panel_transformation",
     }
 
     def __init__(self):

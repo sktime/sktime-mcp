@@ -9,7 +9,8 @@ import asyncio
 import inspect
 import logging
 import uuid
-from typing import Any
+import os
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -648,7 +649,8 @@ class Executor:
                     )
                     if format_result["success"]:
                         # Free the raw handle — the formatted copy supersedes it
-                        del self._data_handles[data_handle]
+                        if data_handle in self._data_handles:
+                            del self._data_handles[data_handle]
                         return {
                             "success": True,
                             "data_handle": format_result["data_handle"],
