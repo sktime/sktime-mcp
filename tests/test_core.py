@@ -160,6 +160,26 @@ class TestCompositionValidator:
 
         assert not result.valid
 
+    def test_forecaster_chain_invalid(self):
+        """Forecaster -> forecaster should be invalid in linear pipeline validation."""
+        from sktime_mcp.composition.validator import CompositionValidator
+
+        validator = CompositionValidator()
+        result = validator.validate_pipeline(["NaiveForecaster", "ExponentialSmoothing"])
+
+        assert not result.valid
+        assert any("Cannot chain forecasters" in err for err in result.errors)
+
+    def test_transformer_to_forecaster_valid(self):
+        """Transformer -> forecaster remains valid."""
+        from sktime_mcp.composition.validator import CompositionValidator
+
+        validator = CompositionValidator()
+        result = validator.validate_pipeline(["Imputer", "NaiveForecaster"])
+
+        assert result.valid
+        assert len(result.errors) == 0
+
 
 class TestTools:
     """Tests for MCP tools."""
