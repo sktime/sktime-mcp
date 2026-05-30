@@ -5,6 +5,7 @@ This example demonstrates how to use the sktime-mcp data loading
 functionality with CSV files.
 """
 
+import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -20,7 +21,7 @@ sample_data = pd.DataFrame(
     }
 )
 
-csv_path = Path("/tmp/sample_sales_data.csv")
+csv_path = Path(tempfile.gettempdir()) / "sample_sales_data.csv"
 sample_data.to_csv(csv_path, index=False)
 print(f"Created sample CSV file: {csv_path}")
 print(f"File size: {csv_path.stat().st_size} bytes")
@@ -70,10 +71,11 @@ if result["success"]:
     estimator_result = executor.instantiate("NaiveForecaster", {"strategy": "drift"})
 
     if estimator_result["success"]:
-        predictions = executor.fit_predict_with_data(
-            estimator_handle=estimator_result["handle"],
+        predictions = executor.fit_predict(
+            estimator_result["handle"],
+            "",
+            10,
             data_handle=result["data_handle"],
-            horizon=10,
         )
 
         if predictions["success"]:
@@ -90,7 +92,7 @@ print("\n" + "=" * 60)
 print("Loading data from TSV file")
 print("=" * 60)
 
-tsv_path = Path("/tmp/sample_sales_data.tsv")
+tsv_path = Path(tempfile.gettempdir()) / "sample_sales_data.tsv"
 sample_data.to_csv(tsv_path, sep="\t", index=False)
 print(f"Created sample TSV file: {tsv_path}")
 
