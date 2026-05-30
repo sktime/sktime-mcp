@@ -4,10 +4,11 @@ Code generation tool for sktime MCP.
 Generates Python code to recreate estimators and pipelines.
 """
 
-from typing import Any, Optional
+import keyword
+from typing import Any
 
 from sktime_mcp.registry.interface import get_registry
-from sktime_mcp.runtime.executor import DEMO_DATASETS
+from sktime_mcp.runtime.executor import _get_demo_datasets
 from sktime_mcp.runtime.handles import get_handle_manager
 
 
@@ -36,13 +37,18 @@ def _format_value(value: Any) -> str:
         return repr(value)
 
 
-def _get_estimator_module(estimator_name: str) -> Optional[str]:
+def _get_estimator_module(estimator_name: str) -> str | None:
     """Get the module path for an estimator."""
     registry = get_registry()
     node = registry.get_estimator_by_name(estimator_name)
     if node and node.class_ref:
         return node.class_ref.__module__
     return None
+
+
+def _is_valid_var_name(var_name: str) -> bool:
+    """Return True when var_name is a valid non-keyword Python identifier."""
+    return isinstance(var_name, str) and var_name.isidentifier() and not keyword.iskeyword(var_name)
 
 
 def _generate_single_estimator_code(
@@ -104,7 +110,7 @@ def _generate_pipeline_code(
 
     # Build component instantiations
     component_code_lines = []
-    for i, (comp_name, params) in enumerate(zip(components, params_list)):
+    for i, (comp_name, params) in enumerate(zip(components, params_list, strict=False)):
         var = f"step_{i}"
         if params:
             param_strs = []
@@ -181,7 +187,7 @@ def export_code_tool(
     handle: str,
     var_name: str = "model",
     include_fit_example: bool = False,
-    dataset: Optional[str] = None,
+    dataset: str | None = None,
 ) -> dict[str, Any]:
     """
     Export an estimator or pipeline as executable Python code.
@@ -221,6 +227,12 @@ def export_code_tool(
     except KeyError:
         return {"success": False, "error": f"Handle not found: {handle}"}
 
+    if not _is_valid_var_name(var_name):
+        return {
+            "success": False,
+            "error": "var_name must be a valid Python identifier and not a keyword.",
+        }
+
     estimator_name = handle_info.estimator_name
     params = handle_info.params
 
@@ -241,9 +253,10 @@ def export_code_tool(
 
     # Optionally add fit/predict example
     if include_fit_example:
-        # Resolve the dataset loader from DEMO_DATASETS
-        if dataset and dataset in DEMO_DATASETS:
-            module_path = DEMO_DATASETS[dataset]
+        # Resolve the dataset loader from demo datasets
+        _demo_datasets = _get_demo_datasets()
+        if dataset and dataset in _demo_datasets:
+            module_path = _demo_datasets[dataset]
             module_parts = module_path.rsplit(".", 1)
             loader_module = module_parts[0]
             loader_func = module_parts[1]

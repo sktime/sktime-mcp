@@ -1,9 +1,9 @@
-from typing import Any, Optional
+from typing import Any
 
 from sktime_mcp.runtime.executor import get_executor
 
 
-def list_available_data_tool(is_demo: Optional[bool] = None) -> dict[str, Any]:
+def list_available_data_tool(is_demo: bool | None = None) -> dict[str, Any]:
     """
     List all data available for use — system demo datasets and active data handles.
 
@@ -25,7 +25,7 @@ def list_available_data_tool(is_demo: Optional[bool] = None) -> dict[str, Any]:
     """
     executor = get_executor()
 
-    system_demos = []
+    system_demos = {}
     active_handles = []
 
     if is_demo is None or is_demo is True:
@@ -35,9 +35,11 @@ def list_available_data_tool(is_demo: Optional[bool] = None) -> dict[str, Any]:
         handles_result = executor.list_data_handles()
         active_handles = handles_result.get("handles", [])
 
+    total_demos = sum(len(v) for v in system_demos.values()) if system_demos else 0
+
     return {
         "success": True,
         "system_demos": system_demos,
         "active_handles": active_handles,
-        "total": len(system_demos) + len(active_handles),
+        "total": total_demos + len(active_handles),
     }

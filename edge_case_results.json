@@ -1,0 +1,88 @@
+{
+  "invalid_estimator": {
+    "success": false,
+    "error": "Unknown estimator: NonExistent"
+  },
+  "invalid_params": {
+    "success": false,
+    "error": "ARIMA.__init__() got an unexpected keyword argument 'unknown_arg'"
+  },
+  "invalid_pipeline": {
+    "valid": false,
+    "errors": [
+      "Pipeline ends with transformer 'Detrender'. The final component should be a forecaster, classifier, or regressor."
+    ],
+    "warnings": [
+      "Unusual composition: forecasting 'ARIMA' \u2192 transformation 'Detrender'"
+    ],
+    "suggestions": [
+      "Add a forecaster like 'ARIMA' or 'ExponentialSmoothing' at the end"
+    ],
+    "success": false
+  },
+  "missing_dataset": {
+    "success": false,
+    "error": "Unknown dataset: non_existent_dataset_123",
+    "available": [
+      "PBS_dataset",
+      "UCR_UEA_dataset",
+      "acsf1",
+      "airline",
+      "arrow_head",
+      "basic_motions",
+      "covid_3month",
+      "electric_devices_segmentation",
+      "forecastingdata",
+      "fpp3",
+      "from_arff_to_dataframe",
+      "from_long_to_dataframe",
+      "from_tsfile",
+      "from_tsfile_to_dataframe",
+      "from_ucr_tsv_to_dataframe",
+      "gun_point_segmentation",
+      "gunpoint",
+      "hierarchical_sales_toydata",
+      "italy_power_demand",
+      "japanese_vowels",
+      "longley",
+      "lynx",
+      "m5",
+      "macroeconomic",
+      "osuleaf",
+      "plaid",
+      "shampoo_sales",
+      "solar",
+      "tecator",
+      "tsf_to_dataframe",
+      "unit_test",
+      "unit_test_tsf",
+      "uschange"
+    ]
+  },
+  "cancel_job": {
+    "success": true,
+    "message": "Job 'd922c638-af25-41af-b821-90755af21e32' cancelled"
+  },
+  "cancelled_job_status": {
+    "success": true,
+    "job_id": "d922c638-af25-41af-b821-90755af21e32",
+    "job_type": "fit_predict",
+    "estimator_handle": "est_980853616c87",
+    "estimator_name": "NaiveForecaster",
+    "status": "cancelled",
+    "created_at": "2026-05-13T16:17:42.037728",
+    "start_time": "2026-05-13T16:17:42.037851",
+    "end_time": "2026-05-13T16:17:42.038626",
+    "total_steps": 3,
+    "completed_steps": 0,
+    "current_step": "Loading dataset 'airline'...",
+    "progress_percentage": 0.0,
+    "elapsed_time": 0.000775,
+    "estimated_time_remaining": null,
+    "estimated_time_remaining_human": null,
+    "dataset_name": "airline",
+    "horizon": 100,
+    "result": null,
+    "errors": []
+  }
+}

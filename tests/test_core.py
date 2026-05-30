@@ -30,6 +30,23 @@ class TestRegistryInterface:
 
         assert all(e.task == "forecasting" for e in forecasters)
 
+    def test_detection_estimators_in_registry(self):
+        """Registry loads sktime `detector` scitype as MCP task `detection`."""
+        from sktime_mcp.registry.interface import get_registry
+        from sktime_mcp.tools.describe_estimator import search_estimators_tool
+
+        registry = get_registry()
+        detectors = registry.get_all_estimators(task="detection")
+
+        assert len(detectors) > 0
+        assert all(e.task == "detection" for e in detectors)
+        names = {e.name for e in detectors}
+        assert "PyODDetector" in names or "BinarySegmentation" in names
+
+        anomaly_search = search_estimators_tool("anomaly", limit=50)
+        assert anomaly_search["success"]
+        assert anomaly_search["count"] > 2
+
     def test_get_estimator_by_name(self):
         """Test getting a specific estimator."""
         from sktime_mcp.registry.interface import get_registry
@@ -41,6 +58,26 @@ class TestRegistryInterface:
         if node is not None:
             assert node.name == "NaiveForecaster"
             assert node.task == "forecasting"
+
+    def test_search_prioritizes_exact_estimator_name(self):
+        """Exact estimator name matches should rank before broad matches."""
+        from sktime_mcp.registry.interface import get_registry
+
+        registry = get_registry()
+        matches = registry.search_estimators("NaiveForecaster")
+
+        assert len(matches) > 0
+        assert matches[0].name == "NaiveForecaster"
+
+    def test_search_prioritizes_case_insensitive_exact_name(self):
+        """Exact estimator ranking should be case-insensitive."""
+        from sktime_mcp.registry.interface import get_registry
+
+        registry = get_registry()
+        matches = registry.search_estimators("naiveforecaster")
+
+        assert len(matches) > 0
+        assert matches[0].name == "NaiveForecaster"
 
 
 class TestHandleManager:
@@ -137,6 +174,27 @@ class TestTools:
         assert "estimators" in result
         assert len(result["estimators"]) <= 5
 
+    def test_list_estimators_detection_task(self):
+        """Test that detection estimators are returned when filtering by detection task."""
+        from sktime_mcp.tools.list_estimators import list_estimators_tool
+
+        result = list_estimators_tool(task="detection", limit=100)
+
+        assert result["success"]
+        assert result["total"] > 0, "There should be detection estimators"
+        assert all(e["task"] == "detection" for e in result["estimators"]), (
+            "All returned estimators should have task='detection'"
+        )
+
+    def test_detection_in_available_tasks(self):
+        """Test that detection appears in available tasks."""
+        from sktime_mcp.tools.list_estimators import get_available_tasks
+
+        result = get_available_tasks()
+
+        assert result["success"]
+        assert "detection" in result["tasks"], "detection should be a valid task"
+
     def test_describe_unknown_estimator(self):
         """Test describing an unknown estimator."""
         from sktime_mcp.tools.describe_estimator import describe_estimator_tool
@@ -156,10 +214,12 @@ class TestTools:
         assert "system_demos" in result
         assert "active_handles" in result
         assert "total" in result
-        assert isinstance(result["system_demos"], list)
+        assert isinstance(result["system_demos"], dict)
         assert isinstance(result["active_handles"], list)
-        assert result["total"] == len(result["system_demos"]) + len(result["active_handles"])
-        assert "airline" in result["system_demos"]
+        assert "forecasting" in result["system_demos"]
+        assert "classification" in result["system_demos"]
+        assert "regression" in result["system_demos"]
+        assert "airline" in result["system_demos"]["forecasting"]
 
     def test_list_available_data_demos_only(self):
         """list_available_data with is_demo=True returns only system demo datasets."""
@@ -170,8 +230,8 @@ class TestTools:
         assert result["success"]
         assert len(result["system_demos"]) > 0
         assert result["active_handles"] == []
-        assert result["total"] == len(result["system_demos"])
-        assert "airline" in result["system_demos"]
+        assert result["total"] > 0
+        assert "airline" in result["system_demos"]["forecasting"]
 
     def test_list_available_data_handles_only(self):
         """list_available_data with is_demo=False returns only active data handles."""
@@ -180,7 +240,7 @@ class TestTools:
         result = list_available_data_tool(is_demo=False)
 
         assert result["success"]
-        assert result["system_demos"] == []
+        assert result["system_demos"] == {}
         assert isinstance(result["active_handles"], list)
         assert result["total"] == len(result["active_handles"])
 
@@ -310,6 +370,115 @@ class TestDataHandleLimits:
         # Rest survive
         for i in range(3, 10):
             assert f"data_{i:08x}" in ex._data_handles
+class TestMemoryLeakFix:
+    """Tests for issue #218 — memory leak in load_data_source auto-formatting."""
+
+    def test_load_data_source_no_raw_handle_leaked(self):
+        """After auto-formatted load, only one handle should exist in the executor."""
+        import pandas as pd
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+        config = {
+            "type": "pandas",
+            "data": {
+                "date": pd.date_range(start="2020-01-01", periods=24, freq="ME"),
+                "value": list(range(100, 124)),
+            },
+            "time_column": "date",
+            "target_column": "value",
+        }
+
+        result = executor.load_data_source(config)
+        assert result["success"], result.get("error")
+
+        # Only the formatted handle should remain — the raw handle must be freed
+        assert len(executor._data_handles) == 1
+        assert result["data_handle"] in executor._data_handles
+
+    def test_load_data_source_original_handle_not_in_response(self):
+        """Response should not expose a leaked original_handle field."""
+        import pandas as pd
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+        config = {
+            "type": "pandas",
+            "data": {
+                "date": pd.date_range(start="2020-01-01", periods=24, freq="ME"),
+                "value": list(range(100, 124)),
+            },
+            "time_column": "date",
+            "target_column": "value",
+        }
+
+        result = executor.load_data_source(config)
+        assert result["success"]
+
+        # original_handle was previously leaked in the response — should be gone
+        assert "original_handle" not in result
+
+    def test_repeated_loads_handle_count_stays_constant(self):
+        """Loading data N times should result in exactly N handles, not 2*N."""
+        import pandas as pd
+        from sktime_mcp.runtime.executor import Executor
+
+        executor = Executor()
+        config = {
+            "type": "pandas",
+            "data": {
+                "date": pd.date_range(start="2020-01-01", periods=24, freq="ME"),
+                "value": list(range(100, 124)),
+            },
+            "time_column": "date",
+            "target_column": "value",
+        }
+
+        for _ in range(3):
+            executor.load_data_source(config)
+
+        assert len(executor._data_handles) == 3
+class TestSearchEstimatorsLimit:
+    """Tests for the limit parameter validation in search_estimators_tool."""
+
+    def test_limit_zero_returns_error(self):
+        """limit=0 should return an error, not an empty list."""
+        from sktime_mcp.tools.describe_estimator import search_estimators_tool
+
+        result = search_estimators_tool("NaiveForecaster", limit=0)
+
+        assert not result["success"]
+        assert result["error"] == "limit must be a positive integer."
+
+    def test_limit_negative_one_returns_error(self):
+        """limit=-1 should return an error, not the last result."""
+        from sktime_mcp.tools.describe_estimator import search_estimators_tool
+
+        result = search_estimators_tool("NaiveForecaster", limit=-1)
+
+        assert not result["success"]
+        assert result["error"] == "limit must be a positive integer."
+
+    def test_limit_negative_five_returns_error(self):
+        """limit=-5 should return an error, not the last 5 results."""
+        from sktime_mcp.tools.describe_estimator import search_estimators_tool
+
+        result = search_estimators_tool("NaiveForecaster", limit=-5)
+
+        assert not result["success"]
+        assert result["error"] == "limit must be a positive integer."
+
+    def test_limit_valid_returns_results(self):
+        """A positive limit should work correctly and cap results."""
+        pytest.importorskip("sktime", reason="sktime not installed in this environment")
+        from sktime_mcp.tools.describe_estimator import search_estimators_tool
+
+        result = search_estimators_tool("Forecaster", limit=3)
+
+        assert result["success"]
+        assert "results" in result
+        assert len(result["results"]) <= 3
+        assert result["count"] <= 3
 
 
 if __name__ == "__main__":

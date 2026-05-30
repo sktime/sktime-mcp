@@ -2,15 +2,15 @@
 
 ## New Data Flow
 
-![New Data Flow](assets/mcp_data_flow.png)
+![New Data Flow](_static/mcp_data_flow.png)
 
 ## Component Interaction
 
-![Component Interaction Sequence](assets/component_interaction.png)
+![Component Interaction Sequence](_static/component_interaction.png)
 
 ## Data Adapter Pattern
 
-![Data Adapter Pattern](assets/data_adapter_pattern.png)
+![Data Adapter Pattern](_static/data_adapter_pattern.png)
 
 ## Data Validation Flow
 
@@ -69,7 +69,7 @@ adapter.to_sktime_format()
 │  }                                                              │
 └─────────────────────────────────────────────────────────────────┘
          │                                    │
-         │ fit_predict_with_data()            │ release_data_handle()
+         │ fit_predict(data_handle=…)         │ release_data_handle()
          │                                    │
          ▼                                    ▼
     Retrieve data                        Delete handle
@@ -123,7 +123,7 @@ adapter.to_sktime_format()
                         │
 3. Fit & Predict        │
    ┌──────────────────────────────────────────────────────────┐
-   │ fit_predict_with_data(                                   │
+   │ fit_predict( … data_handle= … )                           │
    │   estimator_handle="est_xyz789",                         │
    │   data_handle="data_abc123",                             │
    │   horizon=7                                              │
