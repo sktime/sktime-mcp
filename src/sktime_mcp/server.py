@@ -45,10 +45,7 @@ from sktime_mcp.tools.data_tools import (
     load_data_source_tool,
     release_data_handle_tool,
 )
-from sktime_mcp.tools.describe_estimator import (
-    describe_component_tool,
-    describe_estimator_tool,
-)
+from sktime_mcp.tools.describe_estimator import describe_estimator_tool
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
@@ -71,7 +68,6 @@ from sktime_mcp.tools.list_available_data import list_available_data_tool
 from sktime_mcp.tools.list_estimators import (
     get_available_tags,
     list_estimators_tool,
-    query_registry_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
 
@@ -124,9 +120,12 @@ def _apply_response_token_limit(tool_name: str, text: str) -> str:
     that live config changes are respected.
     Returns *text* unchanged when the limit is 0 (unlimited) or not set.
     """
-    from sktime_mcp.config import settings
+    raw = os.environ.get("SKTIME_MCP_MAX_RESPONSE_TOKENS", "0")
+    try:
+        max_tokens = int(raw)
+    except ValueError:
+        max_tokens = 0
 
-    max_tokens = settings.max_response_tokens
     if max_tokens <= 0:
         return text  # unlimited
 
@@ -208,64 +207,6 @@ async def list_tools() -> list[Tool]:
     """List all available MCP tools."""
     return [
         # -- Discovery -------------------------------------------------------
-        Tool(
-            name="query_registry",
-            description=(
-                "Unified entry point to query the sktime registry for estimators, capability tags, or performance metrics. "
-                "Common targets you can search: 'estimators', 'tags', 'metrics'."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "target": {
-                        "type": "string",
-                        "description": "Registry target to search: 'estimators', 'tags', or 'metrics' (default: 'estimators')",
-                        "enum": ["estimators", "tags", "metrics"],
-                        "default": "estimators",
-                    },
-                    "task": {
-                        "type": "string",
-                        "description": (
-                            "Filter estimators or metrics by task type: forecasting, classification, regression, "
-                            "transformation, clustering, splitting, detection, alignment, parameter_estimation, network, or metric"
-                        ),
-                    },
-                    "tags": {
-                        "type": "object",
-                        "description": "Filter estimators by capability tags, e.g. {'capability:pred_int': true}",
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "Search by name or description (substring, case-insensitive)",
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Maximum results (default: 50)",
-                        "default": 50,
-                    },
-                    "offset": {
-                        "type": "integer",
-                        "description": "Skip this many results for pagination (default: 0)",
-                        "default": 0,
-                    },
-                },
-                "required": ["target"],
-            },
-        ),
-        Tool(
-            name="describe_component",
-            description="Get detailed information about ANY class or component in the sktime ecosystem (estimators, splitters, metrics, transformers)",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "description": "Name of the component class (e.g., 'ARIMA', 'SlidingWindowSplitter', 'MeanAbsolutePercentageError')",
-                    },
-                },
-                "required": ["name"],
-            },
-        ),
         Tool(
             name="list_estimators",
             description=(
@@ -809,20 +750,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
     try:
         # -- Discovery -------------------------------------------------------
-        if name == "query_registry":
-            result = query_registry_tool(
-                target=arguments.get("target", "estimators"),
-                task=arguments.get("task"),
-                tags=arguments.get("tags"),
-                query=arguments.get("query"),
-                limit=arguments.get("limit", 50),
-                offset=arguments.get("offset", 0),
-            )
-
-        elif name == "describe_component":
-            result = describe_component_tool(name=arguments["name"])
-
-        elif name == "list_estimators":
+        if name == "list_estimators":
             result = list_estimators_tool(
                 task=arguments.get("task"),
                 tags=arguments.get("tags"),
@@ -978,6 +906,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
 
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
+        elif name == "load_model":
+            result = load_model_tool(arguments["path"])
+        elif name == "save_model":
+            result = save_model_tool(
+                arguments["estimator_handle"],
+                arguments["path"],
+                arguments.get("mlflow_params"),
+            )
         elif name == "fit_predict_classification":
             result = fit_predict_classification_tool(
                 estimator_handle=arguments["estimator_handle"],

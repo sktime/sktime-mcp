@@ -153,19 +153,15 @@ def load_data_source_async_tool(
         total_steps=3,  # load, validate, format
     )
 
-    coro = executor.load_data_source_async(config, job_id)
-
-    # Schedule the async coroutine on the event loop
+    # schedule on event loop
     try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(coro)
+        loop = asyncio.get_event_loop()
     except RuntimeError:
-        # No running event loop (e.g. sync test or CLI environment)
         loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(coro)
-        finally:
-            loop.close()
+        asyncio.set_event_loop(loop)
+
+    coro = executor.load_data_source_async(config, job_id)
+    asyncio.run_coroutine_threadsafe(coro, loop)
 
     return {
         "success": True,
