@@ -56,13 +56,10 @@ def format_time_series_tool(
         )
 
     except Exception as e:
-        import traceback
-
         return {
             "success": False,
             "error": str(e),
             "error_type": type(e).__name__,
-            "traceback": traceback.format_exc(),
         }
 
 

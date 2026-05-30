@@ -5,7 +5,7 @@ Provides tools for checking job status, listing jobs, and cancelling jobs.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 
@@ -38,7 +38,7 @@ def check_job_status_tool(job_id: str) -> dict[str, Any]:
 
 
 def list_jobs_tool(
-    status: Optional[str] = None,
+    status: str | None = None,
     limit: int = 20,
 ) -> dict[str, Any]:
     """
@@ -56,6 +56,14 @@ def list_jobs_tool(
     # Convert status string to enum
     status_filter = None
     if status is not None:
+        if not isinstance(status, str):
+            return {
+                "success": False,
+                "error": (
+                    f"Invalid status type '{type(status).__name__}'. "
+                    "Expected one of: pending, running, completed, failed, cancelled"
+                ),
+            }
         try:
             status_filter = JobStatus(status.lower())
         except ValueError:
@@ -63,6 +71,12 @@ def list_jobs_tool(
                 "success": False,
                 "error": f"Invalid status '{status}'. Valid values: pending, running, completed, failed, cancelled",
             }
+
+    if limit < 1:
+        return {
+            "success": False,
+            "error": "limit must be a positive integer.",
+        }
 
     jobs = job_manager.list_jobs(status=status_filter, limit=limit)
 
@@ -73,63 +87,41 @@ def list_jobs_tool(
     }
 
 
-def cancel_job_tool(job_id: str) -> dict[str, Any]:
+def cancel_job_tool(job_id: str, delete: bool = False) -> dict[str, Any]:
     """
-    Cancel a running or pending job.
+    Cancel a running/pending job, and optionally remove its record.
 
     Args:
         job_id: Job ID to cancel
+        delete: Also remove the job record after cancelling (default: False).
+                For jobs that are already completed/failed, set delete=True
+                to remove them.
 
     Returns:
-        Dictionary with success status
+        Dictionary with success status and message
     """
     job_manager = get_job_manager()
 
-    success = job_manager.cancel_job(job_id)
+    job = job_manager.get_job(job_id)
+    if job is None:
+        return {"success": False, "error": f"Job '{job_id}' not found"}
 
-    if success:
-        return {
-            "success": True,
-            "message": f"Job '{job_id}' cancelled",
-        }
-    else:
-        job = job_manager.get_job(job_id)
-        if job is None:
-            return {
-                "success": False,
-                "error": f"Job '{job_id}' not found",
-            }
-        else:
-            return {
-                "success": False,
-                "error": f"Cannot cancel job in status '{job.status.value}'",
-            }
+    if job.status in (JobStatus.PENDING, JobStatus.RUNNING):
+        job_manager.cancel_job(job_id)
+        msg = f"Job '{job_id}' cancelled"
+        if delete:
+            job_manager.delete_job(job_id)
+            msg += " and removed"
+        return {"success": True, "message": msg}
 
+    if delete:
+        job_manager.delete_job(job_id)
+        return {"success": True, "message": f"Job '{job_id}' removed"}
 
-def delete_job_tool(job_id: str) -> dict[str, Any]:
-    """
-    Delete a job from the job manager.
-
-    Args:
-        job_id: Job ID to delete
-
-    Returns:
-        Dictionary with success status
-    """
-    job_manager = get_job_manager()
-
-    success = job_manager.delete_job(job_id)
-
-    if success:
-        return {
-            "success": True,
-            "message": f"Job '{job_id}' deleted",
-        }
-    else:
-        return {
-            "success": False,
-            "error": f"Job '{job_id}' not found",
-        }
+    return {
+        "success": False,
+        "error": (f"Job is already '{job.status.value}'. Use delete=true to remove the record."),
+    }
 
 
 def cleanup_old_jobs_tool(max_age_hours: int = 24) -> dict[str, Any]:

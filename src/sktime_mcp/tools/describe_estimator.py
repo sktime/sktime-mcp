@@ -59,6 +59,8 @@ def describe_estimator_tool(estimator: str) -> dict[str, Any]:
     # Get tag explanations
     tag_explanations = tag_resolver.explain_tags(node.tags)
 
+    doc = node.docstring or "No description available."
+
     return {
         "success": True,
         "name": node.name,
@@ -67,7 +69,7 @@ def describe_estimator_tool(estimator: str) -> dict[str, Any]:
         "hyperparameters": node.hyperparameters,
         "tags": node.tags,
         "tag_explanations": tag_explanations,
-        "docstring": node.docstring[:500] if node.docstring else None,
+        "docstring": doc[:500],
     }
 
 
@@ -82,6 +84,12 @@ def search_estimators_tool(query: str, limit: int = 20) -> dict[str, Any]:
     Returns:
         Dictionary with matching estimators
     """
+    if limit < 1:
+        return {
+            "success": False,
+            "error": "limit must be a positive integer.",
+        }
+
     registry = get_registry()
 
     try:

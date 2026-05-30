@@ -51,7 +51,7 @@ def main():
     print("✅ Training started!")
     print(f"   Job ID: {job_id}")
     print(f"   Estimator: {job_result['estimator']}")
-    print(f"   Dataset: {job_result['dataset']}")
+    print(f"   Dataset: {job_result['data_source']}")
     print(f"   Horizon: {job_result['horizon']}")
 
     # Step 3: Monitor progress
