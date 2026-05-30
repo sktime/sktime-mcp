@@ -1,8 +1,8 @@
 """
 Registry Interface for sktime MCP.
 
-This module provides the core interface to sktime's estimator registry,
-exposing structured semantic information about all available estimators.
+Thin adapter over sktime's estimator registry.
+Delegates to ``sktime.registry`` functions directly.
 """
 
 import inspect
@@ -23,12 +23,12 @@ class EstimatorNode:
 
     Attributes:
         name: The class name of the estimator (e.g., "ARIMA")
-        task: The task type (e.g., "forecaster", "transformer", "classifier")
+        task: The scitype (e.g., "forecaster", "transformer", "classifier")
         class_ref: Reference to the actual Python class
         module: Full module path to the estimator
         tags: Dictionary of capability tags
-        hyperparameters: List of hyperparameter names with their defaults
-        docstring: The estimator's docstring for understanding usage
+        parameters: Parameter names with their defaults
+        docstring: The estimator's docstring
     """
 
     name: str
@@ -36,7 +36,7 @@ class EstimatorNode:
     class_ref: type
     module: str
     tags: dict[str, Any] = field(default_factory=dict)
-    hyperparameters: dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, Any] = field(default_factory=dict)
     docstring: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -46,10 +46,11 @@ class EstimatorNode:
             "task": self.task,
             "module": self.module,
             "tags": self.tags,
-            "hyperparameters": self.hyperparameters,
+            "parameters": self.parameters,
+            "hyperparameters": self.parameters,  # keep for backward compatibility
             "docstring": (
                 self.docstring[:500] if self.docstring else None
-            ),  # L-1: Truncate docstring to 500 characters, we can also try summarization
+            ),
         }
 
     def to_summary(self) -> dict[str, Any]:
@@ -64,137 +65,71 @@ class EstimatorNode:
 
 class RegistryInterface:
     """
-    Interface to sktime's estimator registry.
+    Adapter over sktime's estimator registry.
 
-    This class wraps sktime's `all_estimators` function and provides
-    structured access to estimator metadata, tags, and documentation.
-
-    The registry is the single source of truth for all estimator information.
+    Delegates to ``sktime.registry.all_estimators`` for discovery and
+    filtering, ``sktime.registry.craft`` for name-based lookups, and
+    uses public class methods (``get_class_tags``,
+    ``get_param_names``, ``get_param_defaults``) for metadata extraction.
     """
-
-    # Map of sktime estimator types to task names
-    TASK_MAP = {
-        "forecaster": "forecasting",
-        "transformer": "transformation",
-        "classifier": "classification",
-        "regressor": "regression",
-        "clusterer": "clustering",
-        "param_est": "parameter_estimation",
-        "splitter": "splitting",
-        "aligner": "alignment",
-        "network": "network",
-        "detector": "detection",
-        "metric": "metric",
-        "transformer-pairwise": "pairwise_transformation",
-        "transformer-pairwise-panel": "pairwise_panel_transformation",
-    }
 
     def __init__(self):
         """Initialize the registry interface."""
-        self._cache: dict[str, EstimatorNode] = {}
-        self._all_tags: set = set()
-        self._loaded = False
-
-    def _ensure_loaded(self):
-        """Lazy-load the registry on first access."""
-        if not self._loaded:
-            self._load_registry()
-            self._loaded = True
-
-    def _load_registry(self):
-        """Load all estimators from sktime's registry."""
-        # L-3: Sometimes, We need to import other packages as well to load the estimators
         try:
             from sktime.registry import all_estimators
         except ImportError as e:
             logger.error(f"Failed to import sktime registry: {e}")
             raise RuntimeError("sktime must be installed to use sktime-mcp") from e
 
-        # Load each type of estimator
-        for estimator_type in self.TASK_MAP:
-            try:
-                estimators = all_estimators(
-                    estimator_types=estimator_type,
-                    return_names=True,
-                    as_dataframe=False,
-                )
-
-                for name, cls in estimators:
-                    try:
-                        node = self._create_node(name, cls, estimator_type)
-                        self._cache[name] = node
-                        self._all_tags.update(node.tags.keys())
-                    except Exception as e:
-                        logger.debug(f"Failed to load estimator {name}: {e}")
-                        continue
-
-            except Exception as e:
-                logger.warning(f"Failed to load estimator type {estimator_type}: {e}")
-                continue
-
-        logger.info(f"Loaded {len(self._cache)} estimators from sktime registry")
-
-    def _create_node(self, name: str, cls: type, estimator_type: str) -> EstimatorNode:
-        """Create an EstimatorNode from a class."""
-        # Get tags
-        tags = self._get_tags(cls)
-
-        # Get hyperparameters from __init__ signature
-        hyperparameters = self._get_hyperparameters(cls)
-
-        # Get docstring
-        docstring = inspect.getdoc(cls)
-
-        return EstimatorNode(
-            name=name,
-            task=self.TASK_MAP.get(estimator_type, estimator_type),
-            class_ref=cls,
-            module=f"{cls.__module__}.{cls.__name__}",
-            tags=tags,
-            hyperparameters=hyperparameters,
-            docstring=docstring,
-        )
-
-    def _get_tags(self, cls: type) -> dict[str, Any]:
-        """Extract tags from an estimator class."""
-        tags = {}
-
+    @staticmethod
+    def _create_node(name: str, cls: type) -> EstimatorNode:
+        """Create an EstimatorNode from sktime estimator."""
+        # Scitype from the class tag (may be a str or list of str)
+        scitype = "estimator"
         try:
-            # sktime estimators have a get_class_tags() method
+            raw = cls.get_class_tag("object_type", "estimator")
+            if isinstance(raw, list):
+                # Prefer the shortest / most general type, e.g. "metric" over
+                # "metric_forecasting".  Fallback to first element.
+                scitype = min(raw, key=len) if raw else "estimator"
+            else:
+                scitype = raw
+        except Exception:
+            pass
+
+        tags: dict[str, Any] = {}
+        try:
             if hasattr(cls, "get_class_tags"):
                 tags = cls.get_class_tags()
-            elif hasattr(cls, "_tags"):
-                tags = dict(cls._tags) if cls._tags else {}
         except Exception as e:
             logger.debug(f"Failed to get tags for {cls.__name__}: {e}")
 
-        return tags
-
-    def _get_hyperparameters(self, cls: type) -> dict[str, Any]:
-        """Extract hyperparameters from __init__ signature."""
-        params = {}
-
+        parameters: dict[str, Any] = {}
         try:
-            sig = inspect.signature(cls.__init__)
-            for param_name, param in sig.parameters.items():
-                if param_name in ("self", "args", "kwargs"):
-                    continue
-
-                default = None
-                if param.default is not inspect.Parameter.empty:
-                    default = param.default
-                    # Convert non-serializable defaults to string representation
-                    if not isinstance(default, (int, float, str, bool, list, dict, type(None))):
-                        default = str(default)
-
-                params[param_name] = {
-                    "default": default,
-                    "required": param.default is inspect.Parameter.empty,
-                }
+            param_names = cls.get_param_names()
+            param_defaults = cls.get_param_defaults()
+            for p in param_names:
+                default = param_defaults.get(p)
+                required = p not in param_defaults
+                if default is not None and not isinstance(
+                    default, (int, float, str, bool, list, dict, type(None))
+                ):
+                    default = str(default)
+                parameters[p] = {"default": default, "required": required}
         except Exception as e:
-            logger.debug(f"Failed to get hyperparameters for {cls.__name__}: {e}")
+            logger.debug(f"Failed to get parameters for {cls.__name__}: {e}")
 
-        return params
+        return EstimatorNode(
+            name=name,
+            task=scitype,
+            class_ref=cls,
+            module=f"{cls.__module__}.{cls.__name__}",
+            tags=tags,
+            parameters=parameters,
+            docstring=inspect.getdoc(cls),
+        )
+
+    # ---- query methods (delegate to sktime.registry) --------------------
 
     def get_all_estimators(
         self,
@@ -202,96 +137,79 @@ class RegistryInterface:
         tags: dict[str, Any] | None = None,
     ) -> list[EstimatorNode]:
         """
-        Get all estimators, optionally filtered by task and tags.
+        Get all estimators, optionally filtered by scitype and tags.
+
+        Delegates filtering to ``sktime.registry.all_estimators``.
 
         Args:
-            task: Filter by task type (e.g., "forecasting", "classification")
-            tags: Filter by capability tags (e.g., {"capability:pred_int": True})
-
-        Returns:
-            List of matching EstimatorNode objects
+            task: Filter by scitype (e.g., "forecaster", "classifier").
+            tags: Filter by capability tags.
         """
-        self._ensure_loaded()
+        from sktime.registry import all_estimators
 
-        results = list(self._cache.values())
+        estimators = all_estimators(
+            estimator_types=task,
+            filter_tags=tags,
+            return_names=True,
+            as_dataframe=False,
+        )
 
-        # Filter by task
-        if task:
-            results = [e for e in results if e.task == task]
-
-        # Filter by tags
-        if tags:
-            results = self._filter_by_tags(results, tags)
-
+        results = []
+        for name, cls in estimators:
+            try:
+                results.append(self._create_node(name, cls))
+            except Exception as e:
+                logger.debug(f"Failed to create node for {name}: {e}")
         return results
-
-    def _filter_by_tags(
-        self,
-        estimators: list[EstimatorNode],
-        required_tags: dict[str, Any],
-    ) -> list[EstimatorNode]:
-        """Filter estimators by required tag values."""
-        filtered = []
-
-        for estimator in estimators:
-            matches = True
-            for tag_name, tag_value in required_tags.items():
-                est_tag_value = estimator.tags.get(tag_name)
-                if est_tag_value != tag_value:
-                    matches = False
-                    break
-
-            if matches:
-                filtered.append(estimator)
-
-        return filtered
 
     def get_estimator_by_name(self, name: str) -> EstimatorNode | None:
         """
         Get a specific estimator by its class name.
 
-        Args:
-            name: The class name of the estimator (e.g., "ARIMA")
+        Uses ``sktime.registry.craft`` for direct class resolution
+        instead of scanning all estimators.
 
-        Returns:
-            EstimatorNode if found, None otherwise
+        Args:
+            name: The class name of the estimator (e.g., "ARIMA").
         """
-        self._ensure_loaded()
-        return self._cache.get(name)
+        from sktime.registry import craft
+
+        try:
+            cls = craft(name)
+            if isinstance(cls, type):
+                return self._create_node(name, cls)
+        except Exception:
+            pass
+        return None
 
     def get_available_tasks(self) -> list[str]:
-        """Get list of available task types."""
-        return list(self.TASK_MAP.values())
+        """Get list of available scitypes from sktime's base class register."""
+        from sktime.registry import get_base_class_register
+
+        return [row[0] for row in get_base_class_register()]
 
     def get_available_tags(self) -> list[dict[str, Any]]:
         """Get rich metadata for all available tags using sktime's registry.
 
-        Returns a list of dicts, each containing:
-        - tag: the tag name (e.g., "scitype:y")
-        - description: human-readable explanation of what the tag means
-        - value_type: the expected value type (e.g., "bool", "str")
-        - applies_to: list of estimator types this tag applies to
+        Returns a list of dicts with: tag, description, value_type, applies_to.
         """
-        self._ensure_loaded()
+        from sktime.registry import all_tags
 
         try:
-            from sktime.registry import all_tags
-
             tags_df = all_tags(as_dataframe=True)
-        except ImportError:
-            # Fallback to old behaviour if all_tags is not available
-            return [{"tag": t} for t in sorted(self._all_tags)]
+        except Exception:
+            return []
 
         result = []
         for _, row in tags_df.iterrows():
-            # Normalize scitype to a list for consistency
             scitype = row.get("scitype", [])
             if isinstance(scitype, str):
                 scitype = [scitype]
             elif not isinstance(scitype, list):
-                scitype = list(scitype) if hasattr(scitype, "__iter__") else [str(scitype)]
+                scitype = (
+                    list(scitype) if hasattr(scitype, "__iter__") else [str(scitype)]
+                )
 
-            # Convert value_type to a JSON-safe string representation
             value_type = row.get("type", "")
             if not isinstance(value_type, str):
                 value_type = str(value_type)
@@ -313,16 +231,13 @@ class RegistryInterface:
         Search estimators by name, module, or docstring.
 
         Args:
-            query: Search string (case-insensitive)
-
-        Returns:
-            List of matching EstimatorNode objects
+            query: Search string (case-insensitive).
         """
-        self._ensure_loaded()
+        all_ests = self.get_all_estimators()
         query_lower = query.strip().lower()
 
         results = []
-        for node in self._cache.values():
+        for node in all_ests:
             name_lower = node.name.lower()
             module_lower = node.module.lower()
             docstring_lower = node.docstring.lower() if node.docstring else ""

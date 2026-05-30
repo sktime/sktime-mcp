@@ -20,10 +20,10 @@ import sys
 sys.path.insert(0, "src")
 
 from sktime_mcp.composition.validator import get_composition_validator
-from sktime_mcp.tools.describe_estimator import describe_estimator_tool
+from sktime_mcp.tools.describe_component import describe_component_tool
 from sktime_mcp.tools.fit_predict import fit_predict_tool
 from sktime_mcp.tools.instantiate import instantiate_estimator_tool
-from sktime_mcp.tools.list_estimators import list_estimators_tool
+from sktime_mcp.tools.list_estimators import query_registry_tool
 
 
 def print_llm_thought(thought: str):
@@ -70,21 +70,28 @@ def simulate_query_1():
     print_llm_thought("Let me find estimators with prediction interval capability...")
 
     print_tool_call(
-        "list_estimators",
-        {"task": "forecasting", "tags": {"capability:pred_int": True}, "limit": 10},
+        "query_registry",
+        {
+            "target": "estimators",
+            "task": "forecasting",
+            "tags": {"capability:pred_int": True},
+            "limit": 10,
+        },
     )
 
-    result = list_estimators_tool(task="forecasting", tags={"capability:pred_int": True}, limit=10)
+    result = query_registry_tool(
+        target="estimators", task="forecasting", tags={"capability:pred_int": True}, limit=10
+    )
     print_result(result)
 
     # Step 3: LLM picks candidates
-    if result["success"] and result["estimators"]:
-        candidates = [e["name"] for e in result["estimators"][:3]]
+    if result["success"] and result["results"]:
+        candidates = [e["name"] for e in result["results"][:3]]
         print_llm_thought(f"Found candidates: {candidates}. Let me check the first one...")
 
         # Step 4: Describe the candidate
-        print_tool_call("describe_estimator", {"estimator": candidates[0]})
-        desc = describe_estimator_tool(candidates[0])
+        print_tool_call("describe_component", {"name": candidates[0]})
+        desc = describe_component_tool(candidates[0])
         print_result(desc)
 
         # Step 5: Generate recommendation
@@ -97,7 +104,7 @@ def simulate_query_1():
 
 def simulate_query_2():
     """
-    Query: "Compare ARIMA and Theta for my sunspot data"
+    Query: "Compare NaiveForecaster and ThetaForecaster for my sunspot data"
     """
     print("\n" + "=" * 70)
     print("  QUERY 2: Compare Two Forecasters")
@@ -108,15 +115,15 @@ def simulate_query_2():
     print_llm_thought("I'll describe both estimators and run them on sunspot data")
 
     # Step 2: Describe first estimator
-    print_tool_call("describe_estimator", {"estimator": "NaiveForecaster"})
-    desc1 = describe_estimator_tool("NaiveForecaster")
+    print_tool_call("describe_component", {"name": "NaiveForecaster"})
+    desc1 = describe_component_tool("NaiveForecaster")
     print_result(
         {"name": desc1.get("name"), "task": desc1.get("task"), "success": desc1["success"]}
     )
 
     # Step 3: Describe second estimator
-    print_tool_call("describe_estimator", {"estimator": "ThetaForecaster"})
-    desc2 = describe_estimator_tool("ThetaForecaster")
+    print_tool_call("describe_component", {"name": "ThetaForecaster"})
+    desc2 = describe_component_tool("ThetaForecaster")
     print_result(
         {"name": desc2.get("name"), "task": desc2.get("task"), "success": desc2["success"]}
     )
@@ -205,15 +212,15 @@ def simulate_query_4():
     # Step 1: Search
     print_llm_thought("Searching for 'exponential' in estimator names and docs...")
 
-    print_tool_call("list_estimators", {"query": "exponential", "limit": 5})
-    result = list_estimators_tool(query="exponential", limit=5)
+    print_tool_call("query_registry", {"target": "estimators", "query": "exponential", "limit": 5})
+    result = query_registry_tool(target="estimators", query="exponential", limit=5)
     print_result(result)
 
     # Step 2: Generate response
     print("\n🤖 LLM Response:")
-    if result["success"] and result["estimators"]:
+    if result["success"] and result["results"]:
         print(f"   Found {result['count']} estimators related to exponential smoothing:")
-        for est in result["estimators"]:
+        for est in result["results"]:
             print(f"   - {est['name']} ({est['task']})")
     else:
         print("   No estimators found matching 'exponential'")
@@ -231,16 +238,16 @@ def simulate_query_5():
     print_llm_thought("Let me count estimators for each task...")
 
     # Count forecasters
-    print_tool_call("list_estimators", {"task": "forecasting"})
-    forecasters = list_estimators_tool(task="forecasting")
+    print_tool_call("query_registry", {"target": "estimators", "task": "forecasting"})
+    forecasters = query_registry_tool(target="estimators", task="forecasting")
 
     # Count classifiers
-    print_tool_call("list_estimators", {"task": "classification"})
-    classifiers = list_estimators_tool(task="classification")
+    print_tool_call("query_registry", {"target": "estimators", "task": "classification"})
+    classifiers = query_registry_tool(target="estimators", task="classification")
 
     # Count transformers
-    print_tool_call("list_estimators", {"task": "transformation"})
-    transformers = list_estimators_tool(task="transformation")
+    print_tool_call("query_registry", {"target": "estimators", "task": "transformation"})
+    transformers = query_registry_tool(target="estimators", task="transformation")
 
     print("\n🤖 LLM Response:")
     print("   sktime estimator counts by task:")

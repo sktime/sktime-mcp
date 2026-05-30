@@ -93,6 +93,8 @@ def _collect_imports_from_value(
     if isinstance(shallow_params, dict):
         for sub_value in shallow_params.values():
             _collect_imports_from_value(sub_value, imports, visited)
+
+
 def _is_valid_var_name(var_name: str) -> bool:
     """Return True when var_name is a valid non-keyword Python identifier."""
     return isinstance(var_name, str) and var_name.isidentifier() and not keyword.iskeyword(var_name)
@@ -154,7 +156,7 @@ def _generate_pipeline_code(
         imports.add(f"from {module} import {comp_name}")
 
     # Determine pipeline type
-    all_transformers_except_last = all(task == "transformation" for task in component_tasks[:-1])
+    all_transformers_except_last = all(task == "transformer" for task in component_tasks[:-1])
     final_task = component_tasks[-1]
 
     # Build component instantiations
@@ -174,7 +176,7 @@ def _generate_pipeline_code(
     if len(components) == 1:
         # Single component, no pipeline needed
         pipeline_code = f"{var_name} = step_0"
-    elif all_transformers_except_last and final_task == "forecasting":
+    if all_transformers_except_last and final_task == "forecaster":
         # Use TransformedTargetForecaster
         imports.add("from sktime.forecasting.compose import TransformedTargetForecaster")
 
@@ -197,7 +199,7 @@ def _generate_pipeline_code(
     ("forecaster", step_{len(components) - 1}),
 ])"""
 
-    elif all_transformers_except_last and final_task in ("classification", "regression"):
+    elif all_transformers_except_last and final_task in ("classifier", "regressor"):
         # Use sklearn-style Pipeline
         imports.add("from sktime.pipeline import Pipeline")
         steps = ", ".join(f'("step_{i}", step_{i})' for i in range(len(components)))
@@ -205,7 +207,7 @@ def _generate_pipeline_code(
     {steps}
 ])"""
 
-    elif all(task == "transformation" for task in component_tasks):
+    elif all(task == "transformer" for task in component_tasks):
         # All transformers - use TransformerPipeline
         imports.add("from sktime.transformations.compose import TransformerPipeline")
         steps = ", ".join(f'("step_{i}", step_{i})' for i in range(len(components)))

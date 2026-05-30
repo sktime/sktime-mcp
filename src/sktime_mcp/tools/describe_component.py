@@ -21,7 +21,7 @@ def describe_component_tool(name: str) -> dict[str, Any]:
         Dictionary with:
         - success: bool
         - name: Component name
-        - task: Task type (e.g., "forecasting", "transformation", "splitting", "metric")
+        - task: Scitype (e.g., "forecaster", "transformer", "splitter", "metric")
         - module: Full module path
         - parameters: Dict of parameter names with defaults
         - tags: Dict of capability tags
@@ -55,46 +55,10 @@ def describe_component_tool(name: str) -> dict[str, Any]:
         "name": node.name,
         "task": node.task,
         "module": node.module,
-        "parameters": node.hyperparameters,
+        "parameters": node.parameters,
         # Keep hyperparameters for backward compatibility with describe_estimator_tool
-        "hyperparameters": node.hyperparameters,
+        "hyperparameters": node.parameters,
         "tags": node.tags,
         "tag_explanations": tag_explanations,
         "docstring": doc[:500],
     }
-
-
-def describe_estimator_tool(estimator: str) -> dict[str, Any]:
-    """Deprecated: Use describe_component_tool instead."""
-    return describe_component_tool(estimator)
-
-
-def search_estimators_tool(query: str, limit: int = 20) -> dict[str, Any]:
-    """
-    Search estimators by name or description.
-
-    Args:
-        query: Search string (case-insensitive)
-        limit: Maximum results
-
-    Returns:
-        Dictionary with matching estimators
-    """
-    if limit < 1:
-        return {
-            "success": False,
-            "error": "limit must be a positive integer.",
-        }
-
-    registry = get_registry()
-
-    try:
-        matches = registry.search_estimators(query)[:limit]
-        return {
-            "success": True,
-            "query": query,
-            "results": [est.to_summary() for est in matches],
-            "count": len(matches),
-        }
-    except Exception as e:
-        return {"success": False, "error": str(e)}

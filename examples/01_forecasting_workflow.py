@@ -18,10 +18,10 @@ import sys
 sys.path.insert(0, "src")
 
 from sktime_mcp.composition.validator import get_composition_validator
-from sktime_mcp.tools.describe_estimator import describe_estimator_tool
+from sktime_mcp.tools.describe_component import describe_component_tool
 from sktime_mcp.tools.fit_predict import fit_predict_tool, list_datasets_tool
 from sktime_mcp.tools.instantiate import instantiate_estimator_tool, list_handles_tool
-from sktime_mcp.tools.list_estimators import get_available_tags, list_estimators_tool
+from sktime_mcp.tools.list_estimators import query_registry_tool
 
 
 def print_section(title: str):
@@ -48,13 +48,13 @@ def main():
     # =========================================================================
     print_section("STEP 2: Discover Forecasting Estimators")
 
-    # List all forecasters
-    result = list_estimators_tool(task="forecasting", limit=10)
+    # Query registry for forecasters
+    result = query_registry_tool(task="forecaster", limit=10)
 
     if result["success"]:
         print(f"Found {result['total']} forecasting estimators")
         print("\nFirst 10 forecasters:")
-        for est in result["estimators"]:
+        for est in result["results"]:
             print(f"  - {est['name']}")
     else:
         print(f"Error: {result.get('error')}")
@@ -65,8 +65,8 @@ def main():
     print_section("STEP 3: Find Probabilistic Forecasters")
 
     # Find forecasters that can produce prediction intervals
-    result = list_estimators_tool(
-        task="forecasting",
+    result = query_registry_tool(
+        task="forecaster",
         tags={"capability:pred_int": True},
         limit=10,
     )
@@ -74,7 +74,7 @@ def main():
     if result["success"]:
         print(f"Found {result['total']} probabilistic forecasters")
         print("\nExamples:")
-        for est in result["estimators"][:5]:
+        for est in result["results"][:5]:
             print(f"  - {est['name']}")
 
     # =========================================================================
@@ -82,14 +82,14 @@ def main():
     # =========================================================================
     print_section("STEP 4: Describe NaiveForecaster")
 
-    desc = describe_estimator_tool("NaiveForecaster")
+    desc = describe_component_tool("NaiveForecaster")
 
     if desc["success"]:
         print(f"Name: {desc['name']}")
         print(f"Task: {desc['task']}")
         print(f"Module: {desc['module']}")
-        print("\nHyperparameters:")
-        for param, info in list(desc["hyperparameters"].items())[:5]:
+        print("\nParameters:")
+        for param, info in list(desc["parameters"].items())[:5]:
             default = info.get("default", "N/A")
             print(f"  - {param}: default={default}")
         print("\nKey Tags:")
@@ -172,12 +172,12 @@ def main():
     # =========================================================================
     print_section("STEP 9: Available Capability Tags")
 
-    tags_result = get_available_tags()
+    tags_result = query_registry_tool(task="tag", limit=15)
     if tags_result["success"]:
-        print(f"Total tags available: {len(tags_result['tags'])}")
+        print(f"Total tags available: {tags_result['total']}")
         print("\nSample tags:")
-        for tag in tags_result["tags"][:15]:
-            print(f"  - {tag}")
+        for tag in tags_result["results"]:
+            print(f"  - {tag['tag']}: {tag['description']}")
 
     print("\n" + "=" * 60)
     print("  ✅ Demo Complete!")
