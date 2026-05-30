@@ -66,16 +66,7 @@ The codebase is organized into **5 main layers**:
   - Dependencies: `mcp`, `sktime`, `pandas`, `numpy`, `scikit-learn`
   - Optional dependencies for dev and extended features
   - Entry point: `sktime-mcp` command → `sktime_mcp.server:main`
-  - Tool configurations (black, ruff, pytest)
-
-#### `pyproject.toml`
-- **Purpose**: Python project configuration (PEP 518)
-- **Key Contents**:
-  - Package metadata (name, version, description)
-  - Dependencies: `mcp`, `sktime`, `pandas`, `numpy`, `scikit-learn`
-  - Optional dependencies for dev and extended features
-  - Entry point: `sktime-mcp` command → `sktime_mcp.server:main`
-  - Tool configurations (black, ruff, pytest)
+  - Tool configurations (ruff, pytest)
 
 ---
 
@@ -90,7 +81,7 @@ The codebase is organized into **5 main layers**:
    
 2. **`@server.list_tools()`**: Registers all available MCP tools
    - Returns tool schemas (name, description, input schema)
-   - Tools: `list_estimators`, `describe_estimator`, `instantiate_estimator`, `instantiate_pipeline`, `fit_predict`, `validate_pipeline`, `list_available_data`, `get_available_tags`
+   - Tools span Discovery, Instantiation, Execution, Data, Export, Persistence, Validation, and Job Management. (e.g., `list_estimators`, `instantiate_pipeline`, `fit_predict_async`, `load_data_source`, `save_model`, `check_job_status`).
 
 3. **`@server.call_tool(name, arguments)`**: Routes tool calls to implementations
    - Validates arguments
@@ -346,13 +337,40 @@ Each file implements one or more MCP tools that LLMs can call.
 4. **`list_handles_tool()`**
    - Lists all active handles
 
+5. **`load_model_tool(path)`**
+   - Loads a previously saved model via MLflow
+
 #### `fit_predict.py`
 **Tools**:
 1. **`fit_predict_tool(estimator_handle, dataset, horizon)`**
    - Calls `executor.fit_predict(handle, dataset, horizon)`
    - Complete workflow in one call
 
-2. **`list_available_data_tool(is_demo)`**
+2. **`fit_predict_async_tool(estimator_handle, dataset, horizon)`**
+   - Dispatches a background job for fit and predict.
+
+#### `evaluate.py`
+**Tool**: `evaluate_estimator_tool(estimator_handle, dataset, cv_folds)`
+- Runs cross-validation using an expanding window splitter
+- Returns comparison metrics like MAE and RMSE
+
+#### `format_tools.py`
+**Tools**:
+1. **`format_time_series_tool(...)`**
+   - Auto-formats, infers frequency, drops duplicates, and fills missing values.
+2. **`auto_format_on_load_tool(enabled)`**
+   - Toggles whether new data sources get auto-formatted on load.
+
+#### `job_tools.py`
+**Tools**: `check_job_status_tool`, `list_jobs_tool`, `cancel_job_tool`, `delete_job_tool`, `cleanup_old_jobs_tool`
+- Interfaces with `JobManager` to control background training jobs.
+
+#### `save_model.py`
+**Tool**: `save_model_tool(estimator_handle, path, mlflow_params)`
+- Persists fitted estimators using MLflow.
+
+#### `list_available_data.py`
+**Tool**: `list_available_data_tool(is_demo)`
    - Returns available demo datasets and/or active user data handles
 
 ---
@@ -402,6 +420,15 @@ Each file implements one or more MCP tools that LLMs can call.
 1. Validate pipeline
 2. Instantiate pipeline → get handle
 3. Fit and predict → get forecasts
+
+#### Additional Examples
+- `05_simple_deseasonalize_detrend_forecaster.py`: Deseasonalize + detrend workflow
+- `06_simple_naive_forecaster.py`: Basic NaiveForecaster example
+- `background_training_example.py`: Demonstrates async background jobs
+- `job_management_demo.py`: Demonstrates checking and listing job status
+- `pandas_example.py`: Demonstrates loading from in-memory pandas objects
+- `csv_example.py`: Demonstrates loading from CSV/TSV files
+- `sql_example.py`: Demonstrates loading from SQL databases
 
 ---
 

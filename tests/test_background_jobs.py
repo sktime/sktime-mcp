@@ -160,6 +160,50 @@ def test_list_jobs_tool_accepts_case_insensitive_status():
     job_manager.delete_job(job_id)
 
 
+def test_cancel_job_delete_keeps_running_job_record():
+    """delete=True should not remove a running job record immediately."""
+    from sktime_mcp.tools.job_tools import cancel_job_tool
+
+    job_manager = get_job_manager()
+    job_id = job_manager.create_job("fit_predict", "handle", "ARIMA")
+    job_manager.update_job(job_id, status=JobStatus.RUNNING)
+
+    result = cancel_job_tool(job_id, delete=True)
+
+    assert result["success"]
+    assert "retained" in result["message"]
+
+    job = job_manager.get_job(job_id)
+    assert job is not None
+    assert job.status == JobStatus.CANCELLED
+
+    job_manager.delete_job(job_id)
+
+
+def test_cancelled_job_ignores_late_updates():
+    """Cancelled jobs should stay cancelled even if background work reports later."""
+    job_manager = get_job_manager()
+    job_id = job_manager.create_job("fit_predict", "handle", "ARIMA", total_steps=3)
+    job_manager.update_job(job_id, status=JobStatus.RUNNING)
+    job_manager.cancel_job(job_id)
+
+    job_manager.update_job(
+        job_id,
+        status=JobStatus.COMPLETED,
+        completed_steps=3,
+        current_step="Finished",
+        result={"predictions": {1: 100}},
+    )
+
+    job = job_manager.get_job(job_id)
+    assert job is not None
+    assert job.status == JobStatus.CANCELLED
+    assert job.completed_steps == 0
+    assert job.result is None
+
+    job_manager.delete_job(job_id)
+
+
 def test_cleanup_old_jobs():
     """Test cleaning up old jobs."""
     job_manager = get_job_manager()

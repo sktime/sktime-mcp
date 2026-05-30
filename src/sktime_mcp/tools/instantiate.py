@@ -258,7 +258,7 @@ def load_model_tool(path: str) -> dict[str, Any]:
     Args:
         path: Local directory path or MLflow URI to the saved model.
               Examples:
-                - "/tmp/my_arima_model"
+                - "/tmp/my_arima_model" (Linux/macOS) or "C:\\Temp\\my_arima_model" (Windows)
                 - "runs:/<run_id>/model"
                 - "mlflow-artifacts:/<run_id>/artifacts/model"
                 - "models:/<model_name>/<version>"

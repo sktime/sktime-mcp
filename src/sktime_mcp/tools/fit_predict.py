@@ -12,7 +12,7 @@ from sktime_mcp.runtime.executor import get_executor
 logger = logging.getLogger(__name__)
 
 
-def _validate_horizon(horizon: int) -> dict[str, Any]:
+def _validate_horizon(horizon: Any) -> dict[str, Any]:
     """
     Validate the horizon parameter.
     Checks if the horizon parameter is strictly integer or not
@@ -70,6 +70,22 @@ def fit_predict_tool(
     """
     validation = _validate_horizon(horizon)
     if not validation["valid"]:
+        return {"success": False, "error": validation["error"]}
+
+    executor = get_executor()
+    return executor.fit_predict(estimator_handle, dataset, horizon, data_handle=data_handle)
+
+
+def fit_tool(
+    estimator_handle: str,
+    dataset: str,
+) -> dict[str, Any]:
+    """
+    Fit an estimator on a dataset.
+
+    Args:
+        estimator_handle: Handle from instantiate_estimator
+        dataset: Name of demo dataset
         return {
             "success": False,
             "error": validation["error"],
@@ -184,6 +200,10 @@ def fit_predict_async_tool(
         }
 
     import asyncio
+
+    validation = _validate_horizon(horizon)
+    if not validation["valid"]:
+        return {"success": False, "error": validation["error"]}
 
     from sktime_mcp.runtime.jobs import get_job_manager
 

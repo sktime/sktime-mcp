@@ -213,6 +213,16 @@ class CompositionValidator:
             current_name, current_node = nodes[i]
             next_name, next_node = nodes[i + 1]
 
+            # In linear pipelines, forecaster -> forecaster is invalid.
+            # The forecasting->forecasting rule is for ensemble composition,
+            # not sequential pipeline chaining.
+            if current_node.task == next_node.task == "forecasting":
+                errors.append(
+                    f"Cannot chain forecasters '{current_node.name}' → '{next_node.name}' directly. "
+                    "Use an ensemble or multiplexer instead."
+                )
+                continue
+
             # Check if this composition is valid
             valid_pair, pair_errors, pair_warnings = self._check_pair_compatibility(
                 current_node, next_node

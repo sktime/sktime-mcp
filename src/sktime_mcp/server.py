@@ -9,7 +9,11 @@ import asyncio
 import json
 import logging
 import os
+import sys
+from io import TextIOWrapper
 from typing import Any
+
+import anyio
 
 try:
     import numpy as np
@@ -30,6 +34,11 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 from sktime_mcp.composition.validator import get_composition_validator
+from sktime_mcp.tools.classify import (
+    fit_predict_classification_tool,
+    fit_predict_regression_tool,
+)
+from sktime_mcp.config import settings
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_async_tool,
@@ -88,16 +97,52 @@ JOB_MAX_AGE_HOURS = _get_int_env("SKTIME_MCP_JOB_MAX_AGE_HOURS", 24)
 JOB_CLEANUP_INTERVAL_SECS = _get_int_env("SKTIME_MCP_JOB_CLEANUP_INTERVAL", 3600)
 
 # Configure logging to stderr with detailed format
-_LOG_LEVEL = os.environ.get("SKTIME_MCP_LOG_LEVEL", "WARNING").upper()
+_handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
+if settings.log_path:
+    _handlers.append(logging.FileHandler(settings.log_path))
+
 logging.basicConfig(
-    level=getattr(logging, _LOG_LEVEL, logging.WARNING),
+    level=getattr(logging, settings.log_level, logging.WARNING),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],
+    handlers=_handlers,
 )
 logger = logging.getLogger(__name__)
-
 # Create MCP server instance
 server = Server("sktime-mcp")
+
+_CHARS_PER_TOKEN = 4
+
+
+def _apply_response_token_limit(tool_name: str, text: str) -> str:
+    """Truncate *text* to the configured token budget and append a notice.
+
+    Reads ``SKTIME_MCP_MAX_RESPONSE_TOKENS`` from environment variable at call time so
+    that live config changes are respected.
+    Returns *text* unchanged when the limit is 0 (unlimited) or not set.
+    """
+    raw = os.environ.get("SKTIME_MCP_MAX_RESPONSE_TOKENS", "0")
+    try:
+        max_tokens = int(raw)
+    except ValueError:
+        max_tokens = 0
+
+    if max_tokens <= 0:
+        return text  # unlimited
+
+    max_chars = max_tokens * _CHARS_PER_TOKEN
+    if len(text) <= max_chars:
+        return text
+
+    notice = (
+        f"\n\n[sktime-mcp] Response truncated: output exceeded the SKTIME_MCP_MAX_RESPONSE_TOKENS "
+        f"limit of {max_tokens} tokens (tool: {tool_name}). "
+        "Increase SKTIME_MCP_MAX_RESPONSE_TOKENS or narrow your query for full results."
+    )
+    # Reserve space for the notice inside the budget
+    budget = max_chars - len(notice)
+    if budget < 0:
+        budget = 0
+    return text[:budget] + notice
 
 
 def sanitize_for_json(obj):
@@ -179,10 +224,7 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "task": {
                         "type": "string",
-                        "description": (
-                            "Task type filter: forecasting, classification, "
-                            "regression, transformation, clustering"
-                        ),
+                        "description": "Task type filter: forecasting, classification, regression, transformation, clustering, detection",
                     },
                     "tags": {
                         "type": "object",
@@ -632,6 +674,66 @@ async def list_tools() -> list[Tool]:
                 "required": ["job_id"],
             },
         ),
+        Tool(
+            name="fit_predict_classification",
+            description="Fit a time series classifier on training data and predict class labels on test data. Use with classification estimators like RocketClassifier, HIVECOTEV2, etc.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle from instantiate_estimator (must be a classifier)",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Demo dataset name: arrow_head, gunpoint, basic_motions, italy_power_demand",
+                    },
+                    "X_train_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom training features",
+                    },
+                    "y_train_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom training labels",
+                    },
+                    "X_test_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom test features",
+                    },
+                },
+                "required": ["estimator_handle"],
+            },
+        ),
+        Tool(
+            name="fit_predict_regression",
+            description="Fit a time series regressor on training data and predict continuous target values on test data. Use with regression estimators like TimeSeriesForestRegressor, etc.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle from instantiate_estimator (must be a regressor)",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Demo dataset name: covid_3month, cardano_sentiment",
+                    },
+                    "X_train_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom training features",
+                    },
+                    "y_train_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom training target values",
+                    },
+                    "X_test_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom test features",
+                    },
+                },
+                "required": ["estimator_handle"],
+            },
+        ),
     ]
 
 
@@ -804,7 +906,32 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
 
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
-
+        elif name == "load_model":
+            result = load_model_tool(arguments["path"])
+        elif name == "save_model":
+            result = save_model_tool(
+                arguments["estimator_handle"],
+                arguments["path"],
+                arguments.get("mlflow_params"),
+            )
+        elif name == "fit_predict_classification":
+            result = fit_predict_classification_tool(
+                estimator_handle=arguments["estimator_handle"],
+                dataset=arguments.get("dataset"),
+                X_train_handle=arguments.get("X_train_handle"),
+                y_train_handle=arguments.get("y_train_handle"),
+                X_test_handle=arguments.get("X_test_handle"),
+            )
+            result = sanitize_for_json(result)
+        elif name == "fit_predict_regression":
+            result = fit_predict_regression_tool(
+                estimator_handle=arguments["estimator_handle"],
+                dataset=arguments.get("dataset"),
+                X_train_handle=arguments.get("X_train_handle"),
+                y_train_handle=arguments.get("y_train_handle"),
+                X_test_handle=arguments.get("X_test_handle"),
+            )
+            result = sanitize_for_json(result)
         else:
             result = {"error": f"Unknown tool: {name}"}
 
@@ -813,7 +940,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         sanitized_result = sanitize_for_json(result)
         logger.info(f"{json.dumps(sanitized_result, indent=2, default=str)}")
 
-        return [TextContent(type="text", text=json.dumps(sanitized_result, indent=2, default=str))]
+        response_text = json.dumps(sanitized_result, indent=2, default=str)
+        truncated_text = _apply_response_token_limit(name, response_text)
+
+        return [TextContent(type="text", text=truncated_text)]
     except Exception as e:
         logger.exception(f"Error in tool {name}")
         return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
@@ -829,10 +959,10 @@ async def _periodic_job_cleanup():
     from sktime_mcp.runtime.jobs import get_job_manager
 
     while True:
-        await asyncio.sleep(JOB_CLEANUP_INTERVAL_SECS)
+        await asyncio.sleep(settings.job_cleanup_interval_secs)
         try:
             job_manager = get_job_manager()
-            removed = job_manager.cleanup_old_jobs(JOB_MAX_AGE_HOURS)
+            removed = job_manager.cleanup_old_jobs(settings.job_max_age_hours)
             if removed:
                 logger.info(f"Periodic cleanup: removed {removed} old job(s)")
         except Exception:
@@ -841,17 +971,27 @@ async def _periodic_job_cleanup():
 
 async def run_server():
     """Run the MCP server."""
+    # Stdio safety: redirect stdout to stderr to protect MCP JSON-RPC
+    # streams from being corrupted by stray prints in third-party libraries.
+    original_stdout = sys.stdout
+    sys.stdout = sys.stderr
+
+    # Explicitly wrap the original stdout buffer for the MCP server output
+    mcp_stdout = anyio.wrap_file(TextIOWrapper(original_stdout.buffer, encoding="utf-8"))
+
     asyncio.create_task(_periodic_job_cleanup())
 
-    async with stdio_server() as (read_stream, write_stream):
+    async with stdio_server(stdout=mcp_stdout) as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
 
 def main():
     """Main entry point."""
-    logger.info("Starting sktime-mcp server...")
-    asyncio.run(run_server())
-
+    try:
+        asyncio.run(run_server())
+    except KeyboardInterrupt:
+        print("\nINFO: sktime-mcp server shut down gracefully.")
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()

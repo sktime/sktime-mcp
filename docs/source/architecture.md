@@ -2,15 +2,15 @@
 
 ## New Data Flow
 
-![New Data Flow](assets/mcp_data_flow.png)
+![New Data Flow](_static/mcp_data_flow.png)
 
 ## Component Interaction
 
-![Component Interaction Sequence](assets/component_interaction.png)
+![Component Interaction Sequence](_static/component_interaction.png)
 
 ## Data Adapter Pattern
 
-![Data Adapter Pattern](assets/data_adapter_pattern.png)
+![Data Adapter Pattern](_static/data_adapter_pattern.png)
 
 ## Data Validation Flow
 

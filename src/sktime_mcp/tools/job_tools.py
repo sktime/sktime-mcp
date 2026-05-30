@@ -110,8 +110,7 @@ def cancel_job_tool(job_id: str, delete: bool = False) -> dict[str, Any]:
         job_manager.cancel_job(job_id)
         msg = f"Job '{job_id}' cancelled"
         if delete:
-            job_manager.delete_job(job_id)
-            msg += " and removed"
+            msg += "; record retained because active jobs cannot be removed immediately"
         return {"success": True, "message": msg}
 
     if delete:

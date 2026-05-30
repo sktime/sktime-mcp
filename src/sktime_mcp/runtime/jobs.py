@@ -196,6 +196,11 @@ class JobManager:
 
             job = self.jobs[job_id]
 
+            # Cancelled jobs are terminal from the client's perspective.
+            # Ignore late updates from background work that may still be winding down.
+            if job.status == JobStatus.CANCELLED:
+                return True
+
             # Update status
             if status is not None:
                 old_status = job.status

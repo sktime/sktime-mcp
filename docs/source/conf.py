@@ -39,9 +39,8 @@ html_css_files = [
 ]
 
 # If you have a logo or favicon, add them here
-html_logo = "_static/favicon.png"
+html_logo = "_static/sktime-logo.png"
 html_favicon = "_static/favicon.png"
-
 
 # Autodoc settings
 autodoc_default_options = {
