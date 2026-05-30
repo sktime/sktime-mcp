@@ -58,5 +58,28 @@ class Settings:
         """
         return int(os.environ.get("SKTIME_MCP_JOB_CLEANUP_INTERVAL", "3600"))
 
+    # -- Memory & Response Budgets --
+    @property
+    def max_data_handles(self) -> int:
+        """
+        Maximum number of active data handles to retain in memory.
+        Env Var: SKTIME_MCP_MAX_DATA_HANDLES
+        Default: 50
+        """
+        return int(os.environ.get("SKTIME_MCP_MAX_DATA_HANDLES", "50"))
+
+    @property
+    def max_response_tokens(self) -> int:
+        """
+        Maximum tokens allowed per tool response.
+        Env Var: SKTIME_MCP_MAX_RESPONSE_TOKENS
+        Default: 0
+        """
+        raw = os.environ.get("SKTIME_MCP_MAX_RESPONSE_TOKENS", "0")
+        try:
+            return int(raw)
+        except ValueError:
+            return 0
+
 
 settings = Settings()

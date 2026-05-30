@@ -124,12 +124,9 @@ def _apply_response_token_limit(tool_name: str, text: str) -> str:
     that live config changes are respected.
     Returns *text* unchanged when the limit is 0 (unlimited) or not set.
     """
-    raw = os.environ.get("SKTIME_MCP_MAX_RESPONSE_TOKENS", "0")
-    try:
-        max_tokens = int(raw)
-    except ValueError:
-        max_tokens = 0
+    from sktime_mcp.config import settings
 
+    max_tokens = settings.max_response_tokens
     if max_tokens <= 0:
         return text  # unlimited
 
