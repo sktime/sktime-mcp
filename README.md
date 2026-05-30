@@ -207,21 +207,22 @@ The `sktime-mcp` server exposes a rich suite of tools categorized logically. Eve
 
 ### Category 1: Discovery & Registry Tools
 
-These tools enable the LLM to inspect the native `sktime` registry, search for estimators matching specific criteria, and understand their capability profiles.
+These tools enable the LLM to inspect the native `sktime` registry, search for estimators, capability tags, or performance metrics, and understand their capability profiles.
 
-#### 1. `list_estimators`
-Discover estimator classes from the `sktime` registry by task type, capabilities, or name query.
+#### 1. `query_registry`
+Unified entry point to discover and search for estimators, capability tags, or performance metrics in the `sktime` ecosystem.
 * **Arguments:**
-  * `task` (`str`, optional): Filter by task type. Valid values: `"forecasting"`, `"classification"`, `"regression"`, `"transformation"`, `"clustering"`, `"detection"`.
-  * `tags` (`dict[str, Any]`, optional): Key-value pairs filtering by capability tags (e.g., `{"capability:pred_int": true, "handles-missing-data": true}`).
-  * `query` (`str`, optional): Case-insensitive substring search on the estimator's class name or docstring.
+  * `target` (`str`, required): What registry target to search. Valid values: `"estimators"`, `"tags"`, `"metrics"`.
+  * `task` (`str`, optional): Filter estimators or metrics by task type (e.g. `"forecasting"`, `"classification"`, `"regression"`, `"transformation"`, `"clustering"`, `"detection"`, `"metric"`).
+  * `tags` (`dict[str, Any]`, optional): Key-value pairs filtering estimators by capability tags (e.g., `{"capability:pred_int": true}`).
+  * `query` (`str`, optional): Case-insensitive substring search on names or descriptions.
   * `limit` (`int`, optional, default=`50`): Maximum number of results to return.
   * `offset` (`int`, optional, default=`0`): Number of entries to skip for pagination.
 * **Returns:**
   ```json
   {
     "success": true,
-    "estimators": [
+    "results": [
       {
         "name": "ARIMA",
         "task": "forecasting",
@@ -233,48 +234,32 @@ Discover estimator classes from the `sktime` registry by task type, capabilities
         "import_path": "sktime.forecasting.arima.ARIMA"
       }
     ],
+    "count": 1,
     "total": 1
   }
   ```
 
-#### 2. `describe_estimator`
-Get full documentation, hyperparameters, capability tags, and Python import path for a specific named estimator class.
+#### 2. `describe_component`
+Get full documentation, hyperparameters, capability tags, and Python import path for ANY specific class or component in the `sktime` ecosystem (estimators, transformers, splitters, metrics, aligners).
 * **Arguments:**
-  * `estimator` (`str`, required): Name of the estimator class (e.g., `"ARIMA"`, `"NaiveForecaster"`).
+  * `name` (`str`, required): Name of the component class (e.g., `"ARIMA"`, `"SlidingWindowSplitter"`, `"MeanAbsolutePercentageError"`).
 * **Returns:**
   ```json
   {
     "success": true,
     "name": "ARIMA",
-    "description": "Autoregressive Integrated Moving Average...",
-    "params": {
-      "order": {
-        "type": "tuple",
-        "default": [1, 0, 0],
-        "description": "The (p,d,q) order of the model."
-      }
+    "task": "forecasting",
+    "module": "sktime.forecasting.arima",
+    "parameters": {
+      "order": [1, 0, 0]
     },
     "tags": {
       "capability:pred_int": true
     },
-    "import_path": "sktime.forecasting.arima.ARIMA"
-  }
-  ```
-
-#### 3. `get_available_tags`
-List all queryable capability tags across the `sktime` registry with their descriptions and expected value types.
-* **Arguments:** None.
-* **Returns:**
-  ```json
-  {
-    "success": true,
-    "tags": {
-      "capability:pred_int": {
-        "type": "bool",
-        "description": "Whether the forecaster can compute prediction intervals.",
-        "scitype": "forecaster"
-      }
-    }
+    "tag_explanations": {
+      "capability:pred_int": "Whether the forecaster can compute prediction intervals."
+    },
+    "docstring": "Autoregressive Integrated Moving Average..."
   }
   ```
 
@@ -945,8 +930,9 @@ Below are examples demonstrating how an LLM utilizes these redesigned tools to c
 1. **Discover Models**
    The LLM queries for forecasting models supporting prediction intervals.
    ```json
-   // list_estimators
+   // query_registry
    {
+     "target": "estimators",
      "task": "forecasting",
      "tags": {
        "capability:pred_int": true
@@ -958,9 +944,9 @@ Below are examples demonstrating how an LLM utilizes these redesigned tools to c
 2. **Inspect Choice**
    The LLM inspects the parameter schema of `"ARIMA"`.
    ```json
-   // describe_estimator
+   // describe_component
    {
-     "estimator": "ARIMA"
+     "name": "ARIMA"
    }
    ```
 
