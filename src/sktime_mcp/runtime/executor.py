@@ -20,7 +20,14 @@ from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 logger = logging.getLogger(__name__)
 
 
-# Dynamically discover all available sktime demo datasets on first access.
+def _validate_horizon(horizon: Any) -> Optional[str]:
+    """Return error message if horizon is invalid, else None."""
+    if isinstance(horizon, bool) or not isinstance(horizon, int) or horizon <= 0:
+        return f"Invalid fh={horizon!r}. fh must be a positive integer."
+    return None
+
+
+# Dynamically discover all available sktime demo datasets at import time.
 # This replaces the old hardcoded dictionary and automatically exposes every
 # load_* function in sktime.datasets to the MCP server.
 def _discover_demo_datasets() -> dict:
@@ -228,6 +235,10 @@ class Executor:
         data_handle: str | None = None,
     ) -> dict[str, Any]:
         """Convenience method: load data, fit, and predict."""
+        horizon_error = _validate_horizon(horizon)
+        if horizon_error:
+            return {"success": False, "error": horizon_error}
+
         if dataset and data_handle:
             return {
                 "success": False,
@@ -294,6 +305,10 @@ class Executor:
         Returns:
             Dictionary with success status and job_id
         """
+        horizon_error = _validate_horizon(horizon)
+        if horizon_error:
+            return {"success": False, "error": horizon_error}
+
         # Get estimator info for job tracking
         try:
             handle_info = self._handle_manager.get_info(handle_id)
@@ -909,6 +924,47 @@ class Executor:
             "metadata": new_data["metadata"],
             "changes_made": changes_made,
         }
+
+    def fit_predict_with_data(
+        self,
+        estimator_handle: str,
+        data_handle: str,
+        horizon: int = 12,
+    ) -> dict[str, Any]:
+        """
+        Fit and predict using a data handle.
+
+        Args:
+            estimator_handle: Estimator handle from instantiate_estimator
+            data_handle: Data handle from load_data_source
+            horizon: Forecast horizon
+
+        Returns:
+            Dictionary with predictions
+        """
+        horizon_error = _validate_horizon(horizon)
+        if horizon_error:
+            return {"success": False, "error": horizon_error}
+
+        if data_handle not in self._data_handles:
+            return {
+                "success": False,
+                "error": f"Unknown data handle: {data_handle}",
+                "available_handles": list(self._data_handles.keys()),
+            }
+
+        data = self._data_handles[data_handle]
+        y = data["y"]
+        X = data.get("X")
+
+        # Fit
+        fh = list(range(1, horizon + 1))
+        fit_result = self.fit(estimator_handle, y=y, X=X, fh=fh)
+        if not fit_result["success"]:
+            return fit_result
+
+        # Predict
+        return self.predict(estimator_handle, fh=fh, X=X)
 
     def list_data_handles(self) -> dict[str, Any]:
         """
