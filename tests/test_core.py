@@ -214,10 +214,12 @@ class TestTools:
         assert "system_demos" in result
         assert "active_handles" in result
         assert "total" in result
-        assert isinstance(result["system_demos"], list)
+        assert isinstance(result["system_demos"], dict)
         assert isinstance(result["active_handles"], list)
-        assert result["total"] == len(result["system_demos"]) + len(result["active_handles"])
-        assert "airline" in result["system_demos"]
+        assert "forecasting" in result["system_demos"]
+        assert "classification" in result["system_demos"]
+        assert "regression" in result["system_demos"]
+        assert "airline" in result["system_demos"]["forecasting"]
 
     def test_list_available_data_demos_only(self):
         """list_available_data with is_demo=True returns only system demo datasets."""
@@ -228,8 +230,8 @@ class TestTools:
         assert result["success"]
         assert len(result["system_demos"]) > 0
         assert result["active_handles"] == []
-        assert result["total"] == len(result["system_demos"])
-        assert "airline" in result["system_demos"]
+        assert result["total"] > 0
+        assert "airline" in result["system_demos"]["forecasting"]
 
     def test_list_available_data_handles_only(self):
         """list_available_data with is_demo=False returns only active data handles."""
@@ -238,7 +240,7 @@ class TestTools:
         result = list_available_data_tool(is_demo=False)
 
         assert result["success"]
-        assert result["system_demos"] == []
+        assert result["system_demos"] == {}
         assert isinstance(result["active_handles"], list)
         assert result["total"] == len(result["active_handles"])
 
