@@ -111,6 +111,14 @@ class TestPipelineParamsValidation:
         assert result["success"] is False
         assert "Unsupported type" in result["error"]
 
+    def test_pipeline_composition_check(self):
+        """Invalid pipeline composition (e.g. chaining forecasters) should fail validation."""
+        result = instantiate_pipeline_tool(["NaiveForecaster", "ExponentialSmoothing"])
+        assert result["success"] is False
+        assert "Invalid pipeline composition" in result["error"]
+        assert "validation_errors" in result
+        assert len(result["validation_errors"]) > 0
+
 
 class TestFitPredictValidation:
     """Tests for parameter validation in fit_predict tools."""
