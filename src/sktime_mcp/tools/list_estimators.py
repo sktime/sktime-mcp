@@ -1,6 +1,6 @@
 """
 Discovery tools for sktime MCP.
-Provides query_registry, list_estimators, and get_available_tags tools.
+Provides the query_registry tool.
 """
 
 import difflib
