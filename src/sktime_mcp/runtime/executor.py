@@ -277,6 +277,16 @@ class Executor:
         if not fit_result["success"]:
             return fit_result
 
+        # Record the training data source on the handle for later use (e.g. export_code defaults).
+        try:
+            handle_info = self._handle_manager.get_info(handle_id)
+            if dataset:
+                handle_info.metadata["training_dataset"] = dataset
+            elif data_handle:
+                handle_info.metadata["training_data_handle"] = data_handle
+        except Exception as e:  # pragma: no cover
+            logger.debug("Could not record training source metadata: %s", e)
+
         return self.predict(handle_id, fh=fh, X=X)
 
     async def fit_predict_async(
@@ -401,6 +411,16 @@ class Executor:
                     errors=[f"Fit failed: {fit_result.get('error')}"],
                 )
                 return fit_result
+
+            # Record the training data source on the handle for later use (e.g. export_code defaults).
+            try:
+                handle_info = self._handle_manager.get_info(handle_id)
+                if dataset:
+                    handle_info.metadata["training_dataset"] = dataset
+                elif data_handle:
+                    handle_info.metadata["training_data_handle"] = data_handle
+            except Exception as e:  # pragma: no cover
+                logger.debug("Could not record training source metadata: %s", e)
 
             # Step 3: Generate predictions
             self._job_manager.update_job(

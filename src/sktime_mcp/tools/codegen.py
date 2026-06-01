@@ -302,10 +302,12 @@ def export_code_tool(
 
     # Optionally add fit/predict example
     if include_fit_example:
+        effective_dataset = dataset or handle_info.metadata.get("training_dataset")
+
         # Resolve the dataset loader from demo datasets
         _demo_datasets = _get_demo_datasets()
-        if dataset and dataset in _demo_datasets:
-            module_path = _demo_datasets[dataset]
+        if effective_dataset and effective_dataset in _demo_datasets:
+            module_path = _demo_datasets[effective_dataset]
             module_parts = module_path.rsplit(".", 1)
             loader_module = module_parts[0]
             loader_func = module_parts[1]

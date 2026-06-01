@@ -253,6 +253,22 @@ class TestExportCodeTool:
         finally:
             self._cleanup_handle(handle)
 
+    def test_include_fit_example_uses_training_dataset_by_default(self):
+        """When handle metadata has training_dataset, use it as default for fit example."""
+        handle = self._create_handle()
+        try:
+            from sktime_mcp.runtime.handles import get_handle_manager
+
+            handle_info = get_handle_manager().get_info(handle)
+            handle_info.metadata["training_dataset"] = "sunspots"
+
+            result = export_code_tool(handle, include_fit_example=True)
+            assert result["success"]
+            assert "load_sunspots" in result["code"]
+            assert "load_airline" not in result["code"]
+        finally:
+            self._cleanup_handle(handle)
+
     def test_include_fit_example_false(self):
         """With include_fit_example=False, code should NOT contain fit example."""
         handle = self._create_handle()
