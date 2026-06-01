@@ -52,6 +52,7 @@ from sktime_mcp.tools.fit_predict import (
     fit_predict_tool,
 )
 from sktime_mcp.tools.format_tools import format_time_series_tool
+from sktime_mcp.tools.inspect_data import inspect_data_tool
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
     instantiate_pipeline_tool,
@@ -69,7 +70,10 @@ from sktime_mcp.tools.list_estimators import (
     get_available_tags,
     list_estimators_tool,
 )
+from sktime_mcp.tools.save_data import save_data_tool
 from sktime_mcp.tools.save_model import save_model_tool
+from sktime_mcp.tools.split_data import split_data_tool
+from sktime_mcp.tools.transform_data import transform_data_tool
 
 
 # ---------------------------------------------------------------------------
@@ -547,6 +551,131 @@ async def list_tools() -> list[Tool]:
                 "required": ["data_handle"],
             },
         ),
+        Tool(
+            name="inspect_data",
+            description=(
+                "Inspect a loaded data handle. Returns rich metadata: mtype, scitype, "
+                "shape, columns, dtypes, index names, frequency, cutoff, missing value "
+                "count, a preview of the first rows, and summary statistics."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Handle ID from load_data_source",
+                    },
+                },
+                "required": ["data_handle"],
+            },
+        ),
+        Tool(
+            name="split_data",
+            description=(
+                "Split a time series data handle into temporal train/test sets. "
+                "Provide exactly one of 'test_size' (fraction 0–1) or 'fh' "
+                "(number of final steps to hold out). Returns two new handles."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Handle ID from load_data_source",
+                    },
+                    "test_size": {
+                        "type": "number",
+                        "description": (
+                            "Fraction of data to use as test set (0.0–1.0). "
+                            "Mutually exclusive with 'fh'."
+                        ),
+                    },
+                    "fh": {
+                        "description": (
+                            "Forecast horizon — number of final time steps for the test set. "
+                            "Can be an integer or a list of step indices. "
+                            "Mutually exclusive with 'test_size'."
+                        ),
+                    },
+                },
+                "required": ["data_handle"],
+            },
+        ),
+        Tool(
+            name="transform_data",
+            description=(
+                "Transform a data handle. Two actions: "
+                "'format' — auto-fix frequency, duplicates, and missing values. "
+                "'convert' — convert data to a different sktime mtype "
+                "(e.g. 'pd.DataFrame', 'pd.Series', 'np.ndarray') "
+                "using sktime's convert_to()."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Handle ID from load_data_source",
+                    },
+                    "action": {
+                        "type": "string",
+                        "description": "Action to perform: 'format' or 'convert' (default: 'format')",
+                        "enum": ["format", "convert"],
+                        "default": "format",
+                    },
+                    "auto_infer_freq": {
+                        "type": "boolean",
+                        "description": "(format only) Infer and set frequency (default: true)",
+                        "default": True,
+                    },
+                    "fill_missing": {
+                        "type": "boolean",
+                        "description": "(format only) Fill missing values (default: true)",
+                        "default": True,
+                    },
+                    "remove_duplicates": {
+                        "type": "boolean",
+                        "description": "(format only) Remove duplicate timestamps (default: true)",
+                        "default": True,
+                    },
+                    "to_mtype": {
+                        "type": "string",
+                        "description": (
+                            "(convert only) Target mtype, e.g. 'pd.DataFrame', "
+                            "'pd.Series', 'np.ndarray'"
+                        ),
+                    },
+                },
+                "required": ["data_handle"],
+            },
+        ),
+        Tool(
+            name="save_data",
+            description=(
+                "Save the data behind a handle to a local file. "
+                "Supported formats: 'csv' (default), 'parquet', 'json'."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Handle ID from load_data_source / split_data / transform_data",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Destination file path",
+                    },
+                    "format": {
+                        "type": "string",
+                        "description": "Output format: 'csv' (default), 'parquet', or 'json'",
+                        "enum": ["csv", "parquet", "json"],
+                        "default": "csv",
+                    },
+                },
+                "required": ["data_handle", "path"],
+            },
+        ),
         # -- Export / Persistence --------------------------------------------
         Tool(
             name="export_code",
@@ -846,6 +975,33 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("auto_infer_freq", True),
                 arguments.get("fill_missing", True),
                 arguments.get("remove_duplicates", True),
+            )
+
+        elif name == "inspect_data":
+            result = inspect_data_tool(arguments["data_handle"])
+
+        elif name == "split_data":
+            result = split_data_tool(
+                data_handle=arguments["data_handle"],
+                test_size=arguments.get("test_size"),
+                fh=arguments.get("fh"),
+            )
+
+        elif name == "transform_data":
+            result = transform_data_tool(
+                data_handle=arguments["data_handle"],
+                action=arguments.get("action", "format"),
+                auto_infer_freq=arguments.get("auto_infer_freq", True),
+                fill_missing=arguments.get("fill_missing", True),
+                remove_duplicates=arguments.get("remove_duplicates", True),
+                to_mtype=arguments.get("to_mtype"),
+            )
+
+        elif name == "save_data":
+            result = save_data_tool(
+                data_handle=arguments["data_handle"],
+                path=arguments["path"],
+                format=arguments.get("format", "csv"),
             )
 
         elif name == "auto_format_on_load":

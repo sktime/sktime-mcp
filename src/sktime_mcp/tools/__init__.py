@@ -13,6 +13,7 @@ from sktime_mcp.tools.fit_predict import (
     fit_predict_tool,
 )
 from sktime_mcp.tools.format_tools import format_time_series_tool
+from sktime_mcp.tools.inspect_data import inspect_data_tool
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
     instantiate_pipeline_tool,
@@ -30,7 +31,10 @@ from sktime_mcp.tools.list_estimators import (
     get_available_tags,
     list_estimators_tool,
 )
+from sktime_mcp.tools.save_data import save_data_tool
 from sktime_mcp.tools.save_model import save_model_tool
+from sktime_mcp.tools.split_data import split_data_tool
+from sktime_mcp.tools.transform_data import transform_data_tool
 
 __all__ = [
     "list_estimators_tool",
@@ -49,6 +53,10 @@ __all__ = [
     "release_data_handle_tool",
     "list_available_data_tool",
     "format_time_series_tool",
+    "inspect_data_tool",
+    "split_data_tool",
+    "transform_data_tool",
+    "save_data_tool",
     "export_code_tool",
     "save_model_tool",
     "check_job_status_tool",
