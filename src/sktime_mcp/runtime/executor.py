@@ -71,6 +71,28 @@ REGRESSION_DATASETS = {
 }
 
 
+def _merge_adapter_validation_warnings(
+    validation_report: dict[str, Any],
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge warnings added during adapter conversion into validation output."""
+    metadata_validation = metadata.get("validation")
+    if not isinstance(metadata_validation, dict):
+        return validation_report
+
+    metadata_warnings = metadata_validation.get("warnings", [])
+    if not metadata_warnings:
+        return validation_report
+
+    merged = validation_report.copy()
+    existing_warnings = list(merged.get("warnings", []))
+    for warning in metadata_warnings:
+        if warning not in existing_warnings:
+            existing_warnings.append(warning)
+    merged["warnings"] = existing_warnings
+    return merged
+
+
 class Executor:
     """
     Execution runtime for sktime estimators.
@@ -622,6 +644,7 @@ class Executor:
 
             # Update metadata to reflect the target and used columns
             metadata = adapter.get_metadata().copy()
+            validation_report = _merge_adapter_validation_warnings(validation_report, metadata)
             metadata["columns"] = [y.name if hasattr(y, "name") and y.name else "target"]
             if X is not None:
                 metadata["exog_columns"] = list(X.columns)
@@ -746,6 +769,7 @@ class Executor:
             y, X = adapter.to_sktime_format(data)
 
             metadata = adapter.get_metadata().copy()
+            validation_report = _merge_adapter_validation_warnings(validation_report, metadata)
             metadata["columns"] = [y.name if hasattr(y, "name") and y.name else "target"]
             if X is not None:
                 metadata["exog_columns"] = list(X.columns)
