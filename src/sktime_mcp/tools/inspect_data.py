@@ -16,31 +16,49 @@ logger = logging.getLogger(__name__)
 
 
 def inspect_data_tool(data_handle: str) -> dict[str, Any]:
-    """
-    Inspect a loaded data handle and return rich metadata.
+    """Inspect a loaded data handle and return rich metadata.
 
     Provides comprehensive information about the data behind a handle,
     including shape, column types, frequency, cutoff point, missing
     value counts, a preview (head), and summary statistics.
 
-    Args:
-        data_handle: Handle ID from load_data / load_data_source
+    Parameters
+    ----------
+    data_handle : str
+        The unique handle ID for the loaded data source (from load_data_source).
 
-    Returns:
-        Dictionary with:
-        - success: bool
-        - data_handle: str
-        - mtype: str (e.g. 'pd.Series', 'pd.DataFrame')
-        - scitype: str (e.g. 'Series', 'Panel')
-        - shape: list[int]
-        - columns: list[str]
-        - dtypes: dict[str, str]
-        - index_names: list[str]
-        - freq: str or None
-        - cutoff: str or None
-        - n_missing: int
-        - head: dict (first 5 rows)
-        - summary_stats: dict (count, mean, std, min, max per column)
+    Returns
+    -------
+    dict
+        Dictionary containing detailed metadata and summary statistics:
+        - "success" : bool
+            True if the data handle was found and inspected successfully.
+        - "data_handle" : str
+            The inspected data handle ID.
+        - "mtype" : str
+            The format mtype (e.g. 'pd.Series', 'pd.DataFrame').
+        - "scitype" : str
+            The sktime scientific type (e.g. 'Series', 'Panel').
+        - "shape" : list of int
+            Shape list: [rows, columns] or [rows].
+        - "columns" : list of str
+            Names of all variables (including exogenous features if present).
+        - "dtypes" : dict
+            Mapping of column names to string names of their data types.
+        - "index_names" : list of str
+            List of names of the index levels.
+        - "freq" : str or None
+            Inferred or declared frequency of the time index.
+        - "cutoff" : str or None
+            Cutoff timestamp/integer index indicating the end of the history.
+        - "n_missing" : int
+            Total count of missing values across the entire dataset.
+        - "head" : dict
+            Preview of the first 5 rows of data.
+        - "summary_stats" : dict
+            Statistical summary metrics (mean, std, min, max, etc.) per column.
+        - "error" : str, optional
+            Error message if "success" is False.
     """
     executor = get_executor()
 

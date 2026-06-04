@@ -27,25 +27,36 @@ def save_data_tool(
     path: str,
     format: str = "csv",
 ) -> dict[str, Any]:
-    """
-    Persist the data behind a handle to a local file.
+    """Persist the data behind a handle to a local file.
 
-    Supports CSV, Parquet, and JSON output formats.  The target
+    Supports CSV, Parquet, and JSON output formats. The target
     directory is created automatically if it does not exist.
 
-    Args:
-        data_handle: Handle ID from load_data / split_data / transform_data
-        path: Destination file path (e.g. ``"/tmp/forecast_output.csv"``).
-              The file extension is **not** used to infer the format;
-              use the ``format`` argument instead.
-        format: Output format — ``"csv"`` (default), ``"parquet"``, or ``"json"``.
+    Parameters
+    ----------
+    data_handle : str
+        Handle ID of the data to save (from load_data_source, split_data, etc.).
+    path : str
+        Destination file path (e.g. "/tmp/forecast_output.csv").
+        Note that the file extension is not used to infer the format;
+        use the `format` argument instead.
+    format : str, default="csv"
+        Output format. Must be one of: "csv", "parquet", or "json".
 
-    Returns:
-        Dictionary with:
-        - success: bool
-        - saved_path: str (absolute path to the written file)
-        - format: str
-        - rows: int
+    Returns
+    -------
+    dict
+        Dictionary containing success status and path information:
+        - "success" : bool
+            True if the data was written successfully, False otherwise.
+        - "saved_path" : str
+            Absolute path to the written file.
+        - "format" : str
+            The format used to write the file.
+        - "rows" : int
+            Number of rows written to the file.
+        - "error" : str, optional
+            Error message if "success" is False.
     """
     executor = get_executor()
 

@@ -19,29 +19,42 @@ def split_data_tool(
     test_size: float | None = None,
     fh: list[int] | int | None = None,
 ) -> dict[str, Any]:
-    """
-    Split a time series data handle into train and test sets.
+    """Split a time series data handle into train and test sets.
 
     Uses sktime's temporal_train_test_split() when available, falling
-    back to a pandas-based implementation. Exactly one of ``test_size``
-    or ``fh`` must be provided.
+    back to a pandas-based implementation. Exactly one of `test_size`
+    or `fh` must be provided.
 
-    Args:
-        data_handle: Handle ID from load_data / load_data_source
-        test_size: Fraction of the data to hold out for testing (0.0–1.0).
-                   Mutually exclusive with ``fh``.
-        fh: Forecast horizon — the number of final time steps to reserve
-            as the test set.  Can be a single int or a list of relative
-            step indices.  Mutually exclusive with ``test_size``.
+    Parameters
+    ----------
+    data_handle : str
+        Handle ID of the loaded data to split (from load_data_source).
+    test_size : float or None, default=None
+        Fraction of the data to hold out for testing (0.0–1.0).
+        Mutually exclusive with `fh`.
+    fh : int, list of int, or None, default=None
+        Forecast horizon — the number of final time steps to reserve
+        as the test set. Can be a single int or a list of relative
+        step indices. Mutually exclusive with `test_size`.
 
-    Returns:
-        Dictionary with:
-        - success: bool
-        - train_handle: str (handle for the training portion)
-        - test_handle: str (handle for the test portion)
-        - cutoff: str (the last training timestamp)
-        - train_size: int
-        - test_size: int
+    Returns
+    -------
+    dict
+        Dictionary containing the split train/test handles and metadata:
+        - "success" : bool
+            True if the split completed successfully, False otherwise.
+        - "train_handle" : str
+            The new unique data handle ID representing the training set.
+        - "test_handle" : str
+            The new unique data handle ID representing the test set.
+        - "cutoff" : str
+            The cutoff timestamp indicating the last training timestamp.
+        - "train_size" : int
+            Number of observations in the training set.
+        - "test_size" : int
+            Number of observations in the test set.
+        - "error" : str, optional
+            Error message if "success" is False.
     """
     executor = get_executor()
 

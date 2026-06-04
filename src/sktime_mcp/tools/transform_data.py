@@ -25,33 +25,43 @@ def transform_data_tool(
     remove_duplicates: bool = True,
     to_mtype: str | None = None,
 ) -> dict[str, Any]:
-    """
-    Transform a data handle — either format it or convert its mtype.
+    """Transform a data handle — either format it or convert its mtype.
 
-    Two modes controlled by ``action``:
+    Supports two modes controlled by the `action` argument.
 
-    * ``"format"`` — Auto-fix common time series issues: infer frequency,
-      remove duplicate timestamps, and fill missing values.  The existing
-      ``format_time_series`` behaviour is preserved here.
+    Parameters
+    ----------
+    data_handle : str
+        Handle ID of the loaded data to transform (from load_data_source).
+    action : str, default="format"
+        The transformation action to perform. Must be one of:
+        - "format" : Auto-fix common time series issues like inferring frequency,
+          removing duplicate timestamps, and filling missing values.
+        - "convert" : Convert the data to a different sktime machine type (mtype).
+    auto_infer_freq : bool, default=True
+        (Format mode only) Infer and set frequency.
+    fill_missing : bool, default=True
+        (Format mode only) Forward/backward fill missing values.
+    remove_duplicates : bool, default=True
+        (Format mode only) Remove duplicate timestamps.
+    to_mtype : str or None, default=None
+        (Convert mode only) Target machine type string, e.g. "pd.DataFrame",
+        "pd.Series", "np.ndarray".
 
-    * ``"convert"`` — Convert the data to a different sktime machine type
-      (mtype) using ``sktime.datatypes.convert_to()``.  Requires the
-      ``to_mtype`` argument (e.g. ``"pd.DataFrame"``, ``"pd.Series"``,
-      ``"np.ndarray"``).
-
-    Args:
-        data_handle: Handle ID from load_data / load_data_source
-        action: ``"format"`` or ``"convert"``
-        auto_infer_freq: (format only) Infer and set frequency. Default True.
-        fill_missing: (format only) Forward/backward fill NaNs. Default True.
-        remove_duplicates: (format only) Remove duplicate timestamps. Default True.
-        to_mtype: (convert only) Target mtype string, e.g. ``"pd.DataFrame"``.
-
-    Returns:
-        Dictionary with:
-        - success: bool
-        - data_handle: str (new handle with transformed data)
-        - changes_applied: list[str] (human-readable list of changes)
+    Returns
+    -------
+    dict
+        Dictionary containing the new data handle and a list of applied changes:
+        - "success" : bool
+            True if the transformation succeeded, False otherwise.
+        - "data_handle" : str
+            The new unique data handle ID representing the transformed data.
+        - "changes_applied" : list of str
+            A list of human-readable changes that were applied to the data.
+        - "metadata" : dict, optional
+            Updated metadata for the new handle.
+        - "error" : str, optional
+            Error message if "success" is False.
     """
     if action not in ("format", "convert"):
         return {
