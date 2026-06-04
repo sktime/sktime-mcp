@@ -16,50 +16,64 @@ def load_data_source_tool(
     config: dict[str, Any],
     run_async: bool = False,
 ) -> dict[str, Any]:
-    """
-    Load data from any source (pandas, SQL, file, etc.).
+    """Load data from any source (pandas, SQL, file, etc.).
 
     Can run synchronously (blocking) or asynchronously in the background.
 
-    Args:
-        config: Data source configuration
-            {
-                "type": "pandas" | "sql" | "file" | "url",
-                ... (type-specific configuration)
-            }
-        run_async: If True, schedules the loading as a background job and
-                   returns a job_id immediately. If False (default), blocks
-                   until loaded and returns the data_handle directly.
+    Parameters
+    ----------
+    config : dict
+        Data source configuration dictionary. Must contain:
+        - "type" : str
+            Source type: "pandas", "sql", "file", or "url".
+        - Additional type-specific configuration keys (e.g. "data", "path",
+          "time_column", "target_column").
+    run_async : bool, default=False
+        If True, schedules the loading as a background job and
+        returns a job_id immediately. If False, blocks until loaded
+        and returns the data_handle directly.
 
-    Returns:
-        Dictionary with:
-        If run_async is False:
-        - success: bool
-        - data_handle: str (handle ID for the loaded data)
-        - metadata: dict (information about the data)
-        - validation: dict (validation results)
+    Returns
+    -------
+    dict
+        Dictionary containing load results and metadata.
+        If run_async is False, contains:
+        - "success" : bool
+            True if the data was loaded successfully.
+        - "data_handle" : str
+            The unique handle ID for the loaded data.
+        - "metadata" : dict
+            Rich metadata including row count, columns, and data type information.
+        - "validation" : dict
+            Results of indexing and format validation checks.
 
-        If run_async is True:
-        - success: bool
-        - job_id: str (Job ID for tracking progress via check_job_status)
-        - message: str (Status message)
+        If run_async is True, contains:
+        - "success" : bool
+            True if the background job was scheduled successfully.
+        - "job_id" : str
+            Unique job ID to monitor progress via check_job_status.
+        - "message" : str
+            A user-friendly status message.
+        - "source_type" : str
+            The type of the source requested to load.
 
-    Examples:
-        # Synchronous Pandas DataFrame Loading
-        >>> load_data_source_tool({
-        ...     "type": "pandas",
-        ...     "data": {"date": [...], "value": [...]},
-        ...     "time_column": "date",
-        ...     "target_column": "value"
-        ... })
+    Examples
+    --------
+    # Synchronous Pandas DataFrame Loading
+    >>> load_data_source_tool({
+    ...     "type": "pandas",
+    ...     "data": {"date": [...], "value": [...]},
+    ...     "time_column": "date",
+    ...     "target_column": "value"
+    ... })
 
-        # Asynchronous CSV File Loading
-        >>> load_data_source_tool({
-        ...     "type": "file",
-        ...     "path": "/path/to/data.csv",
-        ...     "time_column": "date",
-        ...     "target_column": "value"
-        ... }, run_async=True)
+    # Asynchronous CSV File Loading
+    >>> load_data_source_tool({
+    ...     "type": "file",
+    ...     "path": "/path/to/data.csv",
+    ...     "time_column": "date",
+    ...     "target_column": "value"
+    ... }, run_async=True)
     """
     if run_async:
         import asyncio
@@ -108,14 +122,18 @@ def load_data_source_tool(
 
 
 def list_data_sources_tool() -> dict[str, Any]:
-    """
-    List all available data source types.
+    """List all available data source types.
 
-    Returns:
-        Dictionary with:
-        - success: bool
-        - sources: list of available source types
-        - descriptions: dict with descriptions for each source type
+    Returns
+    -------
+    dict
+        Dictionary containing available data sources:
+        - "success" : bool
+            True if the list was retrieved successfully.
+        - "sources" : list of str
+            List of supported source type names.
+        - "descriptions" : dict
+            A mapping of source type names to their class and descriptions.
     """
     from sktime_mcp.data import DataSourceRegistry
 
@@ -138,14 +156,21 @@ def list_data_sources_tool() -> dict[str, Any]:
 
 
 def release_data_handle_tool(data_handle: str) -> dict[str, Any]:
-    """
-    Release a data handle and free memory.
+    """Release a data handle and free memory.
 
-    Args:
-        data_handle: Data handle to release
+    Parameters
+    ----------
+    data_handle : str
+        Data handle to release.
 
-    Returns:
-        Dictionary with success status
+    Returns
+    -------
+    dict
+        Dictionary containing success status:
+        - "success" : bool
+            True if the handle was successfully released, False otherwise.
+        - "message" : str, optional
+            Detailed status or error message.
     """
     executor = get_executor()
     return executor.release_data_handle(data_handle)
