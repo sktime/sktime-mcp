@@ -155,12 +155,3 @@ def query_registry_tool(
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
-
-
-def get_available_tasks() -> dict[str, Any]:
-    """Get list of available task types."""
-    registry = get_registry()
-    return {
-        "success": True,
-        "tasks": registry.get_available_tasks(),
-    }
