@@ -17,29 +17,59 @@ def query_registry_tool(
     limit: int = 50,
     offset: int = 0,
 ) -> dict[str, Any]:
-    """
-    Unified entry point to query the sktime registry for estimators, capability tags, or performance metrics.
+    """Query the sktime registry for estimators, capability tags, or performance metrics.
 
-    Args:
-        target: What registry target to search. One of: "estimators", "tags", "metrics".
-        task: Filter by task type (e.g., "forecasting", "transformation", "classification",
-              "regression", "clustering", "splitting", "detection", "alignment",
-              "parameter_estimation", "network"). Applies to "estimators" and "metrics".
-        tags: Key-value pair of capability tag filters (e.g., {"capability:pred_int": True}).
-              Applies to "estimators".
-        query: Substring search over name, module, or docstring. Applies to "estimators".
-        limit: Maximum number of results to return (default: 50).
-        offset: Number of results to skip for pagination (default: 0).
+    Parameters
+    ----------
+    target : str, default="estimators"
+        The registry target to search. Must be one of the following:
+        - "estimators" : search for sktime estimators/components (e.g. forecasters, classifiers)
+        - "tags" : list/filter available capability tags
+        - "metrics" : search for performance metrics
+    task : str or None, default=None
+        Filter estimators or metrics by task type. Valid values include
+        "forecasting", "transformation", "classification", "regression",
+        "clustering", "splitting", "detection", "alignment", "parameter_estimation",
+        "network", and "metric". Only applies when `target` is "estimators" or "metrics".
+    tags : dict or None, default=None
+        Key-value pairs of capability tag filters (e.g., {"capability:pred_int": True}).
+        Only applies when `target` is "estimators".
+    query : str or None, default=None
+        Substring search query over component names, modules, or docstrings.
+        Only applies when `target` is "estimators" or "tags".
+    limit : int, default=50
+        Maximum number of results to return. Must be a positive integer.
+    offset : int, default=0
+        Number of results to skip for pagination. Must be a non-negative integer.
 
-    Returns:
-        Dictionary with:
-        - success: bool
-        - results: List of matching components or tags
-        - count: Number of results in this page
-        - total: Total matching results
-        - offset: Current offset
-        - limit: Current limit
-        - has_more: True if more results exist
+    Returns
+    -------
+    dict
+        A dictionary with the query results and metadata containing:
+        - "success" : bool
+            True if the query completed successfully, False otherwise.
+        - "results" : list of dict
+            List of matching components, metrics, or tags in summary form.
+        - "count" : int
+            Number of results in the current page.
+        - "total" : int
+            Total number of matching results across all pages.
+        - "offset" : int
+            The offset used for pagination.
+        - "limit" : int
+            The limit used for pagination.
+        - "has_more" : bool
+            True if there are more results to fetch, False otherwise.
+        - "target" : str
+            The target that was queried.
+        - "task_filter" : str or None
+            The task filter that was applied.
+        - "tag_filter" : dict or None
+            The tag filter that was applied.
+        - "query" : str or None
+            The search query that was applied.
+        - "error" : str, optional
+            Error message if "success" is False.
     """
     registry = get_registry()
     try:
