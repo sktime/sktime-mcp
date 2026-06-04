@@ -93,6 +93,8 @@ def _collect_imports_from_value(
     if isinstance(shallow_params, dict):
         for sub_value in shallow_params.values():
             _collect_imports_from_value(sub_value, imports, visited)
+
+
 def _is_valid_var_name(var_name: str) -> bool:
     """Return True when var_name is a valid non-keyword Python identifier."""
     return isinstance(var_name, str) and var_name.isidentifier() and not keyword.iskeyword(var_name)

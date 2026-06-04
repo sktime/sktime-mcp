@@ -6,7 +6,7 @@ Supports both built-in demo datasets and custom user-loaded data handles.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from sktime_mcp.runtime.executor import get_executor
 
@@ -15,10 +15,10 @@ logger = logging.getLogger(__name__)
 
 def fit_predict_classification_tool(
     estimator_handle: str,
-    dataset: Optional[str] = None,
-    X_train_handle: Optional[str] = None,
-    y_train_handle: Optional[str] = None,
-    X_test_handle: Optional[str] = None,
+    dataset: str | None = None,
+    X_train_handle: str | None = None,
+    y_train_handle: str | None = None,
+    X_test_handle: str | None = None,
 ) -> dict[str, Any]:
     """
     Fit a classifier on training data and predict class labels on test data.
@@ -49,10 +49,10 @@ def fit_predict_classification_tool(
 
 def fit_predict_regression_tool(
     estimator_handle: str,
-    dataset: Optional[str] = None,
-    X_train_handle: Optional[str] = None,
-    y_train_handle: Optional[str] = None,
-    X_test_handle: Optional[str] = None,
+    dataset: str | None = None,
+    X_train_handle: str | None = None,
+    y_train_handle: str | None = None,
+    X_test_handle: str | None = None,
 ) -> dict[str, Any]:
     """
     Fit a regressor on training data and predict target values on test data.

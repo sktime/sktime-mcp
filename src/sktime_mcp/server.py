@@ -34,11 +34,11 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 from sktime_mcp.composition.validator import get_composition_validator
+from sktime_mcp.config import settings
 from sktime_mcp.tools.classify import (
     fit_predict_classification_tool,
     fit_predict_regression_tool,
 )
-from sktime_mcp.config import settings
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_async_tool,
@@ -1056,6 +1056,7 @@ def main():
     except KeyboardInterrupt:
         print("\nINFO: sktime-mcp server shut down gracefully.")
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

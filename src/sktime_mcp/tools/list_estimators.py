@@ -64,10 +64,12 @@ def query_registry_tool(
             if query:
                 q_lower = query.lower()
                 all_tags = [
-                    t for t in all_tags
-                    if q_lower in t.get("tag", "").lower() or q_lower in t.get("description", "").lower()
+                    t
+                    for t in all_tags
+                    if q_lower in t.get("tag", "").lower()
+                    or q_lower in t.get("description", "").lower()
                 ]
-            
+
             total = len(all_tags)
             page = all_tags[offset : offset + limit]
             return {
@@ -156,6 +158,7 @@ def query_registry_tool(
 
 
 # --- Backward Compatibility Wrappers ---
+
 
 def list_estimators_tool(
     task: str | None = None,

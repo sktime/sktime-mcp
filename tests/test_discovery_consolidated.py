@@ -1,8 +1,9 @@
 """Tests for consolidated discovery tools: query_registry and describe_component."""
 
 import pytest
-from sktime_mcp.tools.list_estimators import query_registry_tool
+
 from sktime_mcp.tools.describe_estimator import describe_component_tool
+from sktime_mcp.tools.list_estimators import query_registry_tool
 
 
 def test_query_registry_estimators():

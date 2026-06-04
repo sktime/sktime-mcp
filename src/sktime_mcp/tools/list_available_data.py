@@ -55,7 +55,7 @@ def list_available_data_tool(is_demo: bool | None = None) -> dict[str, Any]:
                 demos_dict["regression"].append(name)
             else:
                 demos_dict["forecasting"].append(name)
-        
+
         system_demos = demos_dict
         total_demos = len(system_demos_raw)
 

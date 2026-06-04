@@ -9,8 +9,7 @@ import asyncio
 import inspect
 import logging
 import uuid
-import os
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -21,7 +20,7 @@ from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 logger = logging.getLogger(__name__)
 
 
-def _validate_horizon(horizon: Any) -> Optional[str]:
+def _validate_horizon(horizon: Any) -> str | None:
     """Return error message if horizon is invalid, else None."""
     if isinstance(horizon, bool) or not isinstance(horizon, int) or horizon <= 0:
         return f"Invalid fh={horizon!r}. fh must be a positive integer."
@@ -55,6 +54,7 @@ def _get_demo_datasets() -> dict:
     if _DEMO_DATASETS is None:
         _DEMO_DATASETS = _discover_demo_datasets()
     return _DEMO_DATASETS
+
 
 # Classification demo datasets (return X_train, y_train with split parameter)
 CLASSIFICATION_DATASETS = {
@@ -631,13 +631,16 @@ class Executor:
             data_handle = f"data_{uuid.uuid4().hex[:8]}"
 
             # Store (enforces max_data_handles limit)
-            self._register_data_handle(data_handle, {
-                "y": y,
-                "X": X,
-                "metadata": metadata,
-                "validation": validation_report,
-                "config": config,
-            })
+            self._register_data_handle(
+                data_handle,
+                {
+                    "y": y,
+                    "X": X,
+                    "metadata": metadata,
+                    "validation": validation_report,
+                    "config": config,
+                },
+            )
 
             # Apply auto-formatting if enabled
             if getattr(self, "_auto_format_enabled", True):
@@ -753,13 +756,16 @@ class Executor:
             metadata["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
             data_handle = f"data_{uuid.uuid4().hex[:8]}"
 
-            self._register_data_handle(data_handle, {
-                "y": y,
-                "X": X,
-                "metadata": metadata,
-                "validation": validation_report,
-                "config": config,
-            })
+            self._register_data_handle(
+                data_handle,
+                {
+                    "y": y,
+                    "X": X,
+                    "metadata": metadata,
+                    "validation": validation_report,
+                    "config": config,
+                },
+            )
 
             # auto-format if enabled
             if getattr(self, "_auto_format_enabled", True):
@@ -1175,7 +1181,7 @@ class Executor:
             y_test = data.get("y_test")
             if y_test is not None:
                 y_test_list = y_test.tolist() if hasattr(y_test, "tolist") else list(y_test)
-                correct = sum(1 for p, t in zip(pred_list, y_test_list) if p == t)
+                correct = sum(1 for p, t in zip(pred_list, y_test_list, strict=False) if p == t)
                 result["accuracy"] = round(correct / len(y_test_list), 4)
 
             return result

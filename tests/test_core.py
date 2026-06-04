@@ -412,12 +412,15 @@ class TestDataHandleLimits:
         # Rest survive
         for i in range(3, 10):
             assert f"data_{i:08x}" in ex._data_handles
+
+
 class TestMemoryLeakFix:
     """Tests for issue #218 — memory leak in load_data_source auto-formatting."""
 
     def test_load_data_source_no_raw_handle_leaked(self):
         """After auto-formatted load, only one handle should exist in the executor."""
         import pandas as pd
+
         from sktime_mcp.runtime.executor import Executor
 
         executor = Executor()
@@ -441,6 +444,7 @@ class TestMemoryLeakFix:
     def test_load_data_source_original_handle_not_in_response(self):
         """Response should not expose a leaked original_handle field."""
         import pandas as pd
+
         from sktime_mcp.runtime.executor import Executor
 
         executor = Executor()
@@ -463,6 +467,7 @@ class TestMemoryLeakFix:
     def test_repeated_loads_handle_count_stays_constant(self):
         """Loading data N times should result in exactly N handles, not 2*N."""
         import pandas as pd
+
         from sktime_mcp.runtime.executor import Executor
 
         executor = Executor()
@@ -480,6 +485,8 @@ class TestMemoryLeakFix:
             executor.load_data_source(config)
 
         assert len(executor._data_handles) == 3
+
+
 class TestSearchEstimatorsLimit:
     """Tests for the limit parameter validation in search_estimators_tool."""
 
