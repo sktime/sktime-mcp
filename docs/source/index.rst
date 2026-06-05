@@ -9,40 +9,43 @@ sktime-mcp
    :target: https://github.com/sktime/sktime-mcp/blob/main/LICENSE
    :alt: License
 
-The Semantic Engine for Time-Series Forecasting with LLMs.
+The Semantic Engine for Time-Series Forecasting with Large Language Models.
+
+`sktime-mcp` is a Model Context Protocol (MCP) server that exposes the full power of the `sktime` ecosystem to AI assistants. It provides a stateful runtime for discovering, instantiating, and executing complex time-series forecasting workflows.
 
 .. toctree::
    :maxdepth: 2
    :caption: Getting Started
 
-   intro
-   use-cases
-   user-guide
+   installation
+   quickstart
+   concepts
 
 .. toctree::
    :maxdepth: 2
-   :caption: Features
+   :caption: User Guide
 
-   usage-examples
-   data-sources
-   background-jobs
+   user-guide/data-management
+   user-guide/forecasting-workflows
+   user-guide/pipelines
+   user-guide/async-operations
+   user-guide/persistence
 
 .. toctree::
    :maxdepth: 2
-   :caption: Development
+   :caption: Developer Guide
 
-   architecture
-   ideal-mcp-tools
-   implementation
-   dev-guide
+   developer/architecture
+   developer/contributing
    api
 
 .. toctree::
    :maxdepth: 2
-   :caption: Links
+   :caption: Project Links
    :hidden:
 
    GitHub Repository <https://github.com/sktime/sktime-mcp>
+   sktime Project <https://www.sktime.net/>
 
 Indices and tables
 ==================
