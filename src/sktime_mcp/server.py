@@ -40,6 +40,7 @@ from sktime_mcp.tools.classify import (
     fit_predict_regression_tool,
 )
 from sktime_mcp.tools.codegen import export_code_tool
+from sktime_mcp.tools.compare_estimators import compare_estimators_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_async_tool,
     load_data_source_tool,
@@ -433,6 +434,50 @@ async def list_tools() -> list[Tool]:
                 "required": ["estimator_handle", "dataset"],
             },
         ),
+        # -- Agentic Model Selection -----------------------------------------
+        Tool(
+            name="compare_estimators",
+            description=(
+                "Evaluate multiple sktime forecasters on a dataset and return a "
+                "ranked leaderboard. Uses expanding-window cross-validation. "
+                "Pass a list of estimator names to compare, or omit to use "
+                "a curated set of fast baseline forecasters. "
+                "Returns best_model, best_score, and a full leaderboard sorted "
+                "by the chosen metric (lower is better). "
+                "This is the core tool for agentic model selection workflows."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "dataset": {
+                        "type": "string",
+                        "description": "Demo dataset name: airline, sunspots, lynx, etc.",
+                    },
+                    "estimator_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "List of sktime estimator class names to compare, e.g. "
+                            '["NaiveForecaster", "ThetaForecaster", "ARIMA"]. '
+                            "If omitted, a curated baseline set is used."
+                        ),
+                    },
+                    "cv_folds": {
+                        "type": "integer",
+                        "description": "Number of cross-validation folds (default: 3)",
+                        "default": 3,
+                    },
+                    "metric": {
+                        "type": "string",
+                        "description": (
+                            "Metric column to rank by (default: 'test_MeanAbsolutePercentageError')"
+                        ),
+                        "default": "test_MeanAbsolutePercentageError",
+                    },
+                },
+                "required": ["dataset"],
+            },
+        ),
         # -- Data ------------------------------------------------------------
         Tool(
             name="list_available_data",
@@ -811,6 +856,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["estimator_handle"],
                 arguments["dataset"],
                 arguments.get("cv_folds", 3),
+            )
+
+        elif name == "compare_estimators":
+            result = compare_estimators_tool(
+                dataset=arguments["dataset"],
+                estimator_names=arguments.get("estimator_names"),
+                cv_folds=arguments.get("cv_folds", 3),
+                metric=arguments.get("metric", "test_MeanAbsolutePercentageError"),
             )
 
         elif name == "validate_pipeline":
