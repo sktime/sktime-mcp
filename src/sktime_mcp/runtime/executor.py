@@ -277,6 +277,11 @@ class Executor:
         if not fit_result["success"]:
             return fit_result
 
+        # Record which dataset was used so export_code can reference it
+        if dataset:
+            handle_info = self._handle_manager.get_info(handle_id)
+            handle_info.metadata["training_dataset"] = dataset
+
         return self.predict(handle_id, fh=fh, X=X)
 
     async def fit_predict_async(
