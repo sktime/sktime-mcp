@@ -45,6 +45,16 @@ def save_model_tool(
     except KeyError:
         return {"success": False, "error": f"Handle not found: {estimator_handle}"}
 
+    if not handle_manager.is_fitted(estimator_handle):
+        handle_info = handle_manager.get_info(estimator_handle)
+        return {
+            "success": False,
+            "error": (
+                f"Estimator '{handle_info.estimator_name}' (handle: {estimator_handle}) "
+                "has not been fitted. Call fit_predict before saving."
+            ),
+        }
+
     if mlflow_params is not None and not isinstance(mlflow_params, dict):
         return {"success": False, "error": "mlflow_params must be a dictionary"}
 
