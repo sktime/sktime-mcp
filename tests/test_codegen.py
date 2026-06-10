@@ -15,6 +15,7 @@ from sktime_mcp.tools.codegen import (
     _format_value,
     _generate_pipeline_code,
     _generate_single_estimator_code,
+    _is_valid_var_name,
     export_code_tool,
 )
 from sktime_mcp.tools.instantiate import (
@@ -109,6 +110,47 @@ class TestSingleEstimatorCodeGen:
         result = _generate_single_estimator_code("NotARealEstimator99999", {})
         assert not result["success"]
         assert "error" in result
+
+    def test_composite_params_include_step_imports(self):
+        """Composite estimator params should include imports for nested step classes."""
+        from sktime.forecasting.naive import NaiveForecaster
+        from sktime.transformations.series.difference import Differencer
+
+        result = _generate_single_estimator_code(
+            "ForecastingPipeline",
+            {
+                "steps": [
+                    ("differencer", Differencer()),
+                    ("forecaster", NaiveForecaster()),
+                ]
+            },
+            var_name="pipeline",
+        )
+
+        assert result["success"]
+        assert "import ForecastingPipeline" in result["code"]
+        assert "import Differencer" in result["code"]
+        assert "import NaiveForecaster" in result["code"]
+
+
+class TestVarNameValidation:
+    """Tests for Python variable name validation in code export."""
+
+    def test_valid_var_name(self):
+        """A normal identifier should be accepted."""
+        assert _is_valid_var_name("my_forecaster") is True
+
+    def test_space_in_var_name_invalid(self):
+        """Names with spaces should be rejected."""
+        assert _is_valid_var_name("my forecaster") is False
+
+    def test_leading_digit_invalid(self):
+        """Names starting with digits should be rejected."""
+        assert _is_valid_var_name("123model") is False
+
+    def test_keyword_invalid(self):
+        """Python keywords should be rejected."""
+        assert _is_valid_var_name("class") is False
 
 
 class TestPipelineCodeGen:
@@ -228,6 +270,19 @@ class TestExportCodeTool:
             result = export_code_tool(handle, var_name="my_forecaster")
             assert result["success"]
             assert "my_forecaster" in result["code"]
+        finally:
+            self._cleanup_handle(handle)
+
+    @pytest.mark.parametrize("var_name", ["my model", "123model", "class"])
+    def test_invalid_var_name_fails(self, var_name):
+        """Invalid Python identifiers should fail fast."""
+        handle = self._create_handle()
+        try:
+            result = export_code_tool(handle, var_name=var_name)
+            assert result["success"] is False
+            assert (
+                result["error"] == "var_name must be a valid Python identifier and not a keyword."
+            )
         finally:
             self._cleanup_handle(handle)
 

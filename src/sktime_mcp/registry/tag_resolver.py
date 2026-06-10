@@ -7,7 +7,7 @@ utilities for working with tags and understanding their meanings.
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from sktime_mcp.registry.interface import EstimatorNode, get_registry
 
@@ -21,7 +21,7 @@ class TagInfo:
     name: str
     description: str
     value_type: str  # "bool", "str", "list", etc.
-    possible_values: Optional[list[Any]] = None
+    possible_values: list[Any] | None = None
     category: str = "general"
 
 
@@ -40,7 +40,7 @@ class TagResolver:
     """
 
     # Cache for tag definitions loaded from sktime
-    _tag_definitions_cache: Optional[dict[str, TagInfo]] = None
+    _tag_definitions_cache: dict[str, TagInfo] | None = None
 
     def __init__(self):
         """Initialize the tag resolver."""
@@ -119,7 +119,7 @@ class TagResolver:
             self._load_tag_definitions()
         return TagResolver._tag_definitions_cache or {}
 
-    def get_tag_info(self, tag_name: str) -> Optional[TagInfo]:
+    def get_tag_info(self, tag_name: str) -> TagInfo | None:
         """
         Get information about a specific tag.
 
@@ -190,10 +190,10 @@ class TagResolver:
 
     def filter_estimators_by_capability(
         self,
-        task: Optional[str] = None,
-        probabilistic: Optional[bool] = None,
-        handles_missing: Optional[bool] = None,
-        multivariate: Optional[bool] = None,
+        task: str | None = None,
+        probabilistic: bool | None = None,
+        handles_missing: bool | None = None,
+        multivariate: bool | None = None,
     ) -> list[EstimatorNode]:
         """
         Filter estimators by common capability requirements.
@@ -285,7 +285,7 @@ class TagResolver:
 
 
 # Singleton instance
-_resolver_instance: Optional[TagResolver] = None
+_resolver_instance: TagResolver | None = None
 
 
 def get_tag_resolver() -> TagResolver:
