@@ -10,6 +10,7 @@ import pytest
 
 sys.path.insert(0, "src")
 
+from sktime_mcp.tools.fit_predict import predict_tool
 from sktime_mcp.tools.instantiate import (
     _validate_params,
     instantiate_estimator_tool,
@@ -36,42 +37,22 @@ class TestValidateParams:
         result = _validate_params({"order": [1, 1, 1], "suppress_warnings": True})
         assert result["valid"] is True
 
-    def test_params_string_rejected(self):
-        """String passed as params should be rejected."""
-        result = _validate_params("invalid")
+    @pytest.mark.parametrize(
+        ("invalid_params", "expected_error"),
+        [
+            ("invalid", "must be a dictionary"),
+            ([1, 2, 3], "must be a dictionary"),
+            (42, "must be a dictionary"),
+            ({"fn": lambda: None}, "Unsupported type"),
+            ({"cls": object}, "Unsupported type"),
+            ({"items": [1, 2, lambda: None]}, "Unsupported type"),
+        ],
+    )
+    def test_params_invalid_inputs_rejected(self, invalid_params, expected_error):
+        """Tests to reject invalid input parameters"""
+        result = _validate_params(invalid_params)
         assert result["valid"] is False
-        assert "must be a dictionary" in result["error"]
-
-    def test_params_list_rejected(self):
-        """List passed as params should be rejected."""
-        result = _validate_params([1, 2, 3])
-        assert result["valid"] is False
-        assert "must be a dictionary" in result["error"]
-
-    def test_params_int_rejected(self):
-        """Integer passed as params should be rejected."""
-        result = _validate_params(42)
-        assert result["valid"] is False
-        assert "must be a dictionary" in result["error"]
-
-    def test_params_callable_value_rejected(self):
-        """Dict with callable value should be rejected."""
-        result = _validate_params({"fn": lambda: None})
-        assert result["valid"] is False
-        assert "Unsupported type" in result["error"]
-        assert "fn" in result["error"]
-
-    def test_params_class_value_rejected(self):
-        """Dict with class/type value should be rejected."""
-        result = _validate_params({"cls": object})
-        assert result["valid"] is False
-        assert "Unsupported type" in result["error"]
-
-    def test_params_nested_unsafe_value_rejected(self):
-        """Nested callable inside a list should be rejected."""
-        result = _validate_params({"items": [1, 2, lambda: None]})
-        assert result["valid"] is False
-        assert "Unsupported type" in result["error"]
+        assert expected_error in result["error"]
 
     def test_unknown_key_produces_warning(self):
         """Unknown param key should pass validation but produce a warning."""
@@ -129,6 +110,27 @@ class TestPipelineParamsValidation:
         )
         assert result["success"] is False
         assert "Unsupported type" in result["error"]
+
+
+class TestFitPredictValidation:
+    """Tests for parameter validation in fit_predict tools."""
+
+    @pytest.mark.parametrize(
+        "invalid_horizon, expected_error",
+        [
+            ("five", "must be an integer"),
+            (0, "greater than 0"),
+            (-3, "greater than 0"),
+            (None, "must be an integer"),
+            (3.14, "must be an integer"),
+            ([1, 2], "must be an integer"),
+        ],
+    )
+    def test_predict_tool_horizon_string(self, invalid_horizon, expected_error):
+        """Invalid horizons should be rejected with the correct error"""
+        result = predict_tool("fake_handle", horizon=invalid_horizon)
+        assert result["success"] is False
+        assert expected_error in result["error"]
 
 
 if __name__ == "__main__":

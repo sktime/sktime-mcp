@@ -4,7 +4,8 @@ save_model tool for sktime MCP.
 Saves estimator instances via sktime's MLflow integration.
 """
 
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from sktime_mcp.runtime.handles import get_handle_manager
 
@@ -24,7 +25,7 @@ def _get_mlflow_save_model() -> Callable[..., Any]:
 def save_model_tool(
     estimator_handle: str,
     path: str,
-    mlflow_params: Optional[dict[str, Any]] = None,
+    mlflow_params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Save an instantiated estimator to a local path or URI using sktime+MLflow.
@@ -43,6 +44,16 @@ def save_model_tool(
         estimator = handle_manager.get_instance(estimator_handle)
     except KeyError:
         return {"success": False, "error": f"Handle not found: {estimator_handle}"}
+
+    if not handle_manager.is_fitted(estimator_handle):
+        handle_info = handle_manager.get_info(estimator_handle)
+        return {
+            "success": False,
+            "error": (
+                f"Estimator '{handle_info.estimator_name}' (handle: {estimator_handle}) "
+                "has not been fitted. Call fit_predict before saving."
+            ),
+        }
 
     if mlflow_params is not None and not isinstance(mlflow_params, dict):
         return {"success": False, "error": "mlflow_params must be a dictionary"}
