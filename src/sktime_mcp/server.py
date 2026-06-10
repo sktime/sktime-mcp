@@ -9,16 +9,38 @@ import asyncio
 import json
 import logging
 import os
+import sys
+from io import TextIOWrapper
 from typing import Any
+
+import anyio
+
+try:
+    import numpy as np
+
+    _NUMPY_AVAILABLE = True
+except ImportError:
+    _NUMPY_AVAILABLE = False
+
+try:
+    import pandas as pd
+
+    _PANDAS_AVAILABLE = True
+except ImportError:
+    _PANDAS_AVAILABLE = False
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 from sktime_mcp.composition.validator import get_composition_validator
+from sktime_mcp.config import settings
+from sktime_mcp.tools.classify import (
+    fit_predict_classification_tool,
+    fit_predict_regression_tool,
+)
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
-    fit_predict_with_data_tool,
     load_data_source_async_tool,
     load_data_source_tool,
     release_data_handle_tool,
@@ -49,46 +71,132 @@ from sktime_mcp.tools.list_estimators import (
 )
 from sktime_mcp.tools.save_model import save_model_tool
 
+
 # ---------------------------------------------------------------------------
 # Server configuration via environment variables
 # ---------------------------------------------------------------------------
-JOB_MAX_AGE_HOURS = int(os.environ.get("SKTIME_MCP_JOB_MAX_AGE_HOURS", "24"))
-JOB_CLEANUP_INTERVAL_SECS = int(os.environ.get("SKTIME_MCP_JOB_CLEANUP_INTERVAL", "3600"))
+def _get_int_env(name: str, default: int) -> int:
+    """Return an integer env var value, falling back to default on parse errors."""
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        logging.getLogger(__name__).warning(
+            "Invalid %s=%r; using default value %d instead.",
+            name,
+            raw_value,
+            default,
+        )
+        return default
+
+
+JOB_MAX_AGE_HOURS = _get_int_env("SKTIME_MCP_JOB_MAX_AGE_HOURS", 24)
+JOB_CLEANUP_INTERVAL_SECS = _get_int_env("SKTIME_MCP_JOB_CLEANUP_INTERVAL", 3600)
 
 # Configure logging to stderr with detailed format
+_handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
+if settings.log_path:
+    _handlers.append(logging.FileHandler(settings.log_path))
+
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=getattr(logging, settings.log_level, logging.WARNING),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],
+    handlers=_handlers,
 )
 logger = logging.getLogger(__name__)
-
 # Create MCP server instance
 server = Server("sktime-mcp")
 
+_CHARS_PER_TOKEN = 4
+
+
+def _apply_response_token_limit(tool_name: str, text: str) -> str:
+    """Truncate *text* to the configured token budget and append a notice.
+
+    Reads ``SKTIME_MCP_MAX_RESPONSE_TOKENS`` from environment variable at call time so
+    that live config changes are respected.
+    Returns *text* unchanged when the limit is 0 (unlimited) or not set.
+    """
+    from sktime_mcp.config import settings
+
+    max_tokens = settings.max_response_tokens
+    if max_tokens <= 0:
+        return text  # unlimited
+
+    max_chars = max_tokens * _CHARS_PER_TOKEN
+    if len(text) <= max_chars:
+        return text
+
+    notice = (
+        f"\n\n[sktime-mcp] Response truncated: output exceeded the SKTIME_MCP_MAX_RESPONSE_TOKENS "
+        f"limit of {max_tokens} tokens (tool: {tool_name}). "
+        "Increase SKTIME_MCP_MAX_RESPONSE_TOKENS or narrow your query for full results."
+    )
+    # Reserve space for the notice inside the budget
+    budget = max_chars - len(notice)
+    if budget < 0:
+        budget = 0
+    return text[:budget] + notice
+
 
 def sanitize_for_json(obj):
-    """Recursively convert objects to JSON-serializable format."""
+    """Recursively convert objects to JSON-serializable format.
+
+    Handles:
+    - Standard Python scalars and containers (dict, list, tuple)
+    - NumPy integer/float scalars and ndarrays
+    - Pandas Timestamp, NaT, NA, and Series/DataFrame
+    - Arbitrary objects (fallback to str repr)
+    """
+    # --- NumPy types ---
+    if _NUMPY_AVAILABLE:
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        if isinstance(obj, np.ndarray):
+            return [sanitize_for_json(item) for item in obj.tolist()]
+        if isinstance(obj, np.complexfloating):
+            return str(obj)
+
+    # --- Pandas types ---
+    if _PANDAS_AVAILABLE:
+        if isinstance(obj, pd.Timestamp):
+            return obj.isoformat()
+        if obj is pd.NaT:
+            return None
+        # pd.NA
+        try:
+            if obj is pd.NA:
+                return None
+        except AttributeError:
+            pass
+        if isinstance(obj, pd.Series):
+            return sanitize_for_json(obj.tolist())
+        if isinstance(obj, pd.DataFrame):
+            return sanitize_for_json(obj.to_dict(orient="records"))
+
+    # --- Standard Python containers ---
     if isinstance(obj, dict):
         return {str(k): sanitize_for_json(v) for k, v in obj.items()}
-    elif isinstance(obj, (list, tuple)):
+    if isinstance(obj, (list, tuple)):
         return [sanitize_for_json(item) for item in obj]
-    elif hasattr(obj, "__dict__") and not isinstance(obj, (str, int, float, bool, type(None))):
-        return str(obj)
-    else:
+
+    # --- Already JSON-safe scalars ---
+    if isinstance(obj, (str, int, float, bool, type(None))):
         return obj
 
+    # --- Fallback: objects with __dict__ or anything else ---
+    if hasattr(obj, "__dict__"):
+        return str(obj)
 
-# ===================================================================
-# Tool definitions
-# ===================================================================
-# Consolidation changes applied (see docs/TOOL_CONSOLIDATION_PLAN.md):
-#   1. list_data_sources   -> baked into load_data_source description
-#   2. auto_format_on_load -> env var SKTIME_MCP_AUTO_FORMAT (default true)
-#   3. cleanup_old_jobs    -> automatic periodic timer
-#   4. delete_job          -> merged into cancel_job(delete=True)
-#   5. search_estimators   -> merged into list_estimators(query=...)
-# ===================================================================
+    # Last resort
+    return str(obj)
 
 
 @server.list_tools()
@@ -113,10 +221,7 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "task": {
                         "type": "string",
-                        "description": (
-                            "Task type filter: forecasting, classification, "
-                            "regression, transformation, clustering"
-                        ),
+                        "description": "Task type filter: forecasting, classification, regression, transformation, clustering, detection",
                     },
                     "tags": {
                         "type": "object",
@@ -243,8 +348,9 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="fit_predict",
             description=(
-                "Fit an estimator on a dataset and generate predictions. "
-                "Accepts either a demo dataset name or a data_handle from load_data_source."
+                "Fit an estimator and generate predictions. "
+                "Provide exactly one of: dataset (demo name such as airline, sunspots) "
+                "or data_handle (from load_data_source for custom data)."
             ),
             inputSchema={
                 "type": "object",
@@ -276,8 +382,9 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="fit_predict_async",
             description=(
-                "Fit an estimator on a dataset and generate predictions "
-                "(non-blocking background job). Returns a job_id."
+                "Fit an estimator and generate predictions in the background. "
+                "Provide exactly ONE of 'dataset' (built-in demo name) "
+                "or 'data_handle' (from load_data_source)."
             ),
             inputSchema={
                 "type": "object",
@@ -288,7 +395,11 @@ async def list_tools() -> list[Tool]:
                     },
                     "dataset": {
                         "type": "string",
-                        "description": "Dataset name: airline, sunspots, lynx, etc.",
+                        "description": "Demo dataset name: airline, sunspots, lynx, etc.",
+                    },
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Data handle from load_data_source (e.g. 'data_abc123')",
                     },
                     "horizon": {
                         "type": "integer",
@@ -296,7 +407,7 @@ async def list_tools() -> list[Tool]:
                         "default": 12,
                     },
                 },
-                "required": ["estimator_handle", "dataset"],
+                "required": ["estimator_handle"],
             },
         ),
         Tool(
@@ -560,6 +671,66 @@ async def list_tools() -> list[Tool]:
                 "required": ["job_id"],
             },
         ),
+        Tool(
+            name="fit_predict_classification",
+            description="Fit a time series classifier on training data and predict class labels on test data. Use with classification estimators like RocketClassifier, HIVECOTEV2, etc.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle from instantiate_estimator (must be a classifier)",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Demo dataset name: arrow_head, gunpoint, basic_motions, italy_power_demand",
+                    },
+                    "X_train_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom training features",
+                    },
+                    "y_train_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom training labels",
+                    },
+                    "X_test_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom test features",
+                    },
+                },
+                "required": ["estimator_handle"],
+            },
+        ),
+        Tool(
+            name="fit_predict_regression",
+            description="Fit a time series regressor on training data and predict continuous target values on test data. Use with regression estimators like TimeSeriesForestRegressor, etc.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle from instantiate_estimator (must be a regressor)",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Demo dataset name: covid_3month, cardano_sentiment",
+                    },
+                    "X_train_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom training features",
+                    },
+                    "y_train_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom training target values",
+                    },
+                    "X_test_handle": {
+                        "type": "string",
+                        "description": "Data handle for custom test features",
+                    },
+                },
+                "required": ["estimator_handle"],
+            },
+        ),
     ]
 
 
@@ -626,24 +797,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("horizon", 12),
                 data_handle=arguments.get("data_handle"),
             )
-            result = sanitize_for_json(result)
 
         elif name == "fit_predict_async":
             result = fit_predict_async_tool(
-                arguments["estimator_handle"],
-                arguments["dataset"],
-                arguments.get("horizon", 12),
+                estimator_handle=arguments["estimator_handle"],
+                dataset=arguments.get("dataset"),
+                data_handle=arguments.get("data_handle"),
+                horizon=arguments.get("horizon", 12),
             )
-
-        elif name == "fit_predict_with_data":
-            # Deprecated — kept for backward compatibility
-            logger.warning("fit_predict_with_data is deprecated; use fit_predict(data_handle=...)")
-            result = fit_predict_with_data_tool(
-                arguments["estimator_handle"],
-                arguments["data_handle"],
-                arguments.get("horizon", 12),
-            )
-            result = sanitize_for_json(result)
 
         elif name == "evaluate_estimator":
             result = evaluate_estimator_tool(
@@ -651,7 +812,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["dataset"],
                 arguments.get("cv_folds", 3),
             )
-            result = sanitize_for_json(result)
 
         elif name == "validate_pipeline":
             validator = get_composition_validator()
@@ -659,11 +819,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = validation.to_dict()
             result["success"] = result["valid"]
 
-
         # -- Data ------------------------------------------------------------
         elif name == "list_available_data":
             result = list_available_data_tool(arguments.get("is_demo"))
-
         elif name == "load_data_source":
             result = load_data_source_tool(arguments["config"])
 
@@ -672,8 +830,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         elif name == "list_data_sources":
             # Deprecated — info is now in load_data_source description
-            logger.warning("list_data_sources is deprecated; info is in load_data_source description")
+            logger.warning(
+                "list_data_sources is deprecated; info is in load_data_source description"
+            )
             from sktime_mcp.tools.data_tools import list_data_sources_tool
+
             result = list_data_sources_tool()
 
         elif name == "release_data_handle":
@@ -693,6 +854,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 "auto_format_on_load is deprecated; use env var SKTIME_MCP_AUTO_FORMAT=true/false"
             )
             from sktime_mcp.tools.format_tools import auto_format_on_load_tool
+
             result = auto_format_on_load_tool(arguments.get("enabled", True))
 
         # -- Export / Persistence --------------------------------------------
@@ -739,8 +901,26 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             # Deprecated — now runs automatically on a periodic timer
             logger.warning("cleanup_old_jobs is deprecated; jobs are cleaned up automatically")
             from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
-            result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
 
+            result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
+        elif name == "fit_predict_classification":
+            result = fit_predict_classification_tool(
+                estimator_handle=arguments["estimator_handle"],
+                dataset=arguments.get("dataset"),
+                X_train_handle=arguments.get("X_train_handle"),
+                y_train_handle=arguments.get("y_train_handle"),
+                X_test_handle=arguments.get("X_test_handle"),
+            )
+            result = sanitize_for_json(result)
+        elif name == "fit_predict_regression":
+            result = fit_predict_regression_tool(
+                estimator_handle=arguments["estimator_handle"],
+                dataset=arguments.get("dataset"),
+                X_train_handle=arguments.get("X_train_handle"),
+                y_train_handle=arguments.get("y_train_handle"),
+                X_test_handle=arguments.get("X_test_handle"),
+            )
+            result = sanitize_for_json(result)
         else:
             result = {"error": f"Unknown tool: {name}"}
 
@@ -749,7 +929,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         sanitized_result = sanitize_for_json(result)
         logger.info(f"{json.dumps(sanitized_result, indent=2, default=str)}")
 
-        return [TextContent(type="text", text=json.dumps(sanitized_result, indent=2, default=str))]
+        response_text = json.dumps(sanitized_result, indent=2, default=str)
+        truncated_text = _apply_response_token_limit(name, response_text)
+
+        return [TextContent(type="text", text=truncated_text)]
     except Exception as e:
         logger.exception(f"Error in tool {name}")
         return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
@@ -765,10 +948,10 @@ async def _periodic_job_cleanup():
     from sktime_mcp.runtime.jobs import get_job_manager
 
     while True:
-        await asyncio.sleep(JOB_CLEANUP_INTERVAL_SECS)
+        await asyncio.sleep(settings.job_cleanup_interval_secs)
         try:
             job_manager = get_job_manager()
-            removed = job_manager.cleanup_old_jobs(JOB_MAX_AGE_HOURS)
+            removed = job_manager.cleanup_old_jobs(settings.job_max_age_hours)
             if removed:
                 logger.info(f"Periodic cleanup: removed {removed} old job(s)")
         except Exception:
@@ -777,16 +960,27 @@ async def _periodic_job_cleanup():
 
 async def run_server():
     """Run the MCP server."""
+    # Stdio safety: redirect stdout to stderr to protect MCP JSON-RPC
+    # streams from being corrupted by stray prints in third-party libraries.
+    original_stdout = sys.stdout
+    sys.stdout = sys.stderr
+
+    # Explicitly wrap the original stdout buffer for the MCP server output
+    mcp_stdout = anyio.wrap_file(TextIOWrapper(original_stdout.buffer, encoding="utf-8"))
+
     asyncio.create_task(_periodic_job_cleanup())
 
-    async with stdio_server() as (read_stream, write_stream):
+    async with stdio_server(stdout=mcp_stdout) as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
 
 def main():
     """Main entry point."""
-    print("Starting sktime-mcp server...")
-    asyncio.run(run_server())
+    try:
+        asyncio.run(run_server())
+    except KeyboardInterrupt:
+        print("\nINFO: sktime-mcp server shut down gracefully.")
+        sys.exit(0)
 
 
 if __name__ == "__main__":

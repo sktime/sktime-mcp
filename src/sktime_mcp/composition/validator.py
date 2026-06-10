@@ -17,7 +17,7 @@ This prevents invalid pipelines at planning time.
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from sktime_mcp.registry.interface import EstimatorNode, get_registry
 
@@ -195,7 +195,7 @@ class CompositionValidator:
         suggestions = []
 
         # Get all estimator nodes
-        nodes: list[tuple[str, Optional[EstimatorNode]]] = []
+        nodes: list[tuple[str, EstimatorNode | None]] = []
         for name in components:
             node = self._registry.get_estimator_by_name(name)
             nodes.append((name, node))
@@ -212,6 +212,16 @@ class CompositionValidator:
         for i in range(len(nodes) - 1):
             current_name, current_node = nodes[i]
             next_name, next_node = nodes[i + 1]
+
+            # In linear pipelines, forecaster -> forecaster is invalid.
+            # The forecasting->forecasting rule is for ensemble composition,
+            # not sequential pipeline chaining.
+            if current_node.task == next_node.task == "forecasting":
+                errors.append(
+                    f"Cannot chain forecasters '{current_node.name}' → '{next_node.name}' directly. "
+                    "Use an ensemble or multiplexer instead."
+                )
+                continue
 
             # Check if this composition is valid
             valid_pair, pair_errors, pair_warnings = self._check_pair_compatibility(
@@ -358,7 +368,7 @@ class CompositionValidator:
     def suggest_pipeline(
         self,
         task: str,
-        requirements: Optional[dict[str, Any]] = None,
+        requirements: dict[str, Any] | None = None,
     ) -> list[str]:
         """
         Suggest a valid pipeline for a given task.
@@ -399,7 +409,7 @@ class CompositionValidator:
 
 
 # Singleton instance
-_validator_instance: Optional[CompositionValidator] = None
+_validator_instance: CompositionValidator | None = None
 
 
 def get_composition_validator() -> CompositionValidator:

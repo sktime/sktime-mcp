@@ -1,6 +1,6 @@
 <!--
 Thanks for contributing a pull request! Please ensure you have taken a look
-at our contribution guide: https://github.com/alan-turing-institute/sktime/blob/main/CONTRIBUTING.md
+at our contribution guide: https://github.com/sktime/sktime-mcp/blob/main/docs/source/dev-guide.md
 -->
 
 #### Reference Issues/PRs
@@ -21,7 +21,7 @@ A clear and concise description of what you have implemented.
 #### Does your contribution introduce a new dependency? If yes, which one?
 
 <!--
-If your contribution does add a new hard dependency, we may suggest to initially develop your contribution in a separate companion package in https://github.com/sktime/ to keep external dependencies of the core sktime package to a minimum.
+If your contribution does add a new hard dependency, we may suggest to initially develop your contribution in a separate companion package to keep external dependencies of the core sktime-mcp package to a minimum.
 -->
 
 #### What should a reviewer concentrate their feedback on?
@@ -39,13 +39,10 @@ Please go through the checklist below. Please feel free to remove points if they
 -->
 
 ##### For all contributions
-- [ ] I've added myself to the [list of contributors](https://github.com/alan-turing-institute/sktime/blob/main/.all-contributorsrc).
-- [ ] Optionally, I've updated sktime's [CODEOWNERS](https://github.com/alan-turing-institute/sktime/blob/main/CODEOWNERS) to receive notifications about future changes to these files.
-- [ ] I've added unit tests and made sure they pass locally.
+- [ ] I've added unit tests and made sure they pass locally (`make check`).
 
-##### For new estimators
-- [ ] I've added the estimator to the online documentation.
-- [ ] I've updated the existing example notebooks or provided a new one to showcase how my estimator works.
+- [ ] I've added the tool to the online documentation in `docs/source/`.
+- [ ] I've updated the existing example scripts or provided a new one to showcase how my tool works in `examples/`.
 
 
 <!--
