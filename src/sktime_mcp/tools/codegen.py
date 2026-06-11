@@ -305,14 +305,11 @@ def export_code_tool(
     # Optionally add fit/predict example
     if include_fit_example:
         # Priority: explicit argument > dataset used during fit_predict > "airline" fallback
-        effective_dataset = (
-            dataset
-            or handle_info.metadata.get("training_dataset")
-            or "airline"
-        )
-        # Resolve the dataset loader from DEMO_DATASETS
-        if effective_dataset in DEMO_DATASETS:
-            module_path = DEMO_DATASETS[effective_dataset]
+        effective_dataset = dataset or handle_info.metadata.get("training_dataset") or "airline"
+        # Resolve the dataset loader from discovered demo datasets
+        demo_datasets = _get_demo_datasets()
+        if effective_dataset in demo_datasets:
+            module_path = demo_datasets[effective_dataset]
             module_parts = module_path.rsplit(".", 1)
             loader_module = module_parts[0]
             loader_func = module_parts[1]

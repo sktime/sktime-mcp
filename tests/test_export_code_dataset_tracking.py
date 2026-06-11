@@ -44,9 +44,7 @@ class TestExportCodeDatasetTracking:
         assert code_result["success"], code_result
 
         code = code_result["code"]
-        assert "sunspots" in code, (
-            f"Expected 'sunspots' to appear in exported code, got:\n{code}"
-        )
+        assert "sunspots" in code, f"Expected 'sunspots' to appear in exported code, got:\n{code}"
 
     def test_export_code_explicit_dataset_overrides_metadata(self):
         """An explicit dataset argument to export_code must take priority over metadata."""
@@ -66,9 +64,7 @@ class TestExportCodeDatasetTracking:
         assert code_result["success"], code_result
 
         code = code_result["code"]
-        assert "airline" in code, (
-            f"Expected 'airline' to appear when explicitly set, got:\n{code}"
-        )
+        assert "airline" in code, f"Expected 'airline' to appear when explicitly set, got:\n{code}"
 
     def test_export_code_falls_back_to_airline_without_fit(self):
         """export_code on a never-fitted handle must fall back to 'airline'."""
@@ -83,6 +79,4 @@ class TestExportCodeDatasetTracking:
         assert code_result["success"], code_result
 
         code = code_result["code"]
-        assert "airline" in code, (
-            f"Expected 'airline' fallback for unfitted handle, got:\n{code}"
-        )
+        assert "airline" in code, f"Expected 'airline' fallback for unfitted handle, got:\n{code}"

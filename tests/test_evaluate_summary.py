@@ -41,9 +41,7 @@ class TestEvaluateSummary:
 
         for metric_name, stats in summary.items():
             for key in ("mean", "std", "min", "max"):
-                assert key in stats, (
-                    f"Expected '{key}' in summary['{metric_name}'], got {stats}"
-                )
+                assert key in stats, f"Expected '{key}' in summary['{metric_name}'], got {stats}"
                 assert isinstance(stats[key], float), (
                     f"summary['{metric_name}']['{key}'] should be float, got {type(stats[key])}"
                 )
