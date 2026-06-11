@@ -208,56 +208,87 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="query_registry",
             description=(
-                "Unified entry point to query the sktime registry for estimators, capability tags, or performance metrics. "
-                "Common targets you can search: 'estimators', 'tags', 'metrics'."
+                "Unified entry point to search the sktime component registry. "
+                "target='estimators' (default): discover forecasters, classifiers, transformers, "
+                "splitters, detectors, and other components; filter by task, capability tags, "
+                "or name/module/docstring substring; results include name, task, module, and tags. "
+                "target='tags': list all capability tags with descriptions, expected value_type "
+                "(bool, str, list, etc.), and which component types each tag applies to — "
+                "call this before filtering estimators by tags. "
+                "target='metrics': list performance metrics (task='metric'). "
+                "Supports pagination via limit (default 50) and offset (default 0)."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "target": {
                         "type": "string",
-                        "description": "Registry target to search: 'estimators', 'tags', or 'metrics' (default: 'estimators')",
+                        "description": (
+                            "Registry section to query: 'estimators' (default), 'tags', or 'metrics'. "
+                            "'estimators' returns component summaries; 'tags' returns tag metadata; "
+                            "'metrics' returns performance metric classes."
+                        ),
                         "enum": ["estimators", "tags", "metrics"],
                         "default": "estimators",
                     },
                     "task": {
                         "type": "string",
                         "description": (
-                            "Filter estimators or metrics by task type: forecasting, classification, regression, "
-                            "transformation, clustering, splitting, detection, alignment, parameter_estimation, network, or metric"
+                            "Filter estimators or metrics by task type. Valid values include "
+                            "forecasting, classification, regression, transformation, clustering, "
+                            "splitting, detection, alignment, parameter_estimation, network, and metric. "
+                            "Only applies when target is 'estimators' or 'metrics'."
                         ),
                     },
                     "tags": {
                         "type": "object",
-                        "description": "Filter estimators by capability tags, e.g. {'capability:pred_int': true}",
+                        "description": (
+                            "Filter estimators by capability tags (only when target='estimators'). "
+                            "Values must match each tag's expected type — boolean, string, or list. "
+                            "Use target='tags' first to see valid tag names and value_type for each. "
+                            "Example: {'capability:pred_int': true, 'scitype:y': 'univariate'}"
+                        ),
                     },
                     "query": {
                         "type": "string",
-                        "description": "Search by name or description (substring, case-insensitive)",
+                        "description": (
+                            "Case-insensitive substring search over component names, modules, and "
+                            "docstrings (target='estimators' or 'metrics'), or tag names and "
+                            "descriptions (target='tags')."
+                        ),
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Maximum results (default: 50)",
+                        "description": "Maximum results per page (default: 50). Must be a positive integer.",
                         "default": 50,
                     },
                     "offset": {
                         "type": "integer",
-                        "description": "Skip this many results for pagination (default: 0)",
+                        "description": "Number of results to skip for pagination (default: 0).",
                         "default": 0,
                     },
                 },
-                "required": ["target"],
             },
         ),
         Tool(
             name="describe_component",
-            description="Get detailed information about ANY class or component in the sktime ecosystem (estimators, splitters, metrics, transformers)",
+            description=(
+                "Get detailed metadata for a single sktime component class — estimators, "
+                "transformers, splitters, metrics, aligners, detectors, etc. "
+                "Returns constructor parameters (default values and required flags), "
+                "capability tags (values may be bool, str, list, or null), "
+                "human-readable tag explanations, Python module import path, and a "
+                "docstring preview. Use query_registry to discover valid class names first."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "name": {
                         "type": "string",
-                        "description": "Name of the component class (e.g., 'ARIMA', 'SlidingWindowSplitter', 'MeanAbsolutePercentageError')",
+                        "description": (
+                            "Component class name (case-insensitive), e.g. 'ARIMA', "
+                            "'SlidingWindowSplitter', 'MeanAbsolutePercentageError'."
+                        ),
                     },
                 },
                 "required": ["name"],

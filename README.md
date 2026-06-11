@@ -214,7 +214,7 @@ Unified entry point to discover and search for estimators, capability tags, or p
 * **Arguments:**
   * `target` (`str`, required): What registry target to search. Valid values: `"estimators"`, `"tags"`, `"metrics"`.
   * `task` (`str`, optional): Filter estimators or metrics by task type (e.g. `"forecasting"`, `"classification"`, `"regression"`, `"transformation"`, `"clustering"`, `"detection"`, `"metric"`).
-  * `tags` (`dict[str, Any]`, optional): Key-value pairs filtering estimators by capability tags (e.g., `{"capability:pred_int": true}`).
+  * `tags` (`dict[str, Any]`, optional): Key-value pairs filtering estimators by capability tags. Values must match each tag's expected type (bool, str, list, etc.; use `target="tags"` to inspect `value_type`). Example: `{"capability:pred_int": true, "scitype:y": "univariate"}`.
   * `query` (`str`, optional): Case-insensitive substring search on names or descriptions.
   * `limit` (`int`, optional, default=`50`): Maximum number of results to return.
   * `offset` (`int`, optional, default=`0`): Number of entries to skip for pagination.
@@ -240,7 +240,7 @@ Unified entry point to discover and search for estimators, capability tags, or p
   ```
 
 #### 2. `describe_component`
-Get full documentation, hyperparameters, capability tags, and Python import path for ANY specific class or component in the `sktime` ecosystem (estimators, transformers, splitters, metrics, aligners).
+Get full documentation, constructor parameters, capability tags, and Python import path for ANY specific class or component in the `sktime` ecosystem (estimators, transformers, splitters, metrics, aligners).
 * **Arguments:**
   * `name` (`str`, required): Name of the component class (e.g., `"ARIMA"`, `"SlidingWindowSplitter"`, `"MeanAbsolutePercentageError"`).
 * **Returns:**
@@ -251,7 +251,7 @@ Get full documentation, hyperparameters, capability tags, and Python import path
     "task": "forecasting",
     "module": "sktime.forecasting.arima",
     "parameters": {
-      "order": [1, 0, 0]
+      "order": {"default": [1, 0, 0], "required": false}
     },
     "tags": {
       "capability:pred_int": true

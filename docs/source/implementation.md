@@ -485,7 +485,7 @@ LLM → query_registry(target="estimators", task="forecasting")
 LLM → describe_component("ARIMA")
      → describe_component_tool("ARIMA")
      → registry.get_estimator_by_name("ARIMA")
-     → Returns: {"name": "ARIMA", "hyperparameters": {"order": ...}, ...}
+     → Returns: {"name": "ARIMA", "parameters": {"order": ...}, ...}
 ```
 
 **Step 3: Instantiation**

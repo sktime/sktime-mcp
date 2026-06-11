@@ -1,6 +1,7 @@
 """
-describe_estimator tool for sktime MCP.
-Gets detailed information about an estimator's capabilities.
+describe_component tool for sktime MCP.
+
+Gets detailed metadata about any sktime component class.
 """
 
 from typing import Any
@@ -33,11 +34,11 @@ def describe_component_tool(name: str) -> dict[str, Any]:
         - "module" : str
             The full import path of the module containing the component.
         - "parameters" : dict
-            A dictionary mapping parameter names to their default values.
-        - "hyperparameters" : dict
-            Hyperparameters for the component (kept for backward compatibility).
+            A dictionary mapping constructor parameter names to metadata dicts
+            with ``default`` and ``required`` keys.
         - "tags" : dict
-            A dictionary mapping capability tags to their boolean values.
+            A dictionary mapping capability tag names to their values.
+            Values may be bool, str, list, or null depending on the tag.
         - "tag_explanations" : dict
             A dictionary mapping capability tags to human-readable explanations.
         - "docstring" : str
@@ -73,8 +74,6 @@ def describe_component_tool(name: str) -> dict[str, Any]:
         "task": node.task,
         "module": node.module,
         "parameters": node.hyperparameters,
-        # Keep hyperparameters for backward compatibility with describe_estimator_tool
-        "hyperparameters": node.hyperparameters,
         "tags": node.tags,
         "tag_explanations": tag_explanations,
         "docstring": doc[:500],

@@ -32,7 +32,9 @@ def query_registry_tool(
         "clustering", "splitting", "detection", "alignment", "parameter_estimation",
         "network", and "metric". Only applies when `target` is "estimators" or "metrics".
     tags : dict or None, default=None
-        Key-value pairs of capability tag filters (e.g., {"capability:pred_int": True}).
+        Key-value pairs of capability tag filters. Values must match each tag's
+        expected type (bool, str, list, etc.; use ``target="tags"`` to inspect
+        ``value_type``). Example: ``{"capability:pred_int": True, "scitype:y": "univariate"}``.
         Only applies when `target` is "estimators".
     query : str or None, default=None
         Substring search query over component names, modules, or docstrings.
