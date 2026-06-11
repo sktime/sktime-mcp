@@ -79,7 +79,7 @@ def _validate_params(
                 "warnings": warnings,
             }
 
-    # check if keys match known hyperparameters (warn, don't error)
+    # check if keys match known hyperparameters
     if estimator_name and params:
         registry = get_registry()
         node = registry.get_estimator_by_name(estimator_name)
@@ -90,11 +90,15 @@ def _validate_params(
             unknown_keys = provided_keys - known_keys
 
             if unknown_keys:
-                warnings.append(
-                    f"Unknown parameter(s) for {estimator_name}: "
-                    f"{sorted(unknown_keys)}. "
-                    f"Known parameters: {sorted(known_keys)}"
-                )
+                return {
+                    "valid": False,
+                    "error": (
+                        f"Unknown parameter(s) for {estimator_name}: "
+                        f"{sorted(unknown_keys)}. "
+                        f"Valid parameters: {sorted(known_keys)}"
+                    ),
+                    "warnings": warnings,
+                }
 
     return {"valid": True, "warnings": warnings}
 
