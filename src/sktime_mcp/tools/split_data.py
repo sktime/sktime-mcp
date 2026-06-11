@@ -51,7 +51,7 @@ def split_data_tool(
             The cutoff timestamp indicating the last training timestamp.
         - "train_size" : int
             Number of observations in the training set.
-        - "test_size" : int
+        - "n_test" : int
             Number of observations in the test set.
         - "error" : str, optional
             Error message if "success" is False.
@@ -84,6 +84,25 @@ def split_data_tool(
             "error": f"test_size must be between 0.0 and 1.0 (exclusive), got {test_size}",
         }
 
+    if fh is not None:
+        if isinstance(fh, int):
+            if fh < 1:
+                return {
+                    "success": False,
+                    "error": f"fh must be a positive integer, got {fh}",
+                }
+        elif isinstance(fh, list):
+            if not fh or not all(isinstance(step, int) and step > 0 for step in fh):
+                return {
+                    "success": False,
+                    "error": "fh must be a non-empty list of positive integers.",
+                }
+        else:
+            return {
+                "success": False,
+                "error": f"fh must be an integer or list of integers, got {type(fh).__name__}",
+            }
+
     data_info = executor._data_handles[data_handle]
     y = data_info["y"]
     X = data_info.get("X")
@@ -94,9 +113,11 @@ def split_data_tool(
 
         if test_size is not None:
             n_test = max(1, int(n * test_size))
+        elif isinstance(fh, int):
+            n_test = fh
         else:
-            # fh can be int or list[int]
-            n_test = fh if isinstance(fh, int) else len(fh)
+            # fh as list of relative horizon indices — reserve max(fh) final steps
+            n_test = max(fh)
 
         if n_test >= n:
             return {
@@ -180,7 +201,7 @@ def split_data_tool(
             "test_handle": test_handle,
             "cutoff": cutoff,
             "train_size": len(y_train),
-            "test_size": len(y_test),
+            "n_test": len(y_test),
         }
 
     except Exception as e:

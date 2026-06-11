@@ -106,7 +106,7 @@ class TestSplitData:
         assert "train_handle" in result
         assert "test_handle" in result
         assert "cutoff" in result
-        assert result["train_size"] + result["test_size"] == 60
+        assert result["train_size"] + result["n_test"] == 60
 
     def test_split_by_fh(self):
         executor, handle = _make_executor_with_data()
@@ -117,8 +117,20 @@ class TestSplitData:
             self._unpatch()
 
         assert result["success"]
-        assert result["test_size"] == 12
+        assert result["n_test"] == 12
         assert result["train_size"] == 48
+
+    def test_split_by_fh_list_uses_max(self):
+        executor, handle = _make_executor_with_data()
+        self._patch(executor)
+        try:
+            result = split_data_tool(handle, fh=[1, 5, 10])
+        finally:
+            self._unpatch()
+
+        assert result["success"]
+        assert result["n_test"] == 10
+        assert result["train_size"] == 50
 
     def test_split_requires_one_arg(self):
         executor, handle = _make_executor_with_data()

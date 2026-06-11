@@ -51,7 +51,6 @@ from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
     fit_predict_tool,
 )
-from sktime_mcp.tools.format_tools import format_time_series_tool
 from sktime_mcp.tools.inspect_data import inspect_data_tool
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
@@ -523,47 +522,24 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
-            name="format_time_series",
-            description="Automatically format time series data (frequency, duplicates, missing values)",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "data_handle": {
-                        "type": "string",
-                        "description": "Handle from load_data_source",
-                    },
-                    "auto_infer_freq": {
-                        "type": "boolean",
-                        "description": "Automatically infer and set frequency (default: True)",
-                        "default": True,
-                    },
-                    "fill_missing": {
-                        "type": "boolean",
-                        "description": "Fill missing values with forward/backward fill (default: True)",
-                        "default": True,
-                    },
-                    "remove_duplicates": {
-                        "type": "boolean",
-                        "description": "Remove duplicate timestamps (default: True)",
-                        "default": True,
-                    },
-                },
-                "required": ["data_handle"],
-            },
-        ),
-        Tool(
             name="inspect_data",
             description=(
-                "Inspect a loaded data handle. Returns rich metadata: mtype, scitype, "
-                "shape, columns, dtypes, index names, frequency, cutoff, missing value "
-                "count, a preview of the first rows, and summary statistics."
+                "Inspect a loaded data handle and return rich metadata for understanding "
+                "the series before modelling. Returns mtype, scitype, shape, column names, "
+                "dtypes, index level names, inferred frequency, cutoff (last training "
+                "timestamp), total missing-value count, a 5-row head preview, and "
+                "per-column summary statistics. Works on handles from load_data_source, "
+                "split_data, or transform_data. Does not modify the data."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "data_handle": {
                         "type": "string",
-                        "description": "Handle ID from load_data_source",
+                        "description": (
+                            "Data handle ID to inspect (from load_data_source, split_data, "
+                            "or transform_data)."
+                        ),
                     },
                 },
                 "required": ["data_handle"],
@@ -572,29 +548,33 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="split_data",
             description=(
-                "Split a time series data handle into temporal train/test sets. "
-                "Provide exactly one of 'test_size' (fraction 0–1) or 'fh' "
-                "(number of final steps to hold out). Returns two new handles."
+                "Split a time series data handle into temporal train and test sets, "
+                "registering both halves as new data handles. Provide exactly one of "
+                "test_size (fraction in (0, 1)) or fh (forecast horizon). fh may be an "
+                "integer (hold out that many final steps) or a list of relative horizon "
+                "indices (hold out max(fh) final steps). Returns train_handle, "
+                "test_handle, cutoff timestamp, train_size, and n_test."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "data_handle": {
                         "type": "string",
-                        "description": "Handle ID from load_data_source",
+                        "description": "Data handle ID to split (from load_data_source or transform_data).",
                     },
                     "test_size": {
                         "type": "number",
                         "description": (
-                            "Fraction of data to use as test set (0.0–1.0). "
-                            "Mutually exclusive with 'fh'."
+                            "Fraction of observations to hold out for the test set, "
+                            "exclusive range (0.0, 1.0). Mutually exclusive with fh."
                         ),
                     },
                     "fh": {
                         "description": (
-                            "Forecast horizon — number of final time steps for the test set. "
-                            "Can be an integer or a list of step indices. "
-                            "Mutually exclusive with 'test_size'."
+                            "Forecast horizon for the test window. Integer: hold out that "
+                            "many final time steps. List of ints: hold out max(fh) final "
+                            "steps (e.g. fh=[1,5,10] reserves 10 steps). "
+                            "Mutually exclusive with test_size."
                         ),
                     },
                 },
@@ -604,45 +584,49 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="transform_data",
             description=(
-                "Transform a data handle. Two actions: "
-                "'format' — auto-fix frequency, duplicates, and missing values. "
-                "'convert' — convert data to a different sktime mtype "
-                "(e.g. 'pd.DataFrame', 'pd.Series', 'np.ndarray') "
-                "using sktime's convert_to()."
+                "Transform a loaded data handle and return a new handle. "
+                "action='format' (default): auto-fix common time series issues — "
+                "infer/set frequency, remove duplicate timestamps, fill index gaps, "
+                "and forward/backward-fill missing values; returns changes_applied. "
+                "action='convert': convert y to a different sktime mtype via convert_to() "
+                "(requires to_mtype, e.g. 'pd.DataFrame', 'pd.Series', 'np.ndarray'). "
+                "Replaces the legacy format_time_series tool."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "data_handle": {
                         "type": "string",
-                        "description": "Handle ID from load_data_source",
+                        "description": "Data handle ID to transform.",
                     },
                     "action": {
                         "type": "string",
-                        "description": "Action to perform: 'format' or 'convert' (default: 'format')",
+                        "description": (
+                            "Transformation to apply: 'format' (default) or 'convert'."
+                        ),
                         "enum": ["format", "convert"],
                         "default": "format",
                     },
                     "auto_infer_freq": {
                         "type": "boolean",
-                        "description": "(format only) Infer and set frequency (default: true)",
+                        "description": "(format only) Infer and set DatetimeIndex frequency (default: true).",
                         "default": True,
                     },
                     "fill_missing": {
                         "type": "boolean",
-                        "description": "(format only) Fill missing values (default: true)",
+                        "description": "(format only) Forward/backward fill missing values (default: true).",
                         "default": True,
                     },
                     "remove_duplicates": {
                         "type": "boolean",
-                        "description": "(format only) Remove duplicate timestamps (default: true)",
+                        "description": "(format only) Drop duplicate timestamps, keeping first (default: true).",
                         "default": True,
                     },
                     "to_mtype": {
                         "type": "string",
                         "description": (
-                            "(convert only) Target mtype, e.g. 'pd.DataFrame', "
-                            "'pd.Series', 'np.ndarray'"
+                            "(convert only, required) Target sktime mtype string, "
+                            "e.g. 'pd.DataFrame', 'pd.Series', 'np.ndarray'."
                         ),
                     },
                 },
@@ -652,23 +636,31 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="save_data",
             description=(
-                "Save the data behind a handle to a local file. "
-                "Supported formats: 'csv' (default), 'parquet', 'json'."
+                "Persist the target series (y) and any exogenous features (X) behind a "
+                "data handle to a local file. Combines y and X into one table. Creates "
+                "parent directories as needed. Supported formats: csv (default, writes "
+                "index as first column), parquet, json (records orient, ISO dates)."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "data_handle": {
                         "type": "string",
-                        "description": "Handle ID from load_data_source / split_data / transform_data",
+                        "description": (
+                            "Data handle ID to export (from load_data_source, split_data, "
+                            "or transform_data)."
+                        ),
                     },
                     "path": {
                         "type": "string",
-                        "description": "Destination file path",
+                        "description": (
+                            "Destination file path. Format is controlled by the format "
+                            "argument, not the file extension."
+                        ),
                     },
                     "format": {
                         "type": "string",
-                        "description": "Output format: 'csv' (default), 'parquet', or 'json'",
+                        "description": "Output format: csv (default), parquet, or json.",
                         "enum": ["csv", "parquet", "json"],
                         "default": "csv",
                     },
@@ -968,14 +960,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         elif name == "release_data_handle":
             result = release_data_handle_tool(arguments["data_handle"])
-
-        elif name == "format_time_series":
-            result = format_time_series_tool(
-                arguments["data_handle"],
-                arguments.get("auto_infer_freq", True),
-                arguments.get("fill_missing", True),
-                arguments.get("remove_duplicates", True),
-            )
 
         elif name == "inspect_data":
             result = inspect_data_tool(arguments["data_handle"])
