@@ -120,26 +120,10 @@ class Executor:
         estimator_name: str,
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Instantiate an estimator and return a handle."""
-        node = self._registry.get_estimator_by_name(estimator_name)
-        if node is None:
-            return {"success": False, "error": f"Unknown estimator: {estimator_name}"}
+        """Instantiate an estimator via craft and return a handle."""
+        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 
-        try:
-            instance = node.class_ref(**(params or {}))
-            handle_id = self._handle_manager.create_handle(
-                estimator_name=estimator_name,
-                instance=instance,
-                params=params or {},
-            )
-            return {
-                "success": True,
-                "handle": handle_id,
-                "estimator": estimator_name,
-                "params": params or {},
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+        return instantiate_estimator_tool(estimator=estimator_name, params=params)
 
     # L-7: We can also add custom load_dataset functions here
     def load_dataset(self, name: str) -> dict[str, Any]:
@@ -465,138 +449,10 @@ class Executor:
         components: list[str],
         params_list: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        """
-        Instantiate a pipeline from a list of components.
+        """Instantiate a pipeline via craft and return a handle."""
+        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 
-        Args:
-            components: List of estimator names in pipeline order
-            params_list: Optional list of parameter dicts for each component
-
-        Returns:
-            Dictionary with success status and handle
-        """
-        if not components:
-            return {"success": False, "error": "Pipeline cannot be empty"}
-
-        # Validate the pipeline first
-        from sktime_mcp.composition.validator import get_composition_validator
-
-        validator = get_composition_validator()
-        validation = validator.validate_pipeline(components)
-
-        if not validation.valid:
-            return {
-                "success": False,
-                "error": "Invalid pipeline composition",
-                "validation_errors": validation.errors,
-                "suggestions": validation.suggestions,
-            }
-
-        try:
-            # If only one component, just instantiate it directly
-            if len(components) == 1:
-                params = params_list[0] if params_list else {}
-                return self.instantiate(components[0], params)
-
-            # Build the pipeline
-            # Get all component nodes
-            component_instances = []
-            params_list = params_list or [{}] * len(components)
-
-            for i, comp_name in enumerate(components):
-                node = self._registry.get_estimator_by_name(comp_name)
-                if node is None:
-                    return {"success": False, "error": f"Unknown estimator: {comp_name}"}
-
-                params = params_list[i] if i < len(params_list) else {}
-                instance = node.class_ref(**params)
-                component_instances.append(instance)
-
-            # Determine the type of pipeline to create
-            # Check if all but last are transformers
-            all_transformers_except_last = all(
-                self._registry.get_estimator_by_name(comp).task == "transformation"
-                for comp in components[:-1]
-            )
-
-            final_task = self._registry.get_estimator_by_name(components[-1]).task
-
-            if all_transformers_except_last and final_task == "forecasting":
-                # Use TransformedTargetForecaster
-                from sktime.forecasting.compose import TransformedTargetForecaster
-
-                # Chain transformers if multiple
-                if len(component_instances) == 2:
-                    pipeline = TransformedTargetForecaster(
-                        [
-                            ("transformer", component_instances[0]),
-                            ("forecaster", component_instances[1]),
-                        ]
-                    )
-                else:
-                    # Multiple transformers - chain them
-                    from sktime.transformations.compose import TransformerPipeline
-
-                    transformer_pipeline = TransformerPipeline(
-                        [(f"step_{i}", comp) for i, comp in enumerate(component_instances[:-1])]
-                    )
-                    pipeline = TransformedTargetForecaster(
-                        [
-                            ("transformers", transformer_pipeline),
-                            ("forecaster", component_instances[-1]),
-                        ]
-                    )
-
-            elif all_transformers_except_last and final_task in ("classification", "regression"):
-                # Use sklearn-style Pipeline
-                from sktime.pipeline import Pipeline
-
-                pipeline = Pipeline(
-                    [(f"step_{i}", comp) for i, comp in enumerate(component_instances)]
-                )
-
-            elif all(
-                self._registry.get_estimator_by_name(comp).task == "transformation"
-                for comp in components
-            ):
-                # All transformers - use TransformerPipeline
-                from sktime.transformations.compose import TransformerPipeline
-
-                pipeline = TransformerPipeline(
-                    [(f"step_{i}", comp) for i, comp in enumerate(component_instances)]
-                )
-
-            else:
-                return {
-                    "success": False,
-                    "error": "Unsupported pipeline composition type",
-                    "hint": "Currently supports: transformers → forecaster, transformers → classifier/regressor, or transformer chains",
-                }
-
-            # Create a handle for the pipeline
-            pipeline_name = " → ".join(components)
-            handle_id = self._handle_manager.create_handle(
-                estimator_name=pipeline_name,
-                instance=pipeline,
-                params={"components": components, "params_list": params_list},
-            )
-
-            return {
-                "success": True,
-                "handle": handle_id,
-                "pipeline": pipeline_name,
-                "components": components,
-                "params_list": params_list,
-            }
-
-        except Exception as e:
-            import traceback
-
-            return {
-                "success": False,
-                "error": str(e),
-                "traceback": traceback.format_exc(),
-            }
+        return instantiate_estimator_tool(components=components, params_list=params_list)
 
     def list_datasets(self) -> list[str]:
         """List available demo datasets."""

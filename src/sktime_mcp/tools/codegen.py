@@ -10,6 +10,15 @@ from typing import Any
 from sktime_mcp.registry.interface import get_registry
 from sktime_mcp.runtime.executor import _get_demo_datasets
 from sktime_mcp.runtime.handles import get_handle_manager
+from sktime_mcp.tools.craft_utils import get_spec_imports
+
+_PIPELINE_SPEC_MARKERS = (
+    "TransformedTargetForecaster",
+    "TransformerPipeline",
+    "Pipeline(",
+    "EnsembleForecaster",
+    "MultiplexForecaster",
+)
 
 
 def _format_value(value: Any) -> str:
@@ -234,6 +243,19 @@ def _generate_pipeline_code(
     }
 
 
+def _is_pipeline_spec(spec: str) -> bool:
+    """Return True if a craft spec describes a multi-step pipeline."""
+    return any(marker in spec for marker in _PIPELINE_SPEC_MARKERS)
+
+
+def _export_from_craft_spec(spec: str, var_name: str) -> str:
+    """Generate Python code from a canonical sktime craft spec."""
+    imports_str = get_spec_imports(spec)
+    if imports_str:
+        return f"{imports_str}\n\n{var_name} = {spec}"
+    return f"{var_name} = {spec}"
+
+
 def export_code_tool(
     handle: str,
     var_name: str = "model",
@@ -286,21 +308,25 @@ def export_code_tool(
 
     estimator_name = handle_info.estimator_name
     params = handle_info.params
+    craft_spec = handle_info.metadata.get("spec") or params.get("spec")
 
-    # Check if this is a pipeline (has components in metadata)
-    is_pipeline = "components" in params
-
-    if is_pipeline:
+    if craft_spec:
+        code = _export_from_craft_spec(craft_spec, var_name)
+        is_pipeline = _is_pipeline_spec(craft_spec)
+    elif "components" in params:
         components = params["components"]
         params_list = params.get("params_list", [{}] * len(components))
         result = _generate_pipeline_code(components, params_list, var_name)
+        if not result["success"]:
+            return result
+        code = result["code"]
+        is_pipeline = True
     else:
         result = _generate_single_estimator_code(estimator_name, params, var_name)
-
-    if not result["success"]:
-        return result
-
-    code = result["code"]
+        if not result["success"]:
+            return result
+        code = result["code"]
+        is_pipeline = False
 
     # Optionally add fit/predict example
     if include_fit_example:
