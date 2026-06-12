@@ -45,7 +45,9 @@ from sktime_mcp.tools.data_tools import (
     load_data_source_tool,
     release_data_handle_tool,
 )
-from sktime_mcp.tools.describe_estimator import describe_estimator_tool
+from sktime_mcp.tools.describe_component import (
+    describe_component_tool,
+)
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
@@ -66,8 +68,7 @@ from sktime_mcp.tools.job_tools import (
 )
 from sktime_mcp.tools.list_available_data import list_available_data_tool
 from sktime_mcp.tools.list_estimators import (
-    get_available_tags,
-    list_estimators_tool,
+    query_registry_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
 
@@ -205,71 +206,93 @@ async def list_tools() -> list[Tool]:
     return [
         # -- Discovery -------------------------------------------------------
         Tool(
-            name="list_estimators",
+            name="query_registry",
             description=(
-                "Discover sktime estimators by task, capability tags, or name search. "
-                "Common tags you can filter by: "
-                "'capability:pred_int' (bool) - prediction intervals, "
-                "'capability:multivariate' (bool) - multivariate support, "
-                "'handles-missing-data' (bool) - NaN handling, "
-                "'scitype:y' (str) - target type ('univariate'/'multivariate'/'both'), "
-                "'requires-fh-in-fit' (bool) - needs forecast horizon at fit time. "
-                "Use get_available_tags for the full catalog."
+                "Unified entry point to search the sktime component registry. "
+                "target='estimators' (default): discover forecasters, classifiers, transformers, "
+                "splitters, detectors, and other components; filter by task, capability tags, "
+                "or name/module/docstring substring; results include name, task, module, and tags. "
+                "target='tags': list all capability tags with descriptions, expected value_type "
+                "(bool, str, list, etc.), and which component types each tag applies to — "
+                "call this before filtering estimators by tags. "
+                "target='metrics': list performance metrics (task='metric'). "
+                "Supports pagination via limit (default 50) and offset (default 0)."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
+                    "target": {
+                        "type": "string",
+                        "description": (
+                            "Registry section to query: 'estimators' (default), 'tags', or 'metrics'. "
+                            "'estimators' returns component summaries; 'tags' returns tag metadata; "
+                            "'metrics' returns performance metric classes."
+                        ),
+                        "enum": ["estimators", "tags", "metrics"],
+                        "default": "estimators",
+                    },
                     "task": {
                         "type": "string",
-                        "description": "Task type filter: forecasting, classification, regression, transformation, clustering, detection",
+                        "description": (
+                            "Filter estimators or metrics by task type. Valid values include "
+                            "forecasting, classification, regression, transformation, clustering, "
+                            "splitting, detection, alignment, parameter_estimation, network, and metric. "
+                            "Only applies when target is 'estimators' or 'metrics'."
+                        ),
                     },
                     "tags": {
                         "type": "object",
-                        "description": "Filter by capability tags, e.g. {'capability:pred_int': true}",
+                        "description": (
+                            "Filter estimators by capability tags (only when target='estimators'). "
+                            "Values must match each tag's expected type — boolean, string, or list. "
+                            "Use target='tags' first to see valid tag names and value_type for each. "
+                            "Example: {'capability:pred_int': true, 'scitype:y': 'univariate'}"
+                        ),
                     },
                     "query": {
                         "type": "string",
                         "description": (
-                            "Search by name or description (substring, case-insensitive). "
-                            "Can be combined with task and tags filters."
+                            "Case-insensitive substring search over component names, modules, and "
+                            "docstrings (target='estimators' or 'metrics'), or tag names and "
+                            "descriptions (target='tags')."
                         ),
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Maximum results (default: 50)",
+                        "description": "Maximum results per page (default: 50). Must be a positive integer.",
                         "default": 50,
                     },
                     "offset": {
                         "type": "integer",
-                        "description": "Skip this many results for pagination (default: 0)",
+                        "description": "Number of results to skip for pagination (default: 0).",
                         "default": 0,
                     },
                 },
             },
         ),
         Tool(
-            name="describe_estimator",
-            description="Get detailed information about a specific sktime estimator",
+            name="describe_component",
+            description=(
+                "Get detailed metadata for a single sktime component class — estimators, "
+                "transformers, splitters, metrics, aligners, detectors, etc. "
+                "Returns constructor parameters (default values and required flags), "
+                "capability tags (values may be bool, str, list, or null), "
+                "human-readable tag explanations, Python module import path, and a "
+                "docstring preview. Use query_registry to discover valid class names first."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "estimator": {
+                    "name": {
                         "type": "string",
-                        "description": "Name of the estimator (e.g., 'ARIMA', 'RandomForest')",
+                        "description": (
+                            "Component class name (case-insensitive), e.g. 'ARIMA', "
+                            "'SlidingWindowSplitter', 'MeanAbsolutePercentageError'."
+                        ),
                     },
                 },
-                "required": ["estimator"],
+                "required": ["name"],
             },
-        ),
-        Tool(
-            name="get_available_tags",
-            description=(
-                "List all queryable capability tags with rich metadata. "
-                "Returns tag name, description, expected value type, and which "
-                "estimator types the tag applies to. Call this before "
-                "using tags in list_estimators to ensure correct tag names and values."
-            ),
-            inputSchema={"type": "object", "properties": {}},
         ),
         # -- Instantiation ---------------------------------------------------
         Tool(
@@ -747,8 +770,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
     try:
         # -- Discovery -------------------------------------------------------
-        if name == "list_estimators":
-            result = list_estimators_tool(
+        if name == "query_registry":
+            result = query_registry_tool(
+                target=arguments.get("target", "estimators"),
                 task=arguments.get("task"),
                 tags=arguments.get("tags"),
                 query=arguments.get("query"),
@@ -756,19 +780,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 offset=arguments.get("offset", 0),
             )
 
-        elif name == "search_estimators":
-            # Deprecated — kept for backward compatibility, routes to unified list_estimators
-            logger.warning("search_estimators is deprecated; use list_estimators(query=...)")
-            result = list_estimators_tool(
-                query=arguments["query"],
-                limit=arguments.get("limit", 20),
-            )
-
-        elif name == "describe_estimator":
-            result = describe_estimator_tool(arguments["estimator"])
-
-        elif name == "get_available_tags":
-            result = get_available_tags()
+        elif name == "describe_component":
+            result = describe_component_tool(name=arguments["name"])
 
         # -- Instantiation ---------------------------------------------------
         elif name == "instantiate_estimator":
