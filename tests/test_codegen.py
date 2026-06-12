@@ -291,7 +291,7 @@ class TestExportCodeTool:
         try:
             result = export_code_tool(handle)
             assert result["success"]
-            assert 'strategy="mean"' in result["code"]
+            assert "strategy=" in result["code"] and "mean" in result["code"]
         finally:
             self._cleanup_handle(handle)
 

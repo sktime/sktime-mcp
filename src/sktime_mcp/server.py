@@ -54,9 +54,11 @@ from sktime_mcp.tools.fit_predict import (
 from sktime_mcp.tools.inspect_data import inspect_data_tool
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
+    instantiate_tool,
     list_handles_tool,
     load_model_tool,
     release_handle_tool,
+    set_params_tool,
 )
 from sktime_mcp.tools.job_tools import (
     cancel_job_tool,
@@ -295,6 +297,60 @@ async def list_tools() -> list[Tool]:
             },
         ),
         # -- Instantiation ---------------------------------------------------
+        Tool(
+            name="instantiate",
+            description=(
+                "Create an estimator or pipeline from a sktime craft spec string. "
+                "Use registry class names directly, e.g. "
+                "'NaiveForecaster(strategy=\"last\")' or a multi-line spec with "
+                "assignments ending in 'return'. Set dry_run=true to validate "
+                "without creating a handle. Returns handle, canonical spec, "
+                "python_dependencies, and import statements."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "spec": {
+                        "type": "string",
+                        "description": (
+                            "sktime craft specification, e.g. "
+                            "'ARIMA(order=(1, 1, 1))' or "
+                            "'c0 = Deseasonalizer(sp=12)\\nreturn c0'"
+                        ),
+                    },
+                    "dry_run": {
+                        "type": "boolean",
+                        "description": (
+                            "If true, validate spec and return deps/imports only "
+                            "(no handle created). Default: false."
+                        ),
+                        "default": False,
+                    },
+                },
+                "required": ["spec"],
+            },
+        ),
+        Tool(
+            name="set_params",
+            description=(
+                "Update hyperparameters on an existing unfitted estimator handle. "
+                "Refreshes the stored craft spec. Cannot be used on fitted handles."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "handle": {
+                        "type": "string",
+                        "description": "Estimator handle from instantiate",
+                    },
+                    "params": {
+                        "type": "object",
+                        "description": "Hyperparameters to update (sktime set_params syntax)",
+                    },
+                },
+                "required": ["handle", "params"],
+            },
+        ),
         Tool(
             name="instantiate_estimator",
             description=(
@@ -879,6 +935,18 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = describe_component_tool(name=arguments["name"])
 
         # -- Instantiation ---------------------------------------------------
+        elif name == "instantiate":
+            result = instantiate_tool(
+                arguments["spec"],
+                dry_run=arguments.get("dry_run", False),
+            )
+
+        elif name == "set_params":
+            result = set_params_tool(
+                arguments["handle"],
+                arguments["params"],
+            )
+
         elif name == "instantiate_estimator":
             result = instantiate_estimator_tool(
                 estimator=arguments.get("estimator"),
