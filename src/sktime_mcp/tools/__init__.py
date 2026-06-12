@@ -15,7 +15,6 @@ from sktime_mcp.tools.fit_predict import (
 from sktime_mcp.tools.format_tools import format_time_series_tool
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
-    instantiate_pipeline_tool,
     list_handles_tool,
     load_model_tool,
     release_handle_tool,
@@ -37,7 +36,6 @@ __all__ = [
     "get_available_tags",
     "describe_estimator_tool",
     "instantiate_estimator_tool",
-    "instantiate_pipeline_tool",
     "list_handles_tool",
     "release_handle_tool",
     "load_model_tool",
