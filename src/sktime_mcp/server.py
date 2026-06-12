@@ -33,7 +33,6 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-from sktime_mcp.composition.validator import get_composition_validator
 from sktime_mcp.config import settings
 from sktime_mcp.tools.classify import (
     fit_predict_classification_tool,
@@ -327,21 +326,6 @@ async def list_tools() -> list[Tool]:
                     },
                 },
                 "required": ["handle"],
-            },
-        ),
-        Tool(
-            name="validate_pipeline",
-            description="Check if a pipeline composition is valid",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "components": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of estimator names in pipeline order",
-                    },
-                },
-                "required": ["components"],
             },
         ),
         # -- Execution -------------------------------------------------------
@@ -812,12 +796,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["dataset"],
                 arguments.get("cv_folds", 3),
             )
-
-        elif name == "validate_pipeline":
-            validator = get_composition_validator()
-            validation = validator.validate_pipeline(arguments["components"])
-            result = validation.to_dict()
-            result["success"] = result["valid"]
 
         # -- Data ------------------------------------------------------------
         elif name == "list_available_data":
