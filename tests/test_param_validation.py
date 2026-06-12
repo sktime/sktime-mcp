@@ -14,7 +14,6 @@ from sktime_mcp.tools.fit_predict import predict_tool
 from sktime_mcp.tools.instantiate import (
     _validate_params,
     instantiate_estimator_tool,
-    instantiate_pipeline_tool,
 )
 
 
@@ -70,46 +69,75 @@ class TestInstantiateEstimatorValidation:
 
     def test_valid_params_succeed(self):
         """Valid params with a real estimator should succeed."""
-        result = instantiate_estimator_tool("NaiveForecaster", {"strategy": "last"})
+        result = instantiate_estimator_tool(
+            estimator="NaiveForecaster", params={"strategy": "last"}
+        )
         assert result["success"] is True
         assert "handle" in result
 
     def test_invalid_type_returns_error(self):
         """Non-dict params should return success=False with error."""
-        result = instantiate_estimator_tool("NaiveForecaster", "invalid")
+        result = instantiate_estimator_tool(estimator="NaiveForecaster", params="invalid")
         assert result["success"] is False
         assert "must be a dictionary" in result["error"]
 
     def test_unsafe_value_returns_error(self):
         """Callable param value should return success=False with error."""
-        result = instantiate_estimator_tool("NaiveForecaster", {"fn": print})
+        result = instantiate_estimator_tool(estimator="NaiveForecaster", params={"fn": print})
         assert result["success"] is False
         assert "Unsupported type" in result["error"]
 
+    def test_requires_estimator_or_components(self):
+        """Must provide either estimator or components."""
+        result = instantiate_estimator_tool()
+        assert result["success"] is False
+        assert "required" in result["error"].lower() or "Either" in result["error"]
+
+    def test_rejects_both_estimator_and_components(self):
+        """Cannot provide both estimator and components."""
+        result = instantiate_estimator_tool(
+            estimator="NaiveForecaster",
+            components=["NaiveForecaster"],
+        )
+        assert result["success"] is False
+        assert "not both" in result["error"]
+
 
 class TestPipelineParamsValidation:
-    """Tests for validation in the instantiate_pipeline_tool."""
+    """Tests for pipeline validation via the unified instantiate_estimator_tool."""
 
     def test_pipeline_invalid_params_list_type(self):
         """Non-list params_list should return error."""
-        result = instantiate_pipeline_tool(["NaiveForecaster"], "not_a_list")
+        result = instantiate_estimator_tool(
+            components=["NaiveForecaster"], params_list="not_a_list"
+        )
         assert result["success"] is False
         assert "params_list" in result["error"]
 
     def test_pipeline_invalid_param_dict_in_list(self):
         """Non-dict entry in params_list should return error."""
-        result = instantiate_pipeline_tool(["NaiveForecaster"], ["not_a_dict"])
+        result = instantiate_estimator_tool(
+            components=["NaiveForecaster"], params_list=["not_a_dict"]
+        )
         assert result["success"] is False
         assert "must be a dictionary" in result["error"]
 
     def test_pipeline_unsafe_value_in_params_list(self):
         """Callable value in pipeline params should return error."""
-        result = instantiate_pipeline_tool(
-            ["NaiveForecaster"],
-            [{"fn": lambda: None}],
+        result = instantiate_estimator_tool(
+            components=["NaiveForecaster"],
+            params_list=[{"fn": lambda: None}],
         )
         assert result["success"] is False
         assert "Unsupported type" in result["error"]
+
+    def test_pipeline_composition_check(self):
+        """Invalid pipeline composition (e.g. chaining forecasters) should fail validation."""
+        result = instantiate_estimator_tool(components=["NaiveForecaster", "ExponentialSmoothing"])
+        assert result["success"] is False
+        assert "Invalid pipeline composition" in result["error"]
+        assert "validation_errors" in result
+        assert len(result["validation_errors"]) > 0
 
 
 class TestFitPredictValidation:
