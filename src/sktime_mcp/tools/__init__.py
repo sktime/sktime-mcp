@@ -17,7 +17,6 @@ from sktime_mcp.tools.format_tools import format_time_series_tool
 from sktime_mcp.tools.inspect_data import inspect_data_tool
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
-    instantiate_pipeline_tool,
     list_handles_tool,
     load_model_tool,
     release_handle_tool,
@@ -40,7 +39,6 @@ __all__ = [
     "describe_component_tool",
     "query_registry_tool",
     "instantiate_estimator_tool",
-    "instantiate_pipeline_tool",
     "list_handles_tool",
     "release_handle_tool",
     "load_model_tool",

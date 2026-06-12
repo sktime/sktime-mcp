@@ -54,7 +54,6 @@ from sktime_mcp.tools.fit_predict import (
 from sktime_mcp.tools.inspect_data import inspect_data_tool
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
-    instantiate_pipeline_tool,
     list_handles_tool,
     load_model_tool,
     release_handle_tool,
@@ -298,7 +297,12 @@ async def list_tools() -> list[Tool]:
         # -- Instantiation ---------------------------------------------------
         Tool(
             name="instantiate_estimator",
-            description="Create an estimator instance with given parameters",
+            description=(
+                "Create an estimator instance with given parameters. "
+                "Pass 'estimator' for a single estimator, or 'components' "
+                "for a pipeline (list of estimator names in order). "
+                "A single-element components list is equivalent to a single estimator."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -310,28 +314,24 @@ async def list_tools() -> list[Tool]:
                         "type": "object",
                         "description": "Hyperparameters for the estimator",
                     },
-                },
-                "required": ["estimator"],
-            },
-        ),
-        Tool(
-            name="instantiate_pipeline",
-            description="Create a pipeline instance from a list of components",
-            inputSchema={
-                "type": "object",
-                "properties": {
                     "components": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "List of estimator names in pipeline order (e.g., ['Detrender', 'ARIMA'])",
+                        "description": (
+                            "List of estimator names in pipeline order "
+                            "(e.g., ['Detrender', 'ARIMA']). "
+                            "Mutually exclusive with 'estimator'."
+                        ),
                     },
                     "params_list": {
                         "type": "array",
                         "items": {"type": "object"},
-                        "description": "Optional list of hyperparameter dicts for each component",
+                        "description": (
+                            "Optional list of hyperparameter dicts for each "
+                            "component (used with 'components')"
+                        ),
                     },
                 },
-                "required": ["components"],
             },
         ),
         Tool(
@@ -881,14 +881,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         # -- Instantiation ---------------------------------------------------
         elif name == "instantiate_estimator":
             result = instantiate_estimator_tool(
-                arguments["estimator"],
-                arguments.get("params"),
-            )
-
-        elif name == "instantiate_pipeline":
-            result = instantiate_pipeline_tool(
-                arguments["components"],
-                arguments.get("params_list"),
+                estimator=arguments.get("estimator"),
+                params=arguments.get("params"),
+                components=arguments.get("components"),
+                params_list=arguments.get("params_list"),
             )
 
         elif name == "list_handles":

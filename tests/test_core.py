@@ -301,7 +301,7 @@ class TestTools:
         from sktime_mcp.tools.fit_predict import fit_predict_tool
         from sktime_mcp.tools.instantiate import instantiate_estimator_tool, release_handle_tool
 
-        inst = instantiate_estimator_tool("NaiveForecaster", {"strategy": "last"})
+        inst = instantiate_estimator_tool(estimator="NaiveForecaster", params={"strategy": "last"})
         assert inst["success"]
         handle = inst["handle"]
 
