@@ -2,7 +2,6 @@
 
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
-    load_data_source_async_tool,
     load_data_source_tool,
     release_data_handle_tool,
 )
@@ -49,7 +48,6 @@ __all__ = [
     "fit_predict_async_tool",
     "evaluate_estimator_tool",
     "load_data_source_tool",
-    "load_data_source_async_tool",
     "release_data_handle_tool",
     "list_available_data_tool",
     "format_time_series_tool",

@@ -41,7 +41,6 @@ from sktime_mcp.tools.classify import (
 )
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
-    load_data_source_async_tool,
     load_data_source_tool,
     release_data_handle_tool,
 )
@@ -485,6 +484,7 @@ async def list_tools() -> list[Tool]:
             name="load_data_source",
             description=(
                 "Load data from various sources into a data handle for forecasting. "
+                "Can run synchronously (blocking) or asynchronously in the background. "
                 "Supported source types: "
                 "'pandas' - from a dict or inline data (keys: data, time_column, target_column). "
                 "'file' - from CSV, Excel (.xlsx), or Parquet (keys: path, time_column, target_column). "
@@ -507,24 +507,14 @@ async def list_tools() -> list[Tool]:
                             "(pandas, sql, file, url)."
                         ),
                     },
-                },
-                "required": ["config"],
-            },
-        ),
-        Tool(
-            name="load_data_source_async",
-            description=(
-                "Load data from any source in the background "
-                "(non-blocking). Returns a job_id to track "
-                "progress. The data_handle is available in "
-                "the job result when completed."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "config": {
-                        "type": "object",
-                        "description": "Data source configuration. Same format as load_data_source.",
+                    "run_async": {
+                        "type": "boolean",
+                        "description": (
+                            "If True, loads data in the background (non-blocking) and "
+                            "returns a job_id. If False (default), blocks and returns the "
+                            "data_handle directly."
+                        ),
+                        "default": False,
                     },
                 },
                 "required": ["config"],
@@ -957,10 +947,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         elif name == "list_available_data":
             result = list_available_data_tool(arguments.get("is_demo"))
         elif name == "load_data_source":
-            result = load_data_source_tool(arguments["config"])
-
-        elif name == "load_data_source_async":
-            result = load_data_source_async_tool(arguments["config"])
+            result = load_data_source_tool(arguments["config"], arguments.get("run_async", False))
 
         elif name == "list_data_sources":
             # Deprecated — info is now in load_data_source description
