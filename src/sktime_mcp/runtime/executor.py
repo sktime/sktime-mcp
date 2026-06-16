@@ -30,9 +30,20 @@ def _validate_horizon(horizon: Any) -> str | None:
 # Dynamically discover all available sktime demo datasets at import time.
 # This replaces the old hardcoded dictionary and automatically exposes every
 # load_* function in sktime.datasets to the MCP server.
+def _can_load_without_args(obj) -> bool:
+    """Check if a function can be called with zero arguments."""
+    sig = inspect.signature(obj)
+    params = [
+        p for p in sig.parameters.values()
+        if p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)
+    ]
+    return all(p.default is not inspect.Parameter.empty for p in params)
+
+
 def _discover_demo_datasets() -> dict:
     """Return a mapping of dataset name -> dotted module path for every
-    ``load_*`` function exported by ``sktime.datasets``."""
+    ``load_*`` function exported by ``sktime.datasets`` that can be called
+    with zero arguments (demo datasets)."""
     try:
         import sktime.datasets as _ds_module
 
@@ -40,6 +51,7 @@ def _discover_demo_datasets() -> dict:
             name.removeprefix("load_"): f"sktime.datasets.{name}"
             for name, obj in inspect.getmembers(_ds_module, inspect.isfunction)
             if name.startswith("load_")
+            and _can_load_without_args(obj)
         }
     except Exception:  # pragma: no cover
         return {}  # fallback: empty dict if sktime not installed
