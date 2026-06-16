@@ -81,7 +81,7 @@ The codebase is organized into **5 main layers**:
    
 2. **`@server.list_tools()`**: Registers all available MCP tools
    - Returns tool schemas (name, description, input schema)
-   - Tools span Discovery, Instantiation, Execution, Data, Export, Persistence, Validation, and Job Management. (e.g., `list_estimators`, `instantiate_pipeline`, `fit_predict_async`, `load_data_source`, `save_model`, `check_job_status`).
+   - Tools span Discovery, Instantiation, Execution, Data, Export, Persistence, Validation, and Job Management (e.g., `list_estimators`, `instantiate_pipeline`, `fit_predict_async`, `load_data_source`, `save_model`, `check_job_status`). Among discovery-side tools, `suggest_pipeline` is referenced in `sktime/sktime-mcp#288` with implementation tracked in PR `#301`.
 
 3. **`@server.call_tool(name, arguments)`**: Routes tool calls to implementations
    - Validates arguments
