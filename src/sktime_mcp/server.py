@@ -46,6 +46,7 @@ from sktime_mcp.tools.data_tools import (
     release_data_handle_tool,
 )
 from sktime_mcp.tools.describe_estimator import describe_estimator_tool
+from sktime_mcp.tools.diagnose import diagnose_residuals_tool
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
@@ -433,6 +434,29 @@ async def list_tools() -> list[Tool]:
                 "required": ["estimator_handle", "dataset"],
             },
         ),
+        Tool(
+            name="diagnose_residuals",
+            description="Diagnose residuals of a fitted estimator using statistical tests",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle from instantiate_estimator",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Dataset name: airline, sunspots, lynx, etc.",
+                    },
+                    "significance_level": {
+                        "type": "number",
+                        "description": "Alpha for statistical tests (default 0.05)",
+                        "default": 0.05,
+                    },
+                },
+                "required": ["estimator_handle", "dataset"],
+            },
+        ),
         # -- Data ------------------------------------------------------------
         Tool(
             name="list_available_data",
@@ -811,6 +835,13 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments["estimator_handle"],
                 arguments["dataset"],
                 arguments.get("cv_folds", 3),
+            )
+
+        elif name == "diagnose_residuals":
+            result = diagnose_residuals_tool(
+                arguments["estimator_handle"],
+                arguments["dataset"],
+                arguments.get("significance_level", 0.05),
             )
 
         elif name == "validate_pipeline":
