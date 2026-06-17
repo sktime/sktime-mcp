@@ -310,7 +310,7 @@ class JobManager:
         cutoff = datetime.now() - timedelta(hours=max_age_hours)
 
         with self.lock:
-            old_job_ids = [job_id for job_id, job in self.jobs.items() if job.created_at < cutoff]
+            old_job_ids = [job_id for job_id, job in self.jobs.items() if job.created_at <= cutoff]
 
             for job_id in old_job_ids:
                 del self.jobs[job_id]
