@@ -279,6 +279,7 @@ class TestTools:
 
         handle_manager = get_handle_manager()
         handle = handle_manager.create_handle("DummyEstimator", object())
+        handle_manager.mark_fitted(handle)
 
         try:
             result = save_model_tool(
