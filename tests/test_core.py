@@ -33,7 +33,7 @@ class TestRegistryInterface:
     def test_detection_estimators_in_registry(self):
         """Registry loads sktime `detector` scitype as MCP task `detection`."""
         from sktime_mcp.registry.interface import get_registry
-        from sktime_mcp.tools.list_estimators import query_registry_tool
+        from sktime_mcp.tools.query_registry import query_registry_tool
 
         registry = get_registry()
         detectors = registry.get_all_estimators(task="detector")
@@ -186,7 +186,7 @@ class TestTools:
 
     def test_query_registry_tool(self):
         """Test query_registry tool."""
-        from sktime_mcp.tools.list_estimators import query_registry_tool
+        from sktime_mcp.tools.query_registry import query_registry_tool
 
         result = query_registry_tool(limit=5)
 
@@ -196,7 +196,7 @@ class TestTools:
 
     def test_query_registry_detection_task(self):
         """Test that detection estimators are returned when filtering by detector task."""
-        from sktime_mcp.tools.list_estimators import query_registry_tool
+        from sktime_mcp.tools.query_registry import query_registry_tool
 
         result = query_registry_tool(task="detector", limit=100)
 
@@ -208,7 +208,7 @@ class TestTools:
 
     def test_query_registry_invalid_task(self):
         """Test query_registry with an invalid task."""
-        from sktime_mcp.tools.list_estimators import query_registry_tool
+        from sktime_mcp.tools.query_registry import query_registry_tool
 
         result = query_registry_tool(task="invalid_task_name")
 
@@ -493,7 +493,7 @@ class TestQueryRegistryLimit:
 
     def test_limit_zero_returns_error(self):
         """limit=0 should return an error."""
-        from sktime_mcp.tools.list_estimators import query_registry_tool
+        from sktime_mcp.tools.query_registry import query_registry_tool
 
         result = query_registry_tool(limit=0)
 
@@ -502,7 +502,7 @@ class TestQueryRegistryLimit:
 
     def test_limit_negative_returns_error(self):
         """Negative limit should return an error."""
-        from sktime_mcp.tools.list_estimators import query_registry_tool
+        from sktime_mcp.tools.query_registry import query_registry_tool
 
         result = query_registry_tool(limit=-5)
 
@@ -511,7 +511,7 @@ class TestQueryRegistryLimit:
 
     def test_offset_negative_returns_error(self):
         """Negative offset should return an error."""
-        from sktime_mcp.tools.list_estimators import query_registry_tool
+        from sktime_mcp.tools.query_registry import query_registry_tool
 
         result = query_registry_tool(offset=-1)
 
@@ -521,7 +521,7 @@ class TestQueryRegistryLimit:
     def test_limit_valid_returns_results(self):
         """A positive limit should work correctly and cap results."""
         pytest.importorskip("sktime", reason="sktime not installed in this environment")
-        from sktime_mcp.tools.list_estimators import query_registry_tool
+        from sktime_mcp.tools.query_registry import query_registry_tool
 
         result = query_registry_tool(query="Forecaster", limit=3)
 

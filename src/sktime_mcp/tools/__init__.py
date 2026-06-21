@@ -28,7 +28,7 @@ from sktime_mcp.tools.job_tools import (
     list_jobs_tool,
 )
 from sktime_mcp.tools.list_available_data import list_available_data_tool
-from sktime_mcp.tools.list_estimators import (
+from sktime_mcp.tools.query_registry import (
     query_registry_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
