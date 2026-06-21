@@ -45,8 +45,7 @@ Examples of tasks performed via sktime-mcp and their corresponding MCP tool call
 {
   "name": "query_registry",
   "arguments": {
-    "target": "estimators",
-    "task": "forecasting",
+    "task": "forecaster",
     "tags": {"capability:pred_int": true}
   }
 }

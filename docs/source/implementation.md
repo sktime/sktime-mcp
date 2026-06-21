@@ -124,15 +124,12 @@ LLM → JSON-RPC request → server.call_tool() → tool function → sanitize �
    - **Purpose**: Lazy-loads and caches all sktime estimators
    - **Key Methods**:
      - `get_all_estimators(task, tags)`: Filter estimators by task and tags
-     - `get_estimator_by_name(name)`: Lookup specific estimator
-     - `list_estimators(query=...)`: Text search in names/docstrings
+     - `get_estimator_by_name(name)`: Lookup specific estimator via `sktime.registry.craft`
+     - `search_estimators(query)`: Text search in names/docstrings
      - `get_available_tasks()`: List all task types
      - `get_available_tags()`: List all capability tags
    - **Internal Methods**:
-     - `_load_registry()`: Calls sktime's `all_estimators()` for each task
-     - `_create_node()`: Extracts metadata from estimator class
-     - `_get_tags()`: Calls `cls.get_class_tags()`
-     - `_get_hyperparameters()`: Inspects `__init__` signature
+     - `_create_node()`: Extracts metadata from estimator class using sktime's `get_class_tags` and `get_param_names`
 
 **How It Works**:
 ```python
@@ -304,9 +301,9 @@ handle = handle_manager.create_handle("Pipeline", pipeline)
 
 Each file implements one or more MCP tools that LLMs can call.
 
-#### `list_estimators.py`
+#### `query_registry.py`
 **Tools**:
-1. **`query_registry_tool(target, task, tags, query, limit, offset)`**
+1. **`query_registry_tool(task, tags, query, limit, offset)`**
    - Queries the unified registry for estimators, capability tags, or performance metrics.
    - Returns query results.
 
@@ -473,10 +470,10 @@ Each file implements one or more MCP tools that LLMs can call.
 
 **Step 1: Discovery**
 ```
-LLM → query_registry(target="estimators", task="forecasting")
-     → server.call_tool("query_registry", {"target": "estimators", "task": "forecasting"})
-     → query_registry_tool(target="estimators", task="forecasting")
-     → registry.get_all_estimators(task="forecasting")
+LLM → query_registry(task="forecaster")
+     → server.call_tool("query_registry", {"task": "forecaster"})
+     → query_registry_tool(task="forecaster")
+     → registry.get_all_estimators(task="forecaster")
      → Returns: [{"name": "ARIMA", ...}, {"name": "NaiveForecaster", ...}, ...]
 ```
 

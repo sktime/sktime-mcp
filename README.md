@@ -932,8 +932,7 @@ Below are examples demonstrating how an LLM utilizes these redesigned tools to c
    ```json
    // query_registry
    {
-     "target": "estimators",
-     "task": "forecasting",
+     "task": "forecaster",
      "tags": {
        "capability:pred_int": true
      }

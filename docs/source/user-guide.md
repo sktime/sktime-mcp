@@ -150,7 +150,7 @@ The assistant translates this workflow into the following tool calls:
 {"tool": "list_available_data", "arguments": {"is_demo": true}}
 ```
 ```json
-{"tool": "list_estimators", "arguments": {"task": "forecasting", "limit": 5}}
+{"tool": "query_registry", "arguments": {"task": "forecaster", "limit": 5}}
 ```
 ```json
 {"tool": "instantiate_estimator", "arguments": {"estimator": "NaiveForecaster"}}
