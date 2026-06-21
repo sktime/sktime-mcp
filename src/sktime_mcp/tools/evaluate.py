@@ -65,8 +65,21 @@ def evaluate_estimator_tool(
 
         metrics = results.to_dict(orient="records")
 
+        # Build per-metric summary (mean/std/min/max) over numeric columns only
+        numeric_cols = results.select_dtypes(include="number").columns.tolist()
+        summary = {
+            col: {
+                "mean": float(results[col].mean()),
+                "std": float(results[col].std()),
+                "min": float(results[col].min()),
+                "max": float(results[col].max()),
+            }
+            for col in numeric_cols
+        }
+
         return {
             "success": True,
+            "summary": summary,
             "results": metrics,
             "cv_folds_run": len(metrics),
             "cv_folds_requested": int(cv_folds),

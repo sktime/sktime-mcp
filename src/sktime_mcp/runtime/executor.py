@@ -71,6 +71,22 @@ REGRESSION_DATASETS = {
 }
 
 
+def _get_index_frequency_metadata(
+    index: pd.Index,
+    fallback: str | None = None,
+) -> str | None:
+    """Return a stable frequency label for metadata without assuming datetime-only indexes."""
+    if isinstance(index, (pd.DatetimeIndex, pd.PeriodIndex)):
+        freq = getattr(index, "freq", None)
+        if freq is not None:
+            return str(freq)
+        inferred = pd.infer_freq(index)
+        if inferred is not None:
+            return inferred
+
+    return fallback
+
+
 class Executor:
     """
     Execution runtime for sktime estimators.
@@ -276,6 +292,11 @@ class Executor:
         fit_result = self.fit(handle_id, y, X=X, fh=fh)
         if not fit_result["success"]:
             return fit_result
+
+        # Record which dataset was used so export_code can reference it
+        if dataset:
+            handle_info = self._handle_manager.get_info(handle_id)
+            handle_info.metadata["training_dataset"] = dataset
 
         return self.predict(handle_id, fh=fh, X=X)
 
@@ -829,6 +850,7 @@ class Executor:
             "missing_filled": 0,
             "gaps_filled": 0,
         }
+        original_frequency = data_info["metadata"].get("frequency")
 
         # 1. Remove duplicates
         if remove_duplicates and y.index.duplicated().any():
@@ -845,9 +867,9 @@ class Executor:
 
         # 3. Infer and set frequency
         if auto_infer_freq:
-            freq = y.index.freq
+            freq = getattr(y.index, "freq", None)
 
-            if freq is None:
+            if freq is None and isinstance(y.index, (pd.DatetimeIndex, pd.PeriodIndex)):
                 # Try to infer
                 freq = pd.infer_freq(y.index)
 
@@ -909,7 +931,10 @@ class Executor:
             "metadata": {
                 **data_info["metadata"],
                 "formatted": True,
-                "frequency": str(y.index.freq) if y.index.freq else changes_made.get("frequency"),
+                "frequency": _get_index_frequency_metadata(
+                    y.index,
+                    fallback=changes_made.get("frequency") or original_frequency,
+                ),
                 "rows": len(y),
                 "start_date": str(y.index.min()),
                 "end_date": str(y.index.max()),
