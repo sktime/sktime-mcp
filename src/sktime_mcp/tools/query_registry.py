@@ -101,9 +101,7 @@ def query_registry_tool(
                 return {
                     "success": False,
                     "error": f"Invalid tag key(s): {invalid_keys}. Use task='tag' to see valid keys.",
-                    "suggestions": {
-                        k: v[0] if v else None for k, v in suggestions.items()
-                    },
+                    "suggestions": {k: v[0] if v else None for k, v in suggestions.items()},
                 }
 
         if query:
@@ -112,9 +110,7 @@ def query_registry_tool(
                 estimators = [e for e in estimators if e.task == task]
             if tags:
                 estimators = [
-                    e
-                    for e in estimators
-                    if all(e.tags.get(k) == v for k, v in tags.items())
+                    e for e in estimators if all(e.tags.get(k) == v for k, v in tags.items())
                 ]
         else:
             estimators = registry.get_all_estimators(task=task, tags=tags)
@@ -124,16 +120,16 @@ def query_registry_tool(
         results = [est.to_summary() for est in page]
 
         return {
-          "success": True,
-          "results": results,
-          "count": len(results),
-          "total": total,
-          "offset": offset,
-          "limit": limit,
-          "has_more": (offset + limit) < total,
-          "task_filter": task,
-          "tag_filter": tags,
-          "query": query,
+            "success": True,
+            "results": results,
+            "count": len(results),
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "has_more": (offset + limit) < total,
+            "task_filter": task,
+            "tag_filter": tags,
+            "query": query,
         }
     except Exception as e:
         return {"success": False, "error": str(e)}

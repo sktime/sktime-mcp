@@ -48,9 +48,7 @@ class EstimatorNode:
             "tags": self.tags,
             "parameters": self.parameters,
             "hyperparameters": self.parameters,  # keep for backward compatibility
-            "docstring": (
-                self.docstring[:500] if self.docstring else None
-            ),
+            "docstring": (self.docstring[:500] if self.docstring else None),
         }
 
     def to_summary(self) -> dict[str, Any]:
@@ -76,7 +74,7 @@ class RegistryInterface:
     def __init__(self):
         """Initialize the registry interface."""
         try:
-            from sktime.registry import all_estimators
+            from sktime.registry import all_estimators  # noqa: F401
         except ImportError as e:
             logger.error(f"Failed to import sktime registry: {e}")
             raise RuntimeError("sktime must be installed to use sktime-mcp") from e
@@ -88,7 +86,7 @@ class RegistryInterface:
         scitype = "estimator"
         try:
             raw = cls.get_class_tag("object_type", "estimator")
-            if isinstance(raw, list):
+            if isinstance(raw, list):  # noqa: SIM108
                 # Prefer the shortest / most general type, e.g. "metric" over
                 # "metric_forecasting".  Fallback to first element.
                 scitype = min(raw, key=len) if raw else "estimator"
@@ -206,9 +204,7 @@ class RegistryInterface:
             if isinstance(scitype, str):
                 scitype = [scitype]
             elif not isinstance(scitype, list):
-                scitype = (
-                    list(scitype) if hasattr(scitype, "__iter__") else [str(scitype)]
-                )
+                scitype = list(scitype) if hasattr(scitype, "__iter__") else [str(scitype)]
 
             value_type = row.get("type", "")
             if not isinstance(value_type, str):
