@@ -6,7 +6,7 @@
 #   docker compose run sktime-mcp # run with stdio (interactive, for MCP clients)
 #
 # Notes:
-#   - MCP uses stdio transport, so `docker compose run` (with TTY) is the
+#   - MCP uses stdio transport, so `docker compose run` with stdin attached is the
 #     correct invocation rather than `docker compose up` (which is for daemons).
 #   - The models volume persists saved models across container restarts.
 # =============================================================================
