@@ -19,7 +19,7 @@ services:
     image: sktime-mcp:latest
     container_name: sktime-mcp
 
-    # stdin_open + tty are required for stdio-based MCP transport
+    # Keep stdin open, but avoid allocating a pseudo-TTY so MCP gets raw JSON-RPC over stdio.
     stdin_open: true
     tty: false  # MCP JSON-RPC needs raw stdin, not a pseudo-TTY
 
