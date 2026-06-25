@@ -79,13 +79,13 @@ def _validate_params(
                 "warnings": warnings,
             }
 
-    # check if keys match known hyperparameters (warn, don't error)
+    # check if keys match known parameters (warn, don't error)
     if estimator_name and params:
         registry = get_registry()
         node = registry.get_estimator_by_name(estimator_name)
 
-        if node is not None and node.hyperparameters:
-            known_keys = set(node.hyperparameters.keys())
+        if node is not None and node.parameters:
+            known_keys = set(node.parameters.keys())
             provided_keys = set(params.keys())
             unknown_keys = provided_keys - known_keys
 
@@ -108,7 +108,7 @@ def instantiate_estimator_tool(
 
     Args:
         estimator: Name of the estimator class (e.g., "ARIMA")
-        params: Optional hyperparameters for the estimator
+        params: Optional parameters for the estimator
 
     Returns:
         Dictionary with:

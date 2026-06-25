@@ -43,9 +43,9 @@ Examples of tasks performed via sktime-mcp and their corresponding MCP tool call
 **1. Discover models with prediction interval support:**
 ```json
 {
-  "name": "list_estimators",
+  "name": "query_registry",
   "arguments": {
-    "task": "forecasting",
+    "task": "forecaster",
     "tags": {"capability:pred_int": true}
   }
 }
@@ -54,8 +54,8 @@ Examples of tasks performed via sktime-mcp and their corresponding MCP tool call
 **2. Inspect the chosen estimator:**
 ```json
 {
-  "name": "describe_estimator",
-  "arguments": {"estimator": "ARIMA"}
+  "name": "describe_component",
+  "arguments": {"name": "ARIMA"}
 }
 ```
 
