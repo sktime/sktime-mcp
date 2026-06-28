@@ -1,7 +1,9 @@
 """
-instantiate_estimator tool for sktime MCP.
+Unified instantiate_estimator tool for sktime MCP.
 
-Creates executable estimator instances and pipelines.
+Creates executable estimator instances and pipelines from a list of
+component names.  A single-element list creates a plain estimator;
+multiple elements create a validated pipeline.
 """
 
 from typing import Any
@@ -79,13 +81,13 @@ def _validate_params(
                 "warnings": warnings,
             }
 
-    # check if keys match known hyperparameters (warn, don't error)
+    # check if keys match known parameters (warn, don't error)
     if estimator_name and params:
         registry = get_registry()
         node = registry.get_estimator_by_name(estimator_name)
 
-        if node is not None and node.hyperparameters:
-            known_keys = set(node.hyperparameters.keys())
+        if node is not None and node.parameters:
+            known_keys = set(node.parameters.keys())
             provided_keys = set(params.keys())
             unknown_keys = provided_keys - known_keys
 
@@ -100,88 +102,90 @@ def _validate_params(
 
 
 def instantiate_estimator_tool(
-    estimator: str,
+    estimator: str | None = None,
     params: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """
-    Create an estimator instance and return a handle.
-
-    Args:
-        estimator: Name of the estimator class (e.g., "ARIMA")
-        params: Optional hyperparameters for the estimator
-
-    Returns:
-        Dictionary with:
-        - success: bool
-        - handle: Unique handle ID string
-        - estimator: Name of the estimator
-        - params: Parameters used
-        - warnings: List of any validation warnings
-
-    Example:
-        >>> instantiate_estimator_tool("ARIMA", {"order": [1, 1, 1]})
-        {
-            "success": True,
-            "handle": "est_abc123def456",
-            "estimator": "ARIMA",
-            "params": {"order": [1, 1, 1]}
-        }
-    """
-    # validate params before passing to executor
-    validation = _validate_params(params, estimator_name=estimator)
-
-    if not validation["valid"]:
-        return {
-            "success": False,
-            "error": validation["error"],
-        }
-
-    executor = get_executor()
-    result = executor.instantiate(estimator, params)
-
-    # attach any key-mismatch warnings to the response
-    if validation["warnings"] and result.get("success"):
-        result["warnings"] = validation["warnings"]
-
-    return result
-
-
-def instantiate_pipeline_tool(
-    components: list[str],
+    components: list[str] | None = None,
     params_list: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    """Create an estimator or pipeline instance and return a handle.
+
+    Accepts either:
+    - `estimator` (+ optional `params`) for a single estimator, OR
+    - `components` (+ optional `params_list`) for a pipeline.
+
+    A single-element `components` list is equivalent to passing a single
+    `estimator`.
+
+    Parameters
+    ----------
+    estimator : str or None, default=None
+        Name of a single estimator class (e.g., "ARIMA").
+        Mutually exclusive with `components`.
+    params : dict or None, default=None
+        Optional hyperparameters for the single estimator.
+    components : list of str or None, default=None
+        List of estimator class names in pipeline order
+        (e.g., ["Detrender", "ARIMA"]).
+        Mutually exclusive with `estimator`.
+    params_list : list of dict or None, default=None
+        Optional list of hyperparameter dicts, one per component.
+
+    Returns
+    -------
+    dict
+        Dictionary containing the success status and the unique handle:
+        - "success" : bool
+            True if the instantiation succeeded, False otherwise.
+        - "handle" : str
+            The unique handle ID representing the instantiated object.
+        - "estimator" : str
+            Name of the estimator or pipeline description.
+        - "params" : dict, optional
+            Parameters used (if instantiated as a single estimator).
+        - "params_list" : list of dict, optional
+            List of parameters used per component (if a pipeline).
+        - "warnings" : list of str, optional
+            List of parameter validation or other warnings.
+        - "error" : str, optional
+            Error message if "success" is False.
+
+    Examples
+    --------
+    Single estimator:
+
+    >>> instantiate_estimator_tool(estimator="ARIMA", params={"order": [1, 1, 1]})
+
+    Pipeline:
+
+    >>> instantiate_estimator_tool(
+    ...     components=["Detrender", "ARIMA"],
+    ...     params_list=[{}, {"order": [1, 1, 1]}],
+    ... )
     """
-    Create a pipeline from a list of components and return a handle.
 
-    Args:
-        components: List of estimator names in pipeline order
-        params_list: Optional list of parameter dicts for each component
-
-    Returns:
-        Dictionary with:
-        - success: bool
-        - handle: Unique handle ID string
-        - pipeline: Name of the pipeline
-        - components: List of component names
-        - params_list: Parameters used for each component
-        - warnings: List of any validation warnings
-
-    Example:
-        >>> instantiate_pipeline_tool(
-        ...     ["ConditionalDeseasonalizer", "Detrender", "ARIMA"],
-        ...     [{}, {}, {"order": [1, 1, 1]}]
-        ... )
-        {
-            "success": True,
-            "handle": "est_xyz789abc123",
-            "pipeline": "ConditionalDeseasonalizer → Detrender → ARIMA",
-            "components": ["ConditionalDeseasonalizer", "Detrender", "ARIMA"],
-            "params_list": [{}, {}, {"order": [1, 1, 1]}]
+    if estimator is None and components is None:
+        return {
+            "success": False,
+            "error": (
+                "Either 'estimator' (single estimator name) or 'components' "
+                "(list of estimator names for a pipeline) is required."
+            ),
         }
-    """
-    all_warnings = []
 
-    # validate each params dict in params_list
+    if estimator is not None and components is not None:
+        return {
+            "success": False,
+            "error": "Provide either 'estimator' or 'components', not both.",
+        }
+
+    # Convert single-estimator form into the canonical list form
+    if estimator is not None:
+        components = [estimator]
+        params_list = [params] if params is not None else None
+
+    # ── Validate params_list ──────────────────────────────────────────
+    all_warnings: list[str] = []
+
     if params_list is not None:
         if not isinstance(params_list, list):
             return {
@@ -192,9 +196,9 @@ def instantiate_pipeline_tool(
                 ),
             }
 
-        for i, params in enumerate(params_list):
+        for i, p in enumerate(params_list):
             comp_name = components[i] if i < len(components) else None
-            validation = _validate_params(params, estimator_name=comp_name)
+            validation = _validate_params(p, estimator_name=comp_name)
 
             if not validation["valid"]:
                 return {
@@ -206,25 +210,52 @@ def instantiate_pipeline_tool(
                 }
 
             all_warnings.extend(validation["warnings"])
+    elif len(components) == 1:
+        # Single estimator with no explicit params — still validate None
+        validation = _validate_params(None, estimator_name=components[0])
+        all_warnings.extend(validation["warnings"])
 
+    # ── Dispatch to executor ──────────────────────────────────────────
     executor = get_executor()
-    result = executor.instantiate_pipeline(components, params_list)
 
+    if len(components) == 1:
+        # Single estimator path
+        single_params = params_list[0] if params_list else None
+        result = executor.instantiate(components[0], single_params)
+    else:
+        # Pipeline path (includes composition validation)
+        result = executor.instantiate_pipeline(components, params_list)
+
+    # Attach any key-mismatch warnings to the response
     if all_warnings and result.get("success"):
         result["warnings"] = all_warnings
 
     return result
 
 
+# Keep the old name as a thin alias for backward compatibility in tests
+# and downstream code that hasn't been updated yet.
+instantiate_pipeline_tool = instantiate_estimator_tool
+
+
 def release_handle_tool(handle: str) -> dict[str, Any]:
-    """
-    Release an estimator handle and free resources.
+    """Release an estimator handle and free resources.
 
-    Args:
-        handle: The handle ID to release
+    Parameters
+    ----------
+    handle : str
+        The handle ID to release.
 
-    Returns:
-        Dictionary with success status
+    Returns
+    -------
+    dict
+        Dictionary containing success status:
+        - "success" : bool
+            True if the handle was successfully released, False otherwise.
+        - "handle" : str
+            The handle ID that was requested for release.
+        - "message" : str
+            Status message indicating outcome.
     """
     handle_manager = get_handle_manager()
     released = handle_manager.release_handle(handle)
@@ -236,11 +267,18 @@ def release_handle_tool(handle: str) -> dict[str, Any]:
 
 
 def list_handles_tool() -> dict[str, Any]:
-    """
-    List all active estimator handles.
+    """List all active estimator handles.
 
-    Returns:
-        Dictionary with list of active handles and their info
+    Returns
+    -------
+    dict
+        Dictionary containing details of active handles:
+        - "success" : bool
+            True if the handles were retrieved successfully.
+        - "handles" : list of dict
+            Details of active handles including handle ID, estimator name, and state.
+        - "count" : int
+            The number of active handles.
     """
     handle_manager = get_handle_manager()
     handles = handle_manager.list_handles()
@@ -252,18 +290,34 @@ def list_handles_tool() -> dict[str, Any]:
 
 
 def load_model_tool(path: str) -> dict[str, Any]:
-    """
-    Load a saved model from a local path or MLflow URI and register its handle.
+    """Load a saved model from a local path or MLflow URI and register its handle.
 
-    Args:
-        path: Local directory path or MLflow URI to the saved model.
-              Examples:
-                - "/tmp/my_arima_model" (Linux/macOS) or "C:\\Temp\\my_arima_model" (Windows)
-                - "runs:/<run_id>/model"
-                - "mlflow-artifacts:/<run_id>/artifacts/model"
-                - "models:/<model_name>/<version>"
-    Returns:
-        Dictionary with success status and the new handle.
+    Parameters
+    ----------
+    path : str
+        Local directory path or MLflow URI to the saved model.
+        Examples:
+        - "/tmp/my_arima_model" (Linux/macOS) or "C:\\Temp\\my_arima_model" (Windows)
+        - "runs:/<run_id>/model"
+        - "mlflow-artifacts:/<run_id>/artifacts/model"
+        - "models:/<model_name>/<version>"
+
+    Returns
+    -------
+    dict
+        Dictionary containing success status and the new handle:
+        - "success" : bool
+            True if the model was loaded successfully.
+        - "handle" : str, optional
+            The registered handle ID for the loaded model.
+        - "estimator" : str, optional
+            Class name of the loaded estimator.
+        - "path" : str
+            The path/URI from which the model was loaded.
+        - "message" : str
+            Status message describing outcome.
+        - "error" : str, optional
+            Error message if "success" is False.
     """
     try:
         from sktime.utils.mlflow_sktime import load_model

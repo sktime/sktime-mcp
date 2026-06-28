@@ -33,7 +33,6 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-from sktime_mcp.composition.validator import get_composition_validator
 from sktime_mcp.config import settings
 from sktime_mcp.tools.classify import (
     fit_predict_classification_tool,
@@ -41,11 +40,12 @@ from sktime_mcp.tools.classify import (
 )
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
-    load_data_source_async_tool,
     load_data_source_tool,
     release_data_handle_tool,
 )
-from sktime_mcp.tools.describe_estimator import describe_estimator_tool
+from sktime_mcp.tools.describe_component import (
+    describe_component_tool,
+)
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
@@ -54,7 +54,6 @@ from sktime_mcp.tools.fit_predict import (
 from sktime_mcp.tools.inspect_data import inspect_data_tool
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
-    instantiate_pipeline_tool,
     list_handles_tool,
     load_model_tool,
     release_handle_tool,
@@ -65,9 +64,8 @@ from sktime_mcp.tools.job_tools import (
     list_jobs_tool,
 )
 from sktime_mcp.tools.list_available_data import list_available_data_tool
-from sktime_mcp.tools.list_estimators import (
-    get_available_tags,
-    list_estimators_tool,
+from sktime_mcp.tools.query_registry import (
+    query_registry_tool,
 )
 from sktime_mcp.tools.save_data import save_data_tool
 from sktime_mcp.tools.save_model import save_model_tool
@@ -208,27 +206,32 @@ async def list_tools() -> list[Tool]:
     return [
         # -- Discovery -------------------------------------------------------
         Tool(
-            name="list_estimators",
+            name="query_registry",
             description=(
-                "Discover sktime estimators by task, capability tags, or name search. "
-                "Common tags you can filter by: "
+                "Discover sktime estimators, metrics, or capability tags. "
+                "Common tags you can filter estimators by: "
                 "'capability:pred_int' (bool) - prediction intervals, "
                 "'capability:multivariate' (bool) - multivariate support, "
                 "'handles-missing-data' (bool) - NaN handling, "
                 "'scitype:y' (str) - target type ('univariate'/'multivariate'/'both'), "
                 "'requires-fh-in-fit' (bool) - needs forecast horizon at fit time. "
-                "Use get_available_tags for the full catalog."
+                "Set task='tag' (or 'tags') to query the full list of capability tags."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "task": {
                         "type": "string",
-                        "description": "Task type filter: forecasting, classification, regression, transformation, clustering, detection",
+                        "description": (
+                            "Filter by scitype: forecaster, classifier, regressor, "
+                            "transformer, clusterer, detector, splitter, metric, "
+                            "param_est, aligner, network. "
+                            "Set to 'tag' or 'tags' to retrieve capability tags."
+                        ),
                     },
                     "tags": {
                         "type": "object",
-                        "description": "Filter by capability tags, e.g. {'capability:pred_int': true}",
+                        "description": "Filter by capability tags, e.g. {'capability:pred_int': true}. Ignored if task='tag'.",
                     },
                     "query": {
                         "type": "string",
@@ -239,45 +242,40 @@ async def list_tools() -> list[Tool]:
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Maximum results (default: 50)",
+                        "description": "Maximum results (default: 50). Ignored if task='tag'.",
                         "default": 50,
                     },
                     "offset": {
                         "type": "integer",
-                        "description": "Skip this many results for pagination (default: 0)",
+                        "description": "Skip this many results for pagination (default: 0). Ignored if task='tag'.",
                         "default": 0,
                     },
                 },
             },
         ),
         Tool(
-            name="describe_estimator",
-            description="Get detailed information about a specific sktime estimator",
+            name="describe_component",
+            description="Get detailed information about ANY class or component in the sktime ecosystem (estimators, splitters, metrics, transformers)",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "estimator": {
+                    "name": {
                         "type": "string",
-                        "description": "Name of the estimator (e.g., 'ARIMA', 'RandomForest')",
+                        "description": "Name of the component class (e.g., 'ARIMA', 'SlidingWindowSplitter', 'MeanAbsolutePercentageError')",
                     },
                 },
-                "required": ["estimator"],
+                "required": ["name"],
             },
-        ),
-        Tool(
-            name="get_available_tags",
-            description=(
-                "List all queryable capability tags with rich metadata. "
-                "Returns tag name, description, expected value type, and which "
-                "estimator types the tag applies to. Call this before "
-                "using tags in list_estimators to ensure correct tag names and values."
-            ),
-            inputSchema={"type": "object", "properties": {}},
         ),
         # -- Instantiation ---------------------------------------------------
         Tool(
             name="instantiate_estimator",
-            description="Create an estimator instance with given parameters",
+            description=(
+                "Create an estimator instance with given parameters. "
+                "Pass 'estimator' for a single estimator, or 'components' "
+                "for a pipeline (list of estimator names in order). "
+                "A single-element components list is equivalent to a single estimator."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -287,30 +285,23 @@ async def list_tools() -> list[Tool]:
                     },
                     "params": {
                         "type": "object",
-                        "description": "Hyperparameters for the estimator",
+                        "description": "Parameters for the estimator",
                     },
-                },
-                "required": ["estimator"],
-            },
-        ),
-        Tool(
-            name="instantiate_pipeline",
-            description="Create a pipeline instance from a list of components",
-            inputSchema={
-                "type": "object",
-                "properties": {
                     "components": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "List of estimator names in pipeline order (e.g., ['Detrender', 'ARIMA'])",
+                        "description": (
+                            "List of estimator names in pipeline order "
+                            "(e.g., ['Detrender', 'ARIMA']). "
+                            "Mutually exclusive with 'estimator'."
+                        ),
                     },
                     "params_list": {
                         "type": "array",
                         "items": {"type": "object"},
-                        "description": "Optional list of hyperparameter dicts for each component",
+                        "description": "Optional list of parameter dicts for each component",
                     },
                 },
-                "required": ["components"],
             },
         ),
         Tool(
@@ -330,21 +321,6 @@ async def list_tools() -> list[Tool]:
                     },
                 },
                 "required": ["handle"],
-            },
-        ),
-        Tool(
-            name="validate_pipeline",
-            description="Check if a pipeline composition is valid",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "components": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of estimator names in pipeline order",
-                    },
-                },
-                "required": ["components"],
             },
         ),
         # -- Execution -------------------------------------------------------
@@ -462,6 +438,7 @@ async def list_tools() -> list[Tool]:
             name="load_data_source",
             description=(
                 "Load data from various sources into a data handle for forecasting. "
+                "Can run synchronously (blocking) or asynchronously in the background. "
                 "Supported source types: "
                 "'pandas' - from a dict or inline data (keys: data, time_column, target_column). "
                 "'file' - from CSV, Excel (.xlsx), or Parquet (keys: path, time_column, target_column). "
@@ -484,24 +461,14 @@ async def list_tools() -> list[Tool]:
                             "(pandas, sql, file, url)."
                         ),
                     },
-                },
-                "required": ["config"],
-            },
-        ),
-        Tool(
-            name="load_data_source_async",
-            description=(
-                "Load data from any source in the background "
-                "(non-blocking). Returns a job_id to track "
-                "progress. The data_handle is available in "
-                "the job result when completed."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "config": {
-                        "type": "object",
-                        "description": "Data source configuration. Same format as load_data_source.",
+                    "run_async": {
+                        "type": "boolean",
+                        "description": (
+                            "If True, loads data in the background (non-blocking) and "
+                            "returns a job_id. If False (default), blocks and returns the "
+                            "data_handle directly."
+                        ),
+                        "default": False,
                     },
                 },
                 "required": ["config"],
@@ -868,8 +835,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
     try:
         # -- Discovery -------------------------------------------------------
-        if name == "list_estimators":
-            result = list_estimators_tool(
+        if name == "query_registry":
+            result = query_registry_tool(
                 task=arguments.get("task"),
                 tags=arguments.get("tags"),
                 query=arguments.get("query"),
@@ -877,31 +844,16 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 offset=arguments.get("offset", 0),
             )
 
-        elif name == "search_estimators":
-            # Deprecated — kept for backward compatibility, routes to unified list_estimators
-            logger.warning("search_estimators is deprecated; use list_estimators(query=...)")
-            result = list_estimators_tool(
-                query=arguments["query"],
-                limit=arguments.get("limit", 20),
-            )
-
-        elif name == "describe_estimator":
-            result = describe_estimator_tool(arguments["estimator"])
-
-        elif name == "get_available_tags":
-            result = get_available_tags()
+        elif name == "describe_component":
+            result = describe_component_tool(name=arguments["name"])
 
         # -- Instantiation ---------------------------------------------------
         elif name == "instantiate_estimator":
             result = instantiate_estimator_tool(
-                arguments["estimator"],
-                arguments.get("params"),
-            )
-
-        elif name == "instantiate_pipeline":
-            result = instantiate_pipeline_tool(
-                arguments["components"],
-                arguments.get("params_list"),
+                estimator=arguments.get("estimator"),
+                params=arguments.get("params"),
+                components=arguments.get("components"),
+                params_list=arguments.get("params_list"),
             )
 
         elif name == "list_handles":
@@ -934,20 +886,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("cv_folds", 3),
             )
 
-        elif name == "validate_pipeline":
-            validator = get_composition_validator()
-            validation = validator.validate_pipeline(arguments["components"])
-            result = validation.to_dict()
-            result["success"] = result["valid"]
-
         # -- Data ------------------------------------------------------------
         elif name == "list_available_data":
             result = list_available_data_tool(arguments.get("is_demo"))
         elif name == "load_data_source":
-            result = load_data_source_tool(arguments["config"])
-
-        elif name == "load_data_source_async":
-            result = load_data_source_async_tool(arguments["config"])
+            result = load_data_source_tool(arguments["config"], arguments.get("run_async", False))
 
         elif name == "list_data_sources":
             # Deprecated — info is now in load_data_source description

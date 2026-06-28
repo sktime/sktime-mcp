@@ -20,7 +20,6 @@ from sktime_mcp.tools.codegen import (
 )
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
-    instantiate_pipeline_tool,
 )
 
 
@@ -208,7 +207,7 @@ class TestExportCodeTool:
 
     def _create_handle(self, name="NaiveForecaster", params=None):
         """Helper to create an estimator handle."""
-        result = instantiate_estimator_tool(name, params)
+        result = instantiate_estimator_tool(estimator=name, params=params)
         assert result["success"], f"Failed to create handle: {result}"
         return result["handle"]
 
@@ -298,7 +297,7 @@ class TestExportCodeTool:
 
     def test_pipeline_handle(self):
         """Pipeline handle should return is_pipeline=True."""
-        result = instantiate_pipeline_tool(["Deseasonalizer", "NaiveForecaster"])
+        result = instantiate_estimator_tool(components=["Deseasonalizer", "NaiveForecaster"])
         if not result["success"]:
             pytest.skip("Pipeline instantiation not available")
 

@@ -81,7 +81,7 @@ The codebase is organized into **5 main layers**:
    
 2. **`@server.list_tools()`**: Registers all available MCP tools
    - Returns tool schemas (name, description, input schema)
-   - Tools span Discovery, Instantiation, Execution, Data, Export, Persistence, Validation, and Job Management. (e.g., `list_estimators`, `instantiate_pipeline`, `fit_predict_async`, `load_data_source`, `save_model`, `check_job_status`).
+   - Tools span Discovery, Instantiation, Execution, Data, Export, Persistence, Validation, and Job Management. (e.g., `query_registry`, `instantiate_pipeline`, `fit_predict_async`, `load_data_source`, `save_model`, `check_job_status`).
 
 3. **`@server.call_tool(name, arguments)`**: Routes tool calls to implementations
    - Validates arguments
@@ -124,15 +124,12 @@ LLM → JSON-RPC request → server.call_tool() → tool function → sanitize �
    - **Purpose**: Lazy-loads and caches all sktime estimators
    - **Key Methods**:
      - `get_all_estimators(task, tags)`: Filter estimators by task and tags
-     - `get_estimator_by_name(name)`: Lookup specific estimator
-     - `list_estimators(query=...)`: Text search in names/docstrings
+     - `get_estimator_by_name(name)`: Lookup specific estimator via `sktime.registry.craft`
+     - `search_estimators(query)`: Text search in names/docstrings
      - `get_available_tasks()`: List all task types
      - `get_available_tags()`: List all capability tags
    - **Internal Methods**:
-     - `_load_registry()`: Calls sktime's `all_estimators()` for each task
-     - `_create_node()`: Extracts metadata from estimator class
-     - `_get_tags()`: Calls `cls.get_class_tags()`
-     - `_get_hyperparameters()`: Inspects `__init__` signature
+     - `_create_node()`: Extracts metadata from estimator class using sktime's `get_class_tags` and `get_param_names`
 
 **How It Works**:
 ```python
@@ -304,40 +301,33 @@ handle = handle_manager.create_handle("Pipeline", pipeline)
 
 Each file implements one or more MCP tools that LLMs can call.
 
-#### `list_estimators.py`
+#### `query_registry.py`
 **Tools**:
-1. **`list_estimators_tool(task, tags, query, limit)`**
-   - Calls `registry.get_all_estimators(task, tags)`
-   - Returns: `{"success": True, "estimators": [...], "total": 50}`
+1. **`query_registry_tool(task, tags, query, limit, offset)`**
+   - Queries the unified registry for estimators, capability tags, or performance metrics.
+   - Returns query results.
 
-2. **`get_available_tags()`**
-   - Returns all capability tags
-   - Example: `["capability:pred_int", "handles-missing-data", ...]`
-
-#### `describe_estimator.py`
-**Tool**: `describe_estimator_tool(estimator)`
-- Looks up estimator in registry
-- Returns full EstimatorNode details
-- Includes: name, task, module, tags, hyperparameters, docstring
+#### `describe_component.py`
+**Tool**: `describe_component_tool(name)`
+- Looks up a component (estimator, splitter, metric, transformer) in the registry by name
+- Returns detailed component information
 
 #### `instantiate.py`
 **Tools**:
-1. **`instantiate_estimator_tool(estimator, params)`**
-   - Calls `executor.instantiate(estimator, params)`
+1. **`instantiate_estimator_tool(estimator, params, components, params_list)`** ⭐
+   - Unified tool for both single estimators and pipelines
+   - Pass ``estimator`` (+ ``params``) for a single estimator
+   - Pass ``components`` (+ ``params_list``) for a pipeline
+   - Solves the "steps problem" for pipelines
    - Returns handle
 
-2. **`instantiate_pipeline_tool(components, params_list)`** ⭐
-   - Calls `executor.instantiate_pipeline(components, params_list)`
-   - Solves the "steps problem"
-   - Returns single handle for entire pipeline
-
-3. **`release_handle_tool(handle)`**
+2. **`release_handle_tool(handle)`**
    - Frees memory for a handle
 
-4. **`list_handles_tool()`**
+3. **`list_handles_tool()`**
    - Lists all active handles
 
-5. **`load_model_tool(path)`**
+4. **`load_model_tool(path)`**
    - Loads a previously saved model via MLflow
 
 #### `fit_predict.py`
@@ -382,14 +372,14 @@ Each file implements one or more MCP tools that LLMs can call.
 
 **Steps**:
 1. List datasets
-2. Discover forecasting estimators
+2. Discover forecasting estimators using `query_registry`
 3. Filter by tags (probabilistic forecasters)
-4. Describe an estimator
+4. Describe a component using `describe_component`
 5. Validate pipeline compositions
 6. Instantiate estimator
 7. Fit and predict
 8. List active handles
-9. Show available tags
+9. Show available tags using `query_registry`
 
 **Run**: `python examples/01_forecasting_workflow.py`
 
@@ -399,8 +389,8 @@ Each file implements one or more MCP tools that LLMs can call.
 **Scenario**: User asks "Forecast airline passengers with a probabilistic model"
 
 **LLM Steps**:
-1. `list_estimators(task="forecasting", tags={"capability:pred_int": True})`
-2. `describe_estimator("ARIMA")`
+1. `query_registry(target="estimators", task="forecasting", tags={"capability:pred_int": True})`
+2. `describe_component("ARIMA")`
 3. `instantiate_estimator("ARIMA", {"order": [1,1,1]})`
 4. `fit_predict(handle, "airline", 12)`
 
@@ -478,17 +468,17 @@ Each file implements one or more MCP tools that LLMs can call.
 
 **Step 1: Discovery**
 ```
-LLM → list_estimators(task="forecasting")
-     → server.call_tool("list_estimators", {"task": "forecasting"})
-     → list_estimators_tool(task="forecasting")
-     → registry.get_all_estimators(task="forecasting")
+LLM → query_registry(task="forecaster")
+     → server.call_tool("query_registry", {"task": "forecaster"})
+     → query_registry_tool(task="forecaster")
+     → registry.get_all_estimators(task="forecaster")
      → Returns: [{"name": "ARIMA", ...}, {"name": "NaiveForecaster", ...}, ...]
 ```
 
 **Step 2: Description**
 ```
-LLM → describe_estimator("ARIMA")
-     → describe_estimator_tool("ARIMA")
+LLM → describe_component("ARIMA")
+     → describe_component_tool("ARIMA")
      → registry.get_estimator_by_name("ARIMA")
      → Returns: {"name": "ARIMA", "hyperparameters": {"order": ...}, ...}
 ```
@@ -601,7 +591,7 @@ LLM → fit_predict("est_abc123", "airline", 12)
 4. **Executes** real ML workflows on real data
 5. **Translates** between JSON (LLM) and Python (sktime)
 
-**Key Innovation**: The `instantiate_pipeline` tool solves the "steps problem", enabling LLMs to create complex pipelines with a single JSON-RPC call.
+**Key Innovation**: The unified `instantiate_estimator` tool solves the "steps problem", enabling LLMs to create both single estimators and complex pipelines with a single JSON-RPC call.
 
 **Architecture Highlights**:
 - Clean separation of concerns (registry, composition, runtime, tools)

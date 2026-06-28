@@ -2,11 +2,12 @@
 
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
-    load_data_source_async_tool,
     load_data_source_tool,
     release_data_handle_tool,
 )
-from sktime_mcp.tools.describe_estimator import describe_estimator_tool
+from sktime_mcp.tools.describe_component import (
+    describe_component_tool,
+)
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
@@ -16,7 +17,6 @@ from sktime_mcp.tools.format_tools import format_time_series_tool
 from sktime_mcp.tools.inspect_data import inspect_data_tool
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
-    instantiate_pipeline_tool,
     list_handles_tool,
     load_model_tool,
     release_handle_tool,
@@ -27,9 +27,8 @@ from sktime_mcp.tools.job_tools import (
     list_jobs_tool,
 )
 from sktime_mcp.tools.list_available_data import list_available_data_tool
-from sktime_mcp.tools.list_estimators import (
-    get_available_tags,
-    list_estimators_tool,
+from sktime_mcp.tools.query_registry import (
+    query_registry_tool,
 )
 from sktime_mcp.tools.save_data import save_data_tool
 from sktime_mcp.tools.save_model import save_model_tool
@@ -37,11 +36,9 @@ from sktime_mcp.tools.split_data import split_data_tool
 from sktime_mcp.tools.transform_data import transform_data_tool
 
 __all__ = [
-    "list_estimators_tool",
-    "get_available_tags",
-    "describe_estimator_tool",
+    "describe_component_tool",
+    "query_registry_tool",
     "instantiate_estimator_tool",
-    "instantiate_pipeline_tool",
     "list_handles_tool",
     "release_handle_tool",
     "load_model_tool",
@@ -49,7 +46,6 @@ __all__ = [
     "fit_predict_async_tool",
     "evaluate_estimator_tool",
     "load_data_source_tool",
-    "load_data_source_async_tool",
     "release_data_handle_tool",
     "list_available_data_tool",
     "format_time_series_tool",

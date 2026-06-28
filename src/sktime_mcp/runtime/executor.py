@@ -515,13 +515,13 @@ class Executor:
             # Determine the type of pipeline to create
             # Check if all but last are transformers
             all_transformers_except_last = all(
-                self._registry.get_estimator_by_name(comp).task == "transformation"
+                self._registry.get_estimator_by_name(comp).task == "transformer"
                 for comp in components[:-1]
             )
 
             final_task = self._registry.get_estimator_by_name(components[-1]).task
 
-            if all_transformers_except_last and final_task == "forecasting":
+            if all_transformers_except_last and final_task == "forecaster":
                 # Use TransformedTargetForecaster
                 from sktime.forecasting.compose import TransformedTargetForecaster
 
@@ -547,7 +547,7 @@ class Executor:
                         ]
                     )
 
-            elif all_transformers_except_last and final_task in ("classification", "regression"):
+            elif all_transformers_except_last and final_task in ("classifier", "regressor"):
                 # Use sklearn-style Pipeline
                 from sktime.pipeline import Pipeline
 
@@ -556,7 +556,7 @@ class Executor:
                 )
 
             elif all(
-                self._registry.get_estimator_by_name(comp).task == "transformation"
+                self._registry.get_estimator_by_name(comp).task == "transformer"
                 for comp in components
             ):
                 # All transformers - use TransformerPipeline

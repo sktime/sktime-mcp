@@ -26,24 +26,24 @@ class TestRegistryInterface:
         from sktime_mcp.registry.interface import get_registry
 
         registry = get_registry()
-        forecasters = registry.get_all_estimators(task="forecasting")
+        forecasters = registry.get_all_estimators(task="forecaster")
 
-        assert all(e.task == "forecasting" for e in forecasters)
+        assert all(e.task == "forecaster" for e in forecasters)
 
     def test_detection_estimators_in_registry(self):
         """Registry loads sktime `detector` scitype as MCP task `detection`."""
         from sktime_mcp.registry.interface import get_registry
-        from sktime_mcp.tools.describe_estimator import search_estimators_tool
+        from sktime_mcp.tools.query_registry import query_registry_tool
 
         registry = get_registry()
-        detectors = registry.get_all_estimators(task="detection")
+        detectors = registry.get_all_estimators(task="detector")
 
         assert len(detectors) > 0
-        assert all(e.task == "detection" for e in detectors)
+        assert all(e.task == "detector" for e in detectors)
         names = {e.name for e in detectors}
         assert "PyODDetector" in names or "BinarySegmentation" in names
 
-        anomaly_search = search_estimators_tool("anomaly", limit=50)
+        anomaly_search = query_registry_tool(query="anomaly", limit=50)
         assert anomaly_search["success"]
         assert anomaly_search["count"] > 2
 
@@ -57,7 +57,7 @@ class TestRegistryInterface:
         # NaiveForecaster should always exist
         if node is not None:
             assert node.name == "NaiveForecaster"
-            assert node.task == "forecasting"
+            assert node.task == "forecaster"
 
     def test_search_prioritizes_exact_estimator_name(self):
         """Exact estimator name matches should rank before broad matches."""
@@ -184,42 +184,42 @@ class TestCompositionValidator:
 class TestTools:
     """Tests for MCP tools."""
 
-    def test_list_estimators_tool(self):
-        """Test list_estimators tool."""
-        from sktime_mcp.tools.list_estimators import list_estimators_tool
+    def test_query_registry_tool(self):
+        """Test query_registry tool."""
+        from sktime_mcp.tools.query_registry import query_registry_tool
 
-        result = list_estimators_tool(limit=5)
-
-        assert result["success"]
-        assert "estimators" in result
-        assert len(result["estimators"]) <= 5
-
-    def test_list_estimators_detection_task(self):
-        """Test that detection estimators are returned when filtering by detection task."""
-        from sktime_mcp.tools.list_estimators import list_estimators_tool
-
-        result = list_estimators_tool(task="detection", limit=100)
+        result = query_registry_tool(limit=5)
 
         assert result["success"]
-        assert result["total"] > 0, "There should be detection estimators"
-        assert all(e["task"] == "detection" for e in result["estimators"]), (
-            "All returned estimators should have task='detection'"
+        assert "results" in result
+        assert len(result["results"]) <= 5
+
+    def test_query_registry_detection_task(self):
+        """Test that detection estimators are returned when filtering by detector task."""
+        from sktime_mcp.tools.query_registry import query_registry_tool
+
+        result = query_registry_tool(task="detector", limit=100)
+
+        assert result["success"]
+        assert result["total"] > 0, "There should be detector estimators"
+        assert all(e["task"] == "detector" for e in result["results"]), (
+            "All returned estimators should have task='detector'"
         )
 
-    def test_detection_in_available_tasks(self):
-        """Test that detection appears in available tasks."""
-        from sktime_mcp.tools.list_estimators import get_available_tasks
+    def test_query_registry_invalid_task(self):
+        """Test query_registry with an invalid task."""
+        from sktime_mcp.tools.query_registry import query_registry_tool
 
-        result = get_available_tasks()
+        result = query_registry_tool(task="invalid_task_name")
 
-        assert result["success"]
-        assert "detection" in result["tasks"], "detection should be a valid task"
+        assert not result["success"]
+        assert "error" in result
 
-    def test_describe_unknown_estimator(self):
-        """Test describing an unknown estimator."""
-        from sktime_mcp.tools.describe_estimator import describe_estimator_tool
+    def test_describe_unknown_component(self):
+        """Test describing an unknown component."""
+        from sktime_mcp.tools.describe_component import describe_component_tool
 
-        result = describe_estimator_tool("NotARealEstimator12345")
+        result = describe_component_tool("NotARealComponent12345")
 
         assert not result["success"]
         assert "error" in result
@@ -301,7 +301,7 @@ class TestTools:
         from sktime_mcp.tools.fit_predict import fit_predict_tool
         from sktime_mcp.tools.instantiate import instantiate_estimator_tool, release_handle_tool
 
-        inst = instantiate_estimator_tool("NaiveForecaster", {"strategy": "last"})
+        inst = instantiate_estimator_tool(estimator="NaiveForecaster", params={"strategy": "last"})
         assert inst["success"]
         handle = inst["handle"]
 
@@ -488,42 +488,42 @@ class TestMemoryLeakFix:
         assert len(executor._data_handles) == 3
 
 
-class TestSearchEstimatorsLimit:
-    """Tests for the limit parameter validation in search_estimators_tool."""
+class TestQueryRegistryLimit:
+    """Tests for the limit and offset parameter validation in query_registry_tool."""
 
     def test_limit_zero_returns_error(self):
-        """limit=0 should return an error, not an empty list."""
-        from sktime_mcp.tools.describe_estimator import search_estimators_tool
+        """limit=0 should return an error."""
+        from sktime_mcp.tools.query_registry import query_registry_tool
 
-        result = search_estimators_tool("NaiveForecaster", limit=0)
-
-        assert not result["success"]
-        assert result["error"] == "limit must be a positive integer."
-
-    def test_limit_negative_one_returns_error(self):
-        """limit=-1 should return an error, not the last result."""
-        from sktime_mcp.tools.describe_estimator import search_estimators_tool
-
-        result = search_estimators_tool("NaiveForecaster", limit=-1)
+        result = query_registry_tool(limit=0)
 
         assert not result["success"]
         assert result["error"] == "limit must be a positive integer."
 
-    def test_limit_negative_five_returns_error(self):
-        """limit=-5 should return an error, not the last 5 results."""
-        from sktime_mcp.tools.describe_estimator import search_estimators_tool
+    def test_limit_negative_returns_error(self):
+        """Negative limit should return an error."""
+        from sktime_mcp.tools.query_registry import query_registry_tool
 
-        result = search_estimators_tool("NaiveForecaster", limit=-5)
+        result = query_registry_tool(limit=-5)
 
         assert not result["success"]
         assert result["error"] == "limit must be a positive integer."
+
+    def test_offset_negative_returns_error(self):
+        """Negative offset should return an error."""
+        from sktime_mcp.tools.query_registry import query_registry_tool
+
+        result = query_registry_tool(offset=-1)
+
+        assert not result["success"]
+        assert result["error"] == "offset must be a non-negative integer."
 
     def test_limit_valid_returns_results(self):
         """A positive limit should work correctly and cap results."""
         pytest.importorskip("sktime", reason="sktime not installed in this environment")
-        from sktime_mcp.tools.describe_estimator import search_estimators_tool
+        from sktime_mcp.tools.query_registry import query_registry_tool
 
-        result = search_estimators_tool("Forecaster", limit=3)
+        result = query_registry_tool(query="Forecaster", limit=3)
 
         assert result["success"]
         assert "results" in result
