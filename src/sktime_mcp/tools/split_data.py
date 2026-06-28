@@ -108,7 +108,9 @@ def split_data_tool(
     X = data_info.get("X")
 
     try:
-        # --- determine split point ----------------------------------------
+        from sktime.split import temporal_train_test_split
+        from sktime.datatypes import get_cutoff
+
         n = len(y)
 
         if test_size is not None:
@@ -116,7 +118,6 @@ def split_data_tool(
         elif isinstance(fh, int):
             n_test = fh
         else:
-            # fh as list of relative horizon indices — reserve max(fh) final steps
             n_test = max(fh)
 
         if n_test >= n:
@@ -127,29 +128,14 @@ def split_data_tool(
                 ),
             }
 
-        split_idx = n - n_test
-
-        # --- try sktime first ---------------------------------------------
-        try:
-            from sktime.split import temporal_train_test_split
-
-            y_train, y_test = temporal_train_test_split(y, test_size=n_test / n)
-            if X is not None:
-                X_train, X_test = temporal_train_test_split(X, test_size=n_test / n)
-            else:
-                X_train, X_test = None, None
-        except Exception:
-            # Fallback: plain pandas slicing
-            y_train = y.iloc[:split_idx]
-            y_test = y.iloc[split_idx:]
-            if X is not None:
-                X_train = X.iloc[:split_idx]
-                X_test = X.iloc[split_idx:]
-            else:
-                X_train, X_test = None, None
+        if X is not None:
+            y_train, y_test, X_train, X_test = temporal_train_test_split(y, X, test_size=n_test)
+        else:
+            y_train, y_test = temporal_train_test_split(y, test_size=n_test)
+            X_train, X_test = None, None
 
         # --- cutoff -------------------------------------------------------
-        cutoff = str(y_train.index[-1])
+        cutoff = str(get_cutoff(y_train))
 
         # --- register handles --------------------------------------------
         train_handle = f"data_{uuid.uuid4().hex[:8]}"

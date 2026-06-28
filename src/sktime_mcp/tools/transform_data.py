@@ -168,13 +168,7 @@ def _action_convert(
     data_info = executor._data_handles[data_handle]
     y = data_info["y"]
 
-    try:
-        from sktime.datatypes import convert_to
-    except ImportError:
-        return {
-            "success": False,
-            "error": "sktime.datatypes.convert_to is not available in this environment.",
-        }
+    from sktime.datatypes import convert_to
 
     original_mtype = type(y).__name__
     converted = convert_to(y, to_type=to_mtype)

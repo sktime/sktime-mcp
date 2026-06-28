@@ -74,15 +74,14 @@ def inspect_data_tool(data_handle: str) -> dict[str, Any]:
     X = data_info.get("X")
 
     try:
-        # --- mtype detection ---
-        mtype = type(y).__name__
-        if isinstance(y, pd.DataFrame):
-            mtype = "pd.DataFrame"
-        elif isinstance(y, pd.Series):
-            mtype = "pd.Series"
-
-        # --- scitype detection ---
-        scitype = _detect_scitype(y)
+        from sktime.datatypes import check_is_scitype, get_cutoff
+        
+        valid, _, metadata = check_is_scitype(
+            y, scitype=["Series", "Panel", "Hierarchical"], return_metadata=True
+        )
+        
+        mtype = metadata.get("mtype", type(y).__name__)
+        scitype = metadata.get("scitype", "Unknown")
 
         # --- shape ---
         shape = list(y.shape)
@@ -93,7 +92,7 @@ def inspect_data_tool(data_handle: str) -> dict[str, Any]:
         elif isinstance(y, pd.Series):
             columns = [y.name if y.name else "target"]
         else:
-            columns = []
+            columns = metadata.get("feature_names", [])
 
         # Add exogenous columns if present
         if X is not None and isinstance(X, pd.DataFrame):
@@ -108,29 +107,21 @@ def inspect_data_tool(data_handle: str) -> dict[str, Any]:
             dtypes = {}
 
         # --- index names ---
-        if hasattr(y.index, "names"):
+        if hasattr(y, "index") and hasattr(y.index, "names"):
             index_names = [str(n) if n is not None else "index" for n in y.index.names]
         else:
             index_names = ["index"]
 
         # --- frequency ---
         freq = None
-        if hasattr(y.index, "freq") and y.index.freq is not None:
-            freq = str(y.index.freq)
-        elif hasattr(y.index, "inferred_freq"):
-            freq = y.index.inferred_freq
+        if hasattr(y, "index"):
+            if hasattr(y.index, "freq") and y.index.freq is not None:
+                freq = str(y.index.freq)
+            elif hasattr(y.index, "inferred_freq"):
+                freq = y.index.inferred_freq
 
         # --- cutoff ---
-        cutoff = None
-        try:
-            from sktime.datatypes import get_cutoff as sktime_get_cutoff
-
-            cutoff_val = sktime_get_cutoff(y)
-            cutoff = str(cutoff_val)
-        except Exception:
-            # Fallback: use last index value
-            if len(y) > 0:
-                cutoff = str(y.index[-1])
+        cutoff = str(get_cutoff(y))
 
         # --- missing values ---
         if isinstance(y, pd.DataFrame):
@@ -169,27 +160,6 @@ def inspect_data_tool(data_handle: str) -> dict[str, Any]:
             "error": str(e),
             "error_type": type(e).__name__,
         }
-
-
-def _detect_scitype(y: Any) -> str:
-    """Detect the sktime scitype of the data."""
-    try:
-        from sktime.datatypes import scitype as sktime_scitype
-
-        return sktime_scitype(y, candidate_scitypes=["Series", "Panel", "Hierarchical"])
-    except Exception:
-        pass
-
-    # Fallback heuristic
-    if isinstance(y, pd.Series):
-        return "Series"
-    if isinstance(y, pd.DataFrame):
-        if isinstance(y.index, pd.MultiIndex):
-            if y.index.nlevels >= 3:
-                return "Hierarchical"
-            return "Panel"
-        return "Series"
-    return "Unknown"
 
 
 def _safe_head(y: Any, n: int = 5) -> dict:
