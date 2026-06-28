@@ -108,8 +108,8 @@ def split_data_tool(
     X = data_info.get("X")
 
     try:
-        from sktime.split import temporal_train_test_split
         from sktime.datatypes import get_cutoff
+        from sktime.split import temporal_train_test_split
 
         n = len(y)
 

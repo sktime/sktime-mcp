@@ -75,11 +75,11 @@ def inspect_data_tool(data_handle: str) -> dict[str, Any]:
 
     try:
         from sktime.datatypes import check_is_scitype, get_cutoff
-        
+
         valid, _, metadata = check_is_scitype(
             y, scitype=["Series", "Panel", "Hierarchical"], return_metadata=True
         )
-        
+
         mtype = metadata.get("mtype", type(y).__name__)
         scitype = metadata.get("scitype", "Unknown")
 
