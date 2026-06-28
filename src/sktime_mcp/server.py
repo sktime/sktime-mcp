@@ -33,6 +33,7 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
+from sktime_mcp.composition.validator import get_composition_validator
 from sktime_mcp.config import settings
 from sktime_mcp.tools.classify import (
     fit_predict_classification_tool,
@@ -43,20 +44,20 @@ from sktime_mcp.tools.data_tools import (
     load_data_source_tool,
     release_data_handle_tool,
 )
-from sktime_mcp.tools.describe_component import (
-    describe_component_tool,
-)
+from sktime_mcp.tools.describe_component import describe_component_tool
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
     fit_predict_tool,
 )
-from sktime_mcp.tools.inspect_data import inspect_data_tool
+from sktime_mcp.tools.format_tools import format_time_series_tool
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
+    instantiate_tool,
     list_handles_tool,
     load_model_tool,
     release_handle_tool,
+    set_params_tool,
 )
 from sktime_mcp.tools.job_tools import (
     cancel_job_tool,
@@ -67,10 +68,7 @@ from sktime_mcp.tools.list_available_data import list_available_data_tool
 from sktime_mcp.tools.query_registry import (
     query_registry_tool,
 )
-from sktime_mcp.tools.save_data import save_data_tool
 from sktime_mcp.tools.save_model import save_model_tool
-from sktime_mcp.tools.split_data import split_data_tool
-from sktime_mcp.tools.transform_data import transform_data_tool
 
 
 # ---------------------------------------------------------------------------
@@ -208,8 +206,8 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="query_registry",
             description=(
-                "Discover sktime estimators, metrics, or capability tags. "
-                "Common tags you can filter estimators by: "
+                "Discover sktime estimators by task, capability tags, or name search. "
+                "Common tags you can filter by: "
                 "'capability:pred_int' (bool) - prediction intervals, "
                 "'capability:multivariate' (bool) - multivariate support, "
                 "'handles-missing-data' (bool) - NaN handling, "
@@ -222,16 +220,11 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "task": {
                         "type": "string",
-                        "description": (
-                            "Filter by scitype: forecaster, classifier, regressor, "
-                            "transformer, clusterer, detector, splitter, metric, "
-                            "param_est, aligner, network. "
-                            "Set to 'tag' or 'tags' to retrieve capability tags."
-                        ),
+                        "description": "Task type filter: forecasting, classification, regression, transformation, clustering, detection",
                     },
                     "tags": {
                         "type": "object",
-                        "description": "Filter by capability tags, e.g. {'capability:pred_int': true}. Ignored if task='tag'.",
+                        "description": "Filter by capability tags, e.g. {'capability:pred_int': true}",
                     },
                     "query": {
                         "type": "string",
@@ -242,12 +235,12 @@ async def list_tools() -> list[Tool]:
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Maximum results (default: 50). Ignored if task='tag'.",
+                        "description": "Maximum results (default: 50)",
                         "default": 50,
                     },
                     "offset": {
                         "type": "integer",
-                        "description": "Skip this many results for pagination (default: 0). Ignored if task='tag'.",
+                        "description": "Skip this many results for pagination (default: 0)",
                         "default": 0,
                     },
                 },
@@ -255,19 +248,83 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="describe_component",
-            description="Get detailed information about ANY class or component in the sktime ecosystem (estimators, splitters, metrics, transformers)",
+            description="Get detailed information about a specific sktime estimator",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "name": {
+                    "estimator": {
                         "type": "string",
-                        "description": "Name of the component class (e.g., 'ARIMA', 'SlidingWindowSplitter', 'MeanAbsolutePercentageError')",
+                        "description": "Name of the estimator (e.g., 'ARIMA', 'RandomForest')",
                     },
                 },
-                "required": ["name"],
+                "required": ["estimator"],
             },
         ),
+        Tool(
+            name="get_available_tags",
+            description=(
+                "List all queryable capability tags with rich metadata. "
+                "Returns tag name, description, expected value type, and which "
+                "estimator types the tag applies to. Call this before "
+                "using tags in list_estimators to ensure correct tag names and values."
+            ),
+            inputSchema={"type": "object", "properties": {}},
+        ),
         # -- Instantiation ---------------------------------------------------
+        Tool(
+            name="instantiate",
+            description=(
+                "Create an estimator or pipeline from a sktime craft spec string. "
+                "Use registry class names directly, e.g. "
+                "'NaiveForecaster(strategy=\"last\")' or a multi-line spec with "
+                "assignments ending in 'return'. Set dry_run=true to validate "
+                "without creating a handle. Returns handle, canonical spec, "
+                "python_dependencies, and import statements."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "spec": {
+                        "type": "string",
+                        "description": (
+                            "sktime craft specification, e.g. "
+                            "'ARIMA(order=(1, 1, 1))' or "
+                            "'c0 = Deseasonalizer(sp=12)\\nreturn c0'"
+                        ),
+                    },
+                    "dry_run": {
+                        "type": "boolean",
+                        "description": (
+                            "If true, validate spec and return deps/imports only "
+                            "(no handle created). Default: false."
+                        ),
+                        "default": False,
+                    },
+                },
+                "required": ["spec"],
+            },
+        ),
+        Tool(
+            name="set_params",
+            description=(
+                "Update hyperparameters on an existing unfitted estimator handle. "
+                "Refreshes the stored craft spec. Cannot be used on fitted handles."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "handle": {
+                        "type": "string",
+                        "description": "Estimator handle from instantiate",
+                    },
+                    "params": {
+                        "type": "object",
+                        "description": "Hyperparameters to update (sktime set_params syntax)",
+                    },
+                },
+                "required": ["handle", "params"],
+            },
+        ),
         Tool(
             name="instantiate_estimator",
             description=(
@@ -285,7 +342,7 @@ async def list_tools() -> list[Tool]:
                     },
                     "params": {
                         "type": "object",
-                        "description": "Parameters for the estimator",
+                        "description": "Hyperparameters for the estimator",
                     },
                     "components": {
                         "type": "array",
@@ -299,7 +356,10 @@ async def list_tools() -> list[Tool]:
                     "params_list": {
                         "type": "array",
                         "items": {"type": "object"},
-                        "description": "Optional list of parameter dicts for each component",
+                        "description": (
+                            "Optional list of hyperparameter dicts for each "
+                            "component (used with 'components')"
+                        ),
                     },
                 },
             },
@@ -321,6 +381,21 @@ async def list_tools() -> list[Tool]:
                     },
                 },
                 "required": ["handle"],
+            },
+        ),
+        Tool(
+            name="validate_pipeline",
+            description="Check if a pipeline composition is valid",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "components": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of estimator names in pipeline order",
+                    },
+                },
+                "required": ["components"],
             },
         ),
         # -- Execution -------------------------------------------------------
@@ -438,7 +513,6 @@ async def list_tools() -> list[Tool]:
             name="load_data_source",
             description=(
                 "Load data from various sources into a data handle for forecasting. "
-                "Can run synchronously (blocking) or asynchronously in the background. "
                 "Supported source types: "
                 "'pandas' - from a dict or inline data (keys: data, time_column, target_column). "
                 "'file' - from CSV, Excel (.xlsx), or Parquet (keys: path, time_column, target_column). "
@@ -461,15 +535,6 @@ async def list_tools() -> list[Tool]:
                             "(pandas, sql, file, url)."
                         ),
                     },
-                    "run_async": {
-                        "type": "boolean",
-                        "description": (
-                            "If True, loads data in the background (non-blocking) and "
-                            "returns a job_id. If False (default), blocks and returns the "
-                            "data_handle directly."
-                        ),
-                        "default": False,
-                    },
                 },
                 "required": ["config"],
             },
@@ -489,150 +554,32 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
-            name="inspect_data",
-            description=(
-                "Inspect a loaded data handle and return rich metadata for understanding "
-                "the series before modelling. Returns mtype, scitype, shape, column names, "
-                "dtypes, index level names, inferred frequency, cutoff (last training "
-                "timestamp), total missing-value count, a 5-row head preview, and "
-                "per-column summary statistics. Works on handles from load_data_source, "
-                "split_data, or transform_data. Does not modify the data."
-            ),
+            name="format_time_series",
+            description="Automatically format time series data (frequency, duplicates, missing values)",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "data_handle": {
                         "type": "string",
-                        "description": (
-                            "Data handle ID to inspect (from load_data_source, split_data, "
-                            "or transform_data)."
-                        ),
-                    },
-                },
-                "required": ["data_handle"],
-            },
-        ),
-        Tool(
-            name="split_data",
-            description=(
-                "Split a time series data handle into temporal train and test sets, "
-                "registering both halves as new data handles. Provide exactly one of "
-                "test_size (fraction in (0, 1)) or fh (forecast horizon). fh may be an "
-                "integer (hold out that many final steps) or a list of relative horizon "
-                "indices (hold out max(fh) final steps). Returns train_handle, "
-                "test_handle, cutoff timestamp, train_size, and n_test."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "data_handle": {
-                        "type": "string",
-                        "description": "Data handle ID to split (from load_data_source or transform_data).",
-                    },
-                    "test_size": {
-                        "type": "number",
-                        "description": (
-                            "Fraction of observations to hold out for the test set, "
-                            "exclusive range (0.0, 1.0). Mutually exclusive with fh."
-                        ),
-                    },
-                    "fh": {
-                        "description": (
-                            "Forecast horizon for the test window. Integer: hold out that "
-                            "many final time steps. List of ints: hold out max(fh) final "
-                            "steps (e.g. fh=[1,5,10] reserves 10 steps). "
-                            "Mutually exclusive with test_size."
-                        ),
-                    },
-                },
-                "required": ["data_handle"],
-            },
-        ),
-        Tool(
-            name="transform_data",
-            description=(
-                "Transform a loaded data handle and return a new handle. "
-                "action='format' (default): auto-fix common time series issues — "
-                "infer/set frequency, remove duplicate timestamps, fill index gaps, "
-                "and forward/backward-fill missing values; returns changes_applied. "
-                "action='convert': convert y to a different sktime mtype via convert_to() "
-                "(requires to_mtype, e.g. 'pd.DataFrame', 'pd.Series', 'np.ndarray'). "
-                "Replaces the legacy format_time_series tool."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "data_handle": {
-                        "type": "string",
-                        "description": "Data handle ID to transform.",
-                    },
-                    "action": {
-                        "type": "string",
-                        "description": (
-                            "Transformation to apply: 'format' (default) or 'convert'."
-                        ),
-                        "enum": ["format", "convert"],
-                        "default": "format",
+                        "description": "Handle from load_data_source",
                     },
                     "auto_infer_freq": {
                         "type": "boolean",
-                        "description": "(format only) Infer and set DatetimeIndex frequency (default: true).",
+                        "description": "Automatically infer and set frequency (default: True)",
                         "default": True,
                     },
                     "fill_missing": {
                         "type": "boolean",
-                        "description": "(format only) Forward/backward fill missing values (default: true).",
+                        "description": "Fill missing values with forward/backward fill (default: True)",
                         "default": True,
                     },
                     "remove_duplicates": {
                         "type": "boolean",
-                        "description": "(format only) Drop duplicate timestamps, keeping first (default: true).",
+                        "description": "Remove duplicate timestamps (default: True)",
                         "default": True,
-                    },
-                    "to_mtype": {
-                        "type": "string",
-                        "description": (
-                            "(convert only, required) Target sktime mtype string, "
-                            "e.g. 'pd.DataFrame', 'pd.Series', 'np.ndarray'."
-                        ),
                     },
                 },
                 "required": ["data_handle"],
-            },
-        ),
-        Tool(
-            name="save_data",
-            description=(
-                "Persist the target series (y) and any exogenous features (X) behind a "
-                "data handle to a local file. Combines y and X into one table. Creates "
-                "parent directories as needed. Supported formats: csv (default, writes "
-                "index as first column), parquet, json (records orient, ISO dates)."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "data_handle": {
-                        "type": "string",
-                        "description": (
-                            "Data handle ID to export (from load_data_source, split_data, "
-                            "or transform_data)."
-                        ),
-                    },
-                    "path": {
-                        "type": "string",
-                        "description": (
-                            "Destination file path. Format is controlled by the format "
-                            "argument, not the file extension."
-                        ),
-                    },
-                    "format": {
-                        "type": "string",
-                        "description": "Output format: csv (default), parquet, or json.",
-                        "enum": ["csv", "parquet", "json"],
-                        "default": "csv",
-                    },
-                },
-                "required": ["data_handle", "path"],
             },
         ),
         # -- Export / Persistence --------------------------------------------
@@ -844,10 +791,30 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 offset=arguments.get("offset", 0),
             )
 
+        elif name == "search_estimators":
+            # Deprecated — kept for backward compatibility, routes to unified list_estimators
+            logger.warning("search_estimators is deprecated; use list_estimators(query=...)")
+            result = query_registry_tool(
+                query=arguments["query"],
+                limit=arguments.get("limit", 20),
+            )
+
         elif name == "describe_component":
-            result = describe_component_tool(name=arguments["name"])
+            result = describe_component_tool(arguments["estimator"])
 
         # -- Instantiation ---------------------------------------------------
+        elif name == "instantiate":
+            result = instantiate_tool(
+                arguments["spec"],
+                dry_run=arguments.get("dry_run", False),
+            )
+
+        elif name == "set_params":
+            result = set_params_tool(
+                arguments["handle"],
+                arguments["params"],
+            )
+
         elif name == "instantiate_estimator":
             result = instantiate_estimator_tool(
                 estimator=arguments.get("estimator"),
@@ -886,6 +853,12 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("cv_folds", 3),
             )
 
+        elif name == "validate_pipeline":
+            validator = get_composition_validator()
+            validation = validator.validate_pipeline(arguments["components"])
+            result = validation.to_dict()
+            result["success"] = result["valid"]
+
         # -- Data ------------------------------------------------------------
         elif name == "list_available_data":
             result = list_available_data_tool(arguments.get("is_demo"))
@@ -904,31 +877,12 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         elif name == "release_data_handle":
             result = release_data_handle_tool(arguments["data_handle"])
 
-        elif name == "inspect_data":
-            result = inspect_data_tool(arguments["data_handle"])
-
-        elif name == "split_data":
-            result = split_data_tool(
-                data_handle=arguments["data_handle"],
-                test_size=arguments.get("test_size"),
-                fh=arguments.get("fh"),
-            )
-
-        elif name == "transform_data":
-            result = transform_data_tool(
-                data_handle=arguments["data_handle"],
-                action=arguments.get("action", "format"),
-                auto_infer_freq=arguments.get("auto_infer_freq", True),
-                fill_missing=arguments.get("fill_missing", True),
-                remove_duplicates=arguments.get("remove_duplicates", True),
-                to_mtype=arguments.get("to_mtype"),
-            )
-
-        elif name == "save_data":
-            result = save_data_tool(
-                data_handle=arguments["data_handle"],
-                path=arguments["path"],
-                format=arguments.get("format", "csv"),
+        elif name == "format_time_series":
+            result = format_time_series_tool(
+                arguments["data_handle"],
+                arguments.get("auto_infer_freq", True),
+                arguments.get("fill_missing", True),
+                arguments.get("remove_duplicates", True),
             )
 
         elif name == "auto_format_on_load":
