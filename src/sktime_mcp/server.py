@@ -782,7 +782,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
     try:
         # -- Discovery -------------------------------------------------------
-        if name == "list_estimators":
+        if name == "query_registry":
             result = query_registry_tool(
                 task=arguments.get("task"),
                 tags=arguments.get("tags"),
@@ -799,7 +799,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 limit=arguments.get("limit", 20),
             )
 
-        elif name == "describe_estimator":
+        elif name == "describe_component":
             result = describe_component_tool(arguments["estimator"])
 
         # -- Instantiation ---------------------------------------------------
