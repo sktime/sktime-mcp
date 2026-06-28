@@ -1,0 +1,42 @@
+# Version control
+.git
+.github
+
+# Python caches
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+
+# Virtual environments
+.venv
+venv
+env
+
+# IDE / editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# Build artifacts
+dist/
+*.egg-info
+build/
+
+# Documentation
+docs/_build/
+docs/build/
+
+# Project-specific ignores
+mcp_server.log
+.ignore/
+TODO.md
+.pre-commit-config.yaml
+.readthedocs.yaml
+
+# Docker (prevent recursive context)
+Dockerfile
+docker-compose.yml
+.dockerignore

@@ -81,13 +81,13 @@ def _validate_params(
                 "warnings": warnings,
             }
 
-    # check if keys match known hyperparameters (warn, don't error)
+    # check if keys match known parameters (warn, don't error)
     if estimator_name and params:
         registry = get_registry()
         node = registry.get_estimator_by_name(estimator_name)
 
-        if node is not None and node.hyperparameters:
-            known_keys = set(node.hyperparameters.keys())
+        if node is not None and node.parameters:
+            known_keys = set(node.parameters.keys())
             provided_keys = set(params.keys())
             unknown_keys = provided_keys - known_keys
 
@@ -162,11 +162,27 @@ def instantiate_estimator_tool(
     ...     params_list=[{}, {"order": [1, 1, 1]}],
     ... )
     """
-    # ── Normalise the two calling conventions ──────────────────────────
-    if estimator is not None and components is not None:
-        return {
-            "success": False,
-            "error": ("Provide either 'estimator' (single) or 'components' (pipeline), not both."),
+    Create an estimator instance and return a handle.
+
+    Args:
+        estimator: Name of the estimator class (e.g., "ARIMA")
+        params: Optional parameters for the estimator
+
+    Returns:
+        Dictionary with:
+        - success: bool
+        - handle: Unique handle ID string
+        - estimator: Name of the estimator
+        - params: Parameters used
+        - warnings: List of any validation warnings
+
+    Example:
+        >>> instantiate_estimator_tool("ARIMA", {"order": [1, 1, 1]})
+        {
+            "success": True,
+            "handle": "est_abc123def456",
+            "estimator": "ARIMA",
+            "params": {"order": [1, 1, 1]}
         }
 
     if estimator is None and components is None:
