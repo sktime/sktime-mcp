@@ -41,11 +41,10 @@ from sktime_mcp.tools.classify import (
 )
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
-    load_data_source_async_tool,
     load_data_source_tool,
     release_data_handle_tool,
 )
-from sktime_mcp.tools.describe_estimator import describe_estimator_tool
+from sktime_mcp.tools.describe_component import describe_component_tool
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_predict_async_tool,
@@ -66,9 +65,8 @@ from sktime_mcp.tools.job_tools import (
     list_jobs_tool,
 )
 from sktime_mcp.tools.list_available_data import list_available_data_tool
-from sktime_mcp.tools.list_estimators import (
-    get_available_tags,
-    list_estimators_tool,
+from sktime_mcp.tools.query_registry import (
+    query_registry_tool,
 )
 from sktime_mcp.tools.save_model import save_model_tool
 
@@ -206,7 +204,7 @@ async def list_tools() -> list[Tool]:
     return [
         # -- Discovery -------------------------------------------------------
         Tool(
-            name="list_estimators",
+            name="query_registry",
             description=(
                 "Discover sktime estimators by task, capability tags, or name search. "
                 "Common tags you can filter by: "
@@ -215,7 +213,7 @@ async def list_tools() -> list[Tool]:
                 "'handles-missing-data' (bool) - NaN handling, "
                 "'scitype:y' (str) - target type ('univariate'/'multivariate'/'both'), "
                 "'requires-fh-in-fit' (bool) - needs forecast horizon at fit time. "
-                "Use get_available_tags for the full catalog."
+                "Set task='tag' (or 'tags') to query the full list of capability tags."
             ),
             inputSchema={
                 "type": "object",
@@ -249,7 +247,7 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
-            name="describe_estimator",
+            name="describe_component",
             description="Get detailed information about a specific sktime estimator",
             inputSchema={
                 "type": "object",
@@ -542,25 +540,6 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
-            name="load_data_source_async",
-            description=(
-                "Load data from any source in the background "
-                "(non-blocking). Returns a job_id to track "
-                "progress. The data_handle is available in "
-                "the job result when completed."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "config": {
-                        "type": "object",
-                        "description": "Data source configuration. Same format as load_data_source.",
-                    },
-                },
-                "required": ["config"],
-            },
-        ),
-        Tool(
             name="release_data_handle",
             description="Release a data handle and free memory",
             inputSchema={
@@ -804,7 +783,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     try:
         # -- Discovery -------------------------------------------------------
         if name == "list_estimators":
-            result = list_estimators_tool(
+            result = query_registry_tool(
                 task=arguments.get("task"),
                 tags=arguments.get("tags"),
                 query=arguments.get("query"),
@@ -815,16 +794,13 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         elif name == "search_estimators":
             # Deprecated — kept for backward compatibility, routes to unified list_estimators
             logger.warning("search_estimators is deprecated; use list_estimators(query=...)")
-            result = list_estimators_tool(
+            result = query_registry_tool(
                 query=arguments["query"],
                 limit=arguments.get("limit", 20),
             )
 
         elif name == "describe_estimator":
-            result = describe_estimator_tool(arguments["estimator"])
-
-        elif name == "get_available_tags":
-            result = get_available_tags()
+            result = describe_component_tool(arguments["estimator"])
 
         # -- Instantiation ---------------------------------------------------
         elif name == "instantiate":
@@ -887,10 +863,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         elif name == "list_available_data":
             result = list_available_data_tool(arguments.get("is_demo"))
         elif name == "load_data_source":
-            result = load_data_source_tool(arguments["config"])
-
-        elif name == "load_data_source_async":
-            result = load_data_source_async_tool(arguments["config"])
+            result = load_data_source_tool(arguments["config"], arguments.get("run_async", False))
 
         elif name == "list_data_sources":
             # Deprecated — info is now in load_data_source description

@@ -102,8 +102,8 @@ def _validate_params(
     if estimator_name and params:
         registry = get_registry()
         node = registry.get_estimator_by_name(estimator_name)
-        if node is not None and node.hyperparameters:
-            known_keys = set(node.hyperparameters.keys())
+        if node is not None and node.parameters:
+            known_keys = set(node.parameters.keys())
             unknown_keys = set(params.keys()) - known_keys
             if unknown_keys:
                 warnings.append(
@@ -154,10 +154,10 @@ def _build_pipeline_spec(
         missing = [name for name in components if registry.get_estimator_by_name(name) is None]
         raise ValueError(f"Unknown estimator(s): {missing}")
 
-    all_transformers_except_last = all(task == "transformation" for task in tasks[:-1])
+    all_transformers_except_last = all(task == "transformer" for task in tasks[:-1])
     final_task = tasks[-1]
 
-    if all_transformers_except_last and final_task == "forecasting":
+    if all_transformers_except_last and final_task == "forecaster":
         if len(components) == 2:
             lines.append(
                 'return TransformedTargetForecaster(steps=[("transformer", c0), ("forecaster", c1)])'
@@ -168,10 +168,10 @@ def _build_pipeline_spec(
             lines.append(
                 f'return TransformedTargetForecaster(steps=[("transformers", tp), ("forecaster", c{len(components) - 1})])'
             )
-    elif all_transformers_except_last and final_task in ("classification", "regression"):
+    elif all_transformers_except_last and final_task in ("classifier", "regressor"):
         steps = ", ".join(f'("step_{i}", c{i})' for i in range(len(components)))
         lines.append(f"return Pipeline(steps=[{steps}])")
-    elif all(task == "transformation" for task in tasks):
+    elif all(task == "transformer" for task in tasks):
         steps = ", ".join(f'("step_{i}", c{i})' for i in range(len(components)))
         lines.append(f"return TransformerPipeline(steps=[{steps}])")
     else:
