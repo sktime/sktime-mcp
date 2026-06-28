@@ -51,6 +51,47 @@ git clone https://github.com/sktime/sktime-mcp
 cd sktime-mcp
 python3 -m pip install -e ".[dev]"
 ```
+
+### 🐳 Docker
+
+Run without installing anything locally (only Docker required):
+
+```bash
+# Build the image
+docker build -t sktime-mcp .
+
+# Run the MCP server (stdio transport)
+docker run -i sktime-mcp
+```
+
+Or use Docker Compose:
+
+```bash
+docker compose build
+docker compose run sktime-mcp
+```
+
+**Claude Desktop** — use Docker as the MCP server command:
+
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "sktime-mcp"]
+    }
+  }
+}
+```
+
+Environment variables can be passed at runtime:
+
+```bash
+docker run -i -e SKTIME_MCP_LOG_LEVEL=DEBUG sktime-mcp
+```
+
+For a more detailed first-time setup flow, including MCP server verification and troubleshooting, see [Beginner Setup](#-beginner-setup-firsttime-users).
+
 ## 🧭 Beginner Setup (First‑Time Users)
 
 If you are new to sktime‑mcp or to MCP‑based workflows, this section provides a minimal starting point to help you verify that your setup is working correctly.
@@ -207,21 +248,22 @@ The `sktime-mcp` server exposes a rich suite of tools categorized logically. Eve
 
 ### Category 1: Discovery & Registry Tools
 
-These tools enable the LLM to inspect the native `sktime` registry, search for estimators matching specific criteria, and understand their capability profiles.
+These tools enable the LLM to inspect the native `sktime` registry, search for estimators, capability tags, or performance metrics, and understand their capability profiles.
 
-#### 1. `list_estimators`
-Discover estimator classes from the `sktime` registry by task type, capabilities, or name query.
+#### 1. `query_registry`
+Unified entry point to discover and search for estimators, capability tags, or performance metrics in the `sktime` ecosystem.
 * **Arguments:**
-  * `task` (`str`, optional): Filter by task type. Valid values: `"forecasting"`, `"classification"`, `"regression"`, `"transformation"`, `"clustering"`, `"detection"`.
-  * `tags` (`dict[str, Any]`, optional): Key-value pairs filtering by capability tags (e.g., `{"capability:pred_int": true, "handles-missing-data": true}`).
-  * `query` (`str`, optional): Case-insensitive substring search on the estimator's class name or docstring.
+  * `target` (`str`, required): What registry target to search. Valid values: `"estimators"`, `"tags"`, `"metrics"`.
+  * `task` (`str`, optional): Filter estimators or metrics by task type (e.g. `"forecasting"`, `"classification"`, `"regression"`, `"transformation"`, `"clustering"`, `"detection"`, `"metric"`).
+  * `tags` (`dict[str, Any]`, optional): Key-value pairs filtering estimators by capability tags (e.g., `{"capability:pred_int": true}`).
+  * `query` (`str`, optional): Case-insensitive substring search on names or descriptions.
   * `limit` (`int`, optional, default=`50`): Maximum number of results to return.
   * `offset` (`int`, optional, default=`0`): Number of entries to skip for pagination.
 * **Returns:**
   ```json
   {
     "success": true,
-    "estimators": [
+    "results": [
       {
         "name": "ARIMA",
         "task": "forecasting",
@@ -233,48 +275,32 @@ Discover estimator classes from the `sktime` registry by task type, capabilities
         "import_path": "sktime.forecasting.arima.ARIMA"
       }
     ],
+    "count": 1,
     "total": 1
   }
   ```
 
-#### 2. `describe_estimator`
-Get full documentation, hyperparameters, capability tags, and Python import path for a specific named estimator class.
+#### 2. `describe_component`
+Get full documentation, hyperparameters, capability tags, and Python import path for ANY specific class or component in the `sktime` ecosystem (estimators, transformers, splitters, metrics, aligners).
 * **Arguments:**
-  * `estimator` (`str`, required): Name of the estimator class (e.g., `"ARIMA"`, `"NaiveForecaster"`).
+  * `name` (`str`, required): Name of the component class (e.g., `"ARIMA"`, `"SlidingWindowSplitter"`, `"MeanAbsolutePercentageError"`).
 * **Returns:**
   ```json
   {
     "success": true,
     "name": "ARIMA",
-    "description": "Autoregressive Integrated Moving Average...",
-    "params": {
-      "order": {
-        "type": "tuple",
-        "default": [1, 0, 0],
-        "description": "The (p,d,q) order of the model."
-      }
+    "task": "forecasting",
+    "module": "sktime.forecasting.arima",
+    "parameters": {
+      "order": [1, 0, 0]
     },
     "tags": {
       "capability:pred_int": true
     },
-    "import_path": "sktime.forecasting.arima.ARIMA"
-  }
-  ```
-
-#### 3. `get_available_tags`
-List all queryable capability tags across the `sktime` registry with their descriptions and expected value types.
-* **Arguments:** None.
-* **Returns:**
-  ```json
-  {
-    "success": true,
-    "tags": {
-      "capability:pred_int": {
-        "type": "bool",
-        "description": "Whether the forecaster can compute prediction intervals.",
-        "scitype": "forecaster"
-      }
-    }
+    "tag_explanations": {
+      "capability:pred_int": "Whether the forecaster can compute prediction intervals."
+    },
+    "docstring": "Autoregressive Integrated Moving Average..."
   }
   ```
 
@@ -584,38 +610,76 @@ Load custom files, SQL database queries, URLs, or inline JSON into the server as
   }
   ```
 
-#### 18. `save_data`
-Persist an in-memory `data_handle` (such as predictions or transformed series) back to disk.
+#### 18. `inspect_data`
+Inspect a loaded data handle and return rich metadata (mtype, scitype, shape, columns, dtypes, frequency, cutoff, missing counts, head preview, summary statistics).
 * **Arguments:**
-  * `data_handle` (`str`, required): In-memory data handle to save.
-  * `path` (`str`, required): Local filesystem path where the file will be saved.
-  * `format` (`str`, optional): Output format (inferred from path extension if omitted: `"csv"`, `"parquet"`, `"json"`).
-* **Returns:**
-  ```json
-  {
-    "success": true,
-    "saved_path": "/home/user/forecasts.csv",
-    "message": "Data saved successfully."
-  }
-  ```
-
-#### 19. `format_time_series`
-Clean, fill missing values, deduplicate, and standardize loaded time series data.
-* **Arguments:**
-  * `data_handle` (`str`, required): Target data handle.
-  * `auto_infer_freq` (`bool`, optional, default=`true`): Re-infer time delta frequency.
-  * `fill_missing` (`bool`, optional, default=`true`): Interpolate missing values using forward/backward fills.
-  * `remove_duplicates` (`bool`, optional, default=`true`): Deduplicate timestamps.
+  * `data_handle` (`str`, required): Handle to inspect.
 * **Returns:**
   ```json
   {
     "success": true,
     "data_handle": "data_abc123",
-    "changes_applied": ["inferred frequency: M", "filled 3 missing values"]
+    "mtype": "pd.Series",
+    "scitype": "Series",
+    "shape": [60],
+    "cutoff": "2024-12-01",
+    "n_missing": 0,
+    "head": {},
+    "summary_stats": {}
   }
   ```
 
-#### 20. `release_data_handle`
+#### 19. `split_data`
+Split a time series handle into temporal train/test sets, returning two new handles.
+* **Arguments:**
+  * `data_handle` (`str`, required): Handle to split.
+  * `test_size` (`float`, optional): Fraction in (0, 1) to hold out. Mutually exclusive with `fh`.
+  * `fh` (`int | list[int]`, optional): Forecast horizon — integer steps or list of relative indices (uses `max(fh)` steps).
+* **Returns:**
+  ```json
+  {
+    "success": true,
+    "train_handle": "data_train123",
+    "test_handle": "data_test456",
+    "cutoff": "2024-06-01",
+    "train_size": 48,
+    "n_test": 12
+  }
+  ```
+
+#### 20. `transform_data`
+Transform a data handle — format (auto-fix frequency/dupes/NaN) or convert mtype.
+* **Arguments:**
+  * `data_handle` (`str`, required): Handle to transform.
+  * `action` (`str`, optional, default=`"format"`): `"format"` or `"convert"`.
+  * `auto_infer_freq`, `fill_missing`, `remove_duplicates` (`bool`, optional): Format-mode options.
+  * `to_mtype` (`str`, optional): Required when `action="convert"` (e.g. `"pd.DataFrame"`).
+* **Returns:**
+  ```json
+  {
+    "success": true,
+    "data_handle": "data_abc123",
+    "changes_applied": ["Inferred and set frequency to 'MS'"]
+  }
+  ```
+
+#### 21. `save_data`
+Persist an in-memory `data_handle` (target series and exogenous features) to disk.
+* **Arguments:**
+  * `data_handle` (`str`, required): In-memory data handle to save.
+  * `path` (`str`, required): Local filesystem path where the file will be saved.
+  * `format` (`str`, optional, default=`"csv"`): Output format — `"csv"`, `"parquet"`, or `"json"`.
+* **Returns:**
+  ```json
+  {
+    "success": true,
+    "saved_path": "/home/user/forecasts.csv",
+    "format": "csv",
+    "rows": 60
+  }
+  ```
+
+#### 22. `release_data_handle`
 Free a data handle and its contents from server memory.
 * **Arguments:**
   * `data_handle` (`str`, required): Handle ID to release.
@@ -633,7 +697,7 @@ Free a data handle and its contents from server memory.
 
 These tools manage the serialization of estimator instances and generation of production-ready source code.
 
-#### 21. `save_model`
+#### 23. `save_model`
 Serialize an estimator blueprint or fitted model handle to disk using sktime-MLflow integration.
 * **Arguments:**
   * `estimator_handle` (`str`, required): Estimator or pipeline handle to save.
@@ -649,7 +713,7 @@ Serialize an estimator blueprint or fitted model handle to disk using sktime-MLf
   }
   ```
 
-#### 22. `load_model`
+#### 24. `load_model`
 Reload a serialized blueprint or fitted model back into an active `estimator_handle`.
 * **Arguments:**
   * `path` (`str`, required): Filesystem path to the model directory.
@@ -662,7 +726,7 @@ Reload a serialized blueprint or fitted model back into an active `estimator_han
   }
   ```
 
-#### 23. `export_code`
+#### 25. `export_code`
 Generate standalone, executable Python code to reproduce an estimator's structure and execution.
 * **Arguments:**
   * `handle` (`str`, required): Handle ID of the estimator/pipeline.
@@ -945,9 +1009,9 @@ Below are examples demonstrating how an LLM utilizes these redesigned tools to c
 1. **Discover Models**
    The LLM queries for forecasting models supporting prediction intervals.
    ```json
-   // list_estimators
+   // query_registry
    {
-     "task": "forecasting",
+     "task": "forecaster",
      "tags": {
        "capability:pred_int": true
      }
@@ -958,9 +1022,9 @@ Below are examples demonstrating how an LLM utilizes these redesigned tools to c
 2. **Inspect Choice**
    The LLM inspects the parameter schema of `"ARIMA"`.
    ```json
-   // describe_estimator
+   // describe_component
    {
-     "estimator": "ARIMA"
+     "name": "ARIMA"
    }
    ```
 
@@ -1062,7 +1126,10 @@ sktime-mcp/
 │   └── tools/              # MCP tool implementations
 ├── docs/                   # Sphinx documentation source
 ├── examples/               # Usage examples
-└── tests/                  # Test suite
+├── tests/                  # Test suite
+├── Dockerfile              # Multi-stage container build
+├── docker-compose.yml      # Compose service definition
+└── .dockerignore           # Docker build context filter
 ```
 
 ## 🧪 Running Tests
