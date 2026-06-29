@@ -108,7 +108,7 @@ class TestExecutorDataIntegration:
         handles = executor.list_data_handles()
         assert handles["count"] >= 1
 
-        est_result = executor.instantiate("NaiveForecaster", {"strategy": "last"})
+        est_result = executor.instantiate(spec="NaiveForecaster(strategy='last')")
         assert est_result["success"]
 
         pred_result = executor.fit_predict(

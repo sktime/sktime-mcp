@@ -117,29 +117,31 @@ class Executor:
 
     def instantiate(
         self,
-        estimator_name: str,
-        params: dict[str, Any] | None = None,
+        spec: str,
     ) -> dict[str, Any]:
-        """Instantiate an estimator and return a handle."""
-        node = self._registry.get_estimator_by_name(estimator_name)
-        if node is None:
-            return {"success": False, "error": f"Unknown estimator: {estimator_name}"}
-
+        """Instantiate an estimator or pipeline from a spec and return a handle."""
+        from sktime.registry import craft
         try:
-            instance = node.class_ref(**(params or {}))
+            instance = craft(spec)
+            estimator_name = type(instance).__name__
             handle_id = self._handle_manager.create_handle(
                 estimator_name=estimator_name,
                 instance=instance,
-                params=params or {},
+                params={"spec": spec},
             )
             return {
                 "success": True,
                 "handle": handle_id,
                 "estimator": estimator_name,
-                "params": params or {},
+                "spec": spec,
             }
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            import traceback
+            return {
+                "success": False,
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            }
 
     # L-7: We can also add custom load_dataset functions here
     def load_dataset(self, name: str) -> dict[str, Any]:
@@ -184,22 +186,61 @@ class Executor:
     ) -> dict[str, Any]:
         """Fit an estimator."""
         try:
-            instance = self._handle_manager.get_instance(handle_id)
+            handle_info = self._handle_manager.get_info(handle_id)
+            instance = handle_info.instance
         except KeyError:
             return {"success": False, "error": f"Handle not found: {handle_id}"}
 
+        obj_type = getattr(instance, "get_class_tag", lambda x, y: "")("object_type", "")
+        if not hasattr(instance, "fit"):
+            return {
+                "success": False, 
+                "error": f"The {obj_type or 'estimator'} scitype does not support fit(). Please use the 'call_method' tool to interact with its native methods."
+            }
+
+        # Check scitype to determine how to call fit
+        # By default in sktime:
+        # - Forecasters: fit(y, X=None, fh=None)
+        # - Classifiers/Regressors: fit(X, y)
+        # - Transformers/Clusterers: fit(X, y=None)
+        
+        is_classifier_or_regressor = False
+        is_transformer = False
+        if hasattr(instance, "get_class_tag"):
+            obj_type = instance.get_class_tag("object_type", "")
+            if obj_type in ("classifier", "regressor"):
+                is_classifier_or_regressor = True
+            elif obj_type in ("transformer", "clusterer"):
+                is_transformer = True
+
         try:
-            if fh is not None:
-                instance.fit(y, X=X, fh=fh)
-            elif X is not None:
-                instance.fit(y, X=X)
+            if is_classifier_or_regressor:
+                # For classifiers/regressors, y from load_dataset might actually be the feature (X_data) 
+                # because the loader returns X, y. But fit_predict.py extracts y=data, X=exog.
+                # So if X is None, 'y' contains X, and we can't fit because labels are missing.
+                # Actually, our executor.load_dataset maps (X, y) -> y=X, exog=y for classifiers.
+                # So the argument 'y' here is actually X (features), and 'X' here is y (labels).
+                # Therefore we call instance.fit(y, X).
+                instance.fit(y, X)
+            elif is_transformer:
+                if X is not None:
+                    instance.fit(y, X)
+                else:
+                    instance.fit(y)
             else:
-                instance.fit(y)
+                # Assume forecaster or similar default
+                if fh is not None:
+                    instance.fit(y, X=X, fh=fh)
+                elif X is not None:
+                    instance.fit(y, X=X)
+                else:
+                    instance.fit(y)
 
             self._handle_manager.mark_fitted(handle_id)
             return {"success": True, "handle": handle_id, "fitted": True}
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            import traceback
+            return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
 
     def predict(
         self,
@@ -216,29 +257,68 @@ class Executor:
         except KeyError:
             return {"success": False, "error": f"Handle not found: {handle_id}"}
 
+        obj_type = getattr(instance, "get_class_tag", lambda x, y: "")("object_type", "")
+        if not hasattr(instance, "predict") and mode == "predict" and not (hasattr(instance, "transform") and obj_type == "transformer"):
+            return {
+                "success": False, 
+                "error": f"The {obj_type or 'estimator'} scitype does not support predict(). Please use the 'call_method' tool to interact with its native methods."
+            }
+
         if not self._handle_manager.is_fitted(handle_id):
             return {"success": False, "error": "Estimator not fitted"}
 
+        is_classifier_or_regressor = False
+        is_transformer = False
+        if hasattr(instance, "get_class_tag"):
+            obj_type = instance.get_class_tag("object_type", "")
+            if obj_type in ("classifier", "regressor"):
+                is_classifier_or_regressor = True
+            elif obj_type in ("transformer", "clusterer"):
+                is_transformer = True
+
         try:
-            if fh is None:
+            if fh is None and not (is_classifier_or_regressor or is_transformer):
                 fh = list(range(1, 13))
 
             kwargs = {}
             if X is not None:
                 kwargs["X"] = X
 
-            if mode == "predict":
-                predictions = instance.predict(fh=fh, **kwargs)
-            elif mode == "predict_interval":
-                predictions = instance.predict_interval(fh=fh, coverage=coverage, **kwargs)
-            elif mode == "predict_quantiles":
-                predictions = instance.predict_quantiles(fh=fh, alpha=alpha, **kwargs)
-            elif mode == "predict_proba":
-                predictions = instance.predict_proba(fh=fh, **kwargs)
-            elif mode == "predict_var":
-                predictions = instance.predict_var(fh=fh, **kwargs)
+            if is_classifier_or_regressor:
+                # Classifiers take X in predict (and we mapped X in fit_predict to X)
+                # But instance.predict(X) is the signature.
+                # Since kwargs["X"] has it, we can just pass X positionally
+                if mode == "predict":
+                    predictions = instance.predict(X)
+                elif mode == "predict_proba":
+                    predictions = instance.predict_proba(X)
+                else:
+                    return {"success": False, "error": f"Mode {mode} not supported for {obj_type}"}
+            elif is_transformer:
+                if mode == "predict":
+                    if obj_type == "clusterer":
+                        predictions = instance.predict(X) if X is not None else instance.predict(fh=fh) # some clusterers might use predict(X)
+                    else:
+                        # For transformer, transform is basically the predict equivalent if X is passed
+                        if X is not None:
+                            predictions = instance.transform(X)
+                        else:
+                            return {"success": False, "error": "Transform requires X"}
+                else:
+                    return {"success": False, "error": f"Mode {mode} not supported for {obj_type}"}
             else:
-                return {"success": False, "error": f"Unknown prediction mode: {mode}"}
+                if mode == "predict":
+                    predictions = instance.predict(fh=fh, **kwargs)
+                elif mode == "predict_interval":
+                    predictions = instance.predict_interval(fh=fh, coverage=coverage, **kwargs)
+                elif mode == "predict_quantiles":
+                    predictions = instance.predict_quantiles(fh=fh, alpha=alpha, **kwargs)
+                elif mode == "predict_proba":
+                    predictions = instance.predict_proba(fh=fh, **kwargs)
+                elif mode == "predict_var":
+                    predictions = instance.predict_var(fh=fh, **kwargs)
+                else:
+                    return {"success": False, "error": f"Unknown prediction mode: {mode}"}
 
             from sktime_mcp.server import sanitize_for_json
             
@@ -275,6 +355,62 @@ class Executor:
             return out
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def call_method(
+        self,
+        handle_id: str,
+        method_name: str,
+        kwargs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Dynamically call a method on the underlying estimator."""
+        try:
+            instance = self._handle_manager.get_instance(handle_id)
+        except KeyError:
+            return {"success": False, "error": f"Handle not found: {handle_id}"}
+        
+        if not hasattr(instance, method_name):
+            obj_type = getattr(instance, "get_class_tag", lambda x, y: "")("object_type", "")
+            return {"success": False, "error": f"The {obj_type or 'estimator'} does not have a method '{method_name}'."}
+
+        kwargs = kwargs or {}
+        
+        try:
+            method = getattr(instance, method_name)
+            
+            # Map data_handle and dataset from kwargs if they exist
+            # This allows the LLM to pass 'dataset': 'airline' and we inject the actual data
+            for k, v in list(kwargs.items()):
+                if k.endswith("_dataset") and isinstance(v, str):
+                    data_res = self.load_dataset(v)
+                    if data_res.get("success"):
+                        # Replace the kwarg with the actual data (e.g. y_dataset -> y)
+                        actual_key = k.replace("_dataset", "")
+                        kwargs[actual_key] = data_res["data"]
+                        del kwargs[k]
+                elif k.endswith("_data_handle") and isinstance(v, str):
+                    if v in self._data_handles:
+                        actual_key = k.replace("_data_handle", "")
+                        kwargs[actual_key] = self._data_handles[v]["y"]
+                        del kwargs[k]
+                    else:
+                        return {"success": False, "error": f"Unknown data handle: {v}"}
+
+            result = method(**kwargs)
+            
+            from sktime_mcp.server import sanitize_for_json
+            if hasattr(result, "to_dict"):
+                if isinstance(result, __import__("pandas").DataFrame) and isinstance(result.columns, __import__("pandas").MultiIndex):
+                    result.columns = ["_".join(map(str, col)) for col in result.columns.values]
+                    sanitized = result.to_dict(orient="list")
+                else:
+                    sanitized = result.to_dict()
+            else:
+                sanitized = sanitize_for_json(result)
+            
+            return {"success": True, "result": sanitized}
+        except Exception as e:
+            import traceback
+            return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
 
     def update(
         self,
@@ -377,6 +513,94 @@ class Executor:
             handle_info.metadata["training_dataset"] = dataset
 
         return self.predict(handle_id, fh=fh, X=X)
+
+    async def fit_async(
+        self,
+        handle_id: str,
+        dataset: str | None = None,
+        data_handle: str | None = None,
+        job_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Async version of fit with job tracking."""
+        try:
+            import asyncio
+            from sktime_mcp.runtime.jobs import JobStatus
+            
+            # Update status to RUNNING
+            self._job_manager.update_job(job_id, status=JobStatus.RUNNING)
+
+            # Step 1: Load data
+            if data_handle:
+                self._job_manager.update_job(
+                    job_id,
+                    completed_steps=0,
+                    current_step=f"Loading data from handle '{data_handle}'...",
+                )
+                await asyncio.sleep(0.01)
+                
+                if data_handle not in self._data_handles:
+                    raise ValueError(f"Unknown data handle: {data_handle}")
+                data_info = self._data_handles[data_handle]
+                y = data_info["y"]
+                X = data_info.get("X")
+            else:
+                self._job_manager.update_job(
+                    job_id,
+                    completed_steps=0,
+                    current_step=f"Loading dataset '{dataset}'...",
+                )
+                await asyncio.sleep(0.01)
+                
+                data_result = self.load_dataset(dataset)
+                if not data_result["success"]:
+                    raise ValueError(data_result["error"])
+                y = data_result["data"]
+                X = data_result.get("exog")
+                
+            # Step 2: Fit model
+            self._job_manager.update_job(
+                job_id,
+                completed_steps=1,
+                current_step="Fitting model (this may take a while)...",
+            )
+            
+            # Run fit in thread pool so it doesn't block async loop
+            loop = asyncio.get_running_loop()
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                def run_fit():
+                    return self.fit(handle_id, y, X=X)
+                fit_result = await loop.run_in_executor(pool, run_fit)
+            
+            if not fit_result["success"]:
+                raise ValueError(fit_result["error"])
+                
+            if dataset:
+                try:
+                    handle_info = self._handle_manager.get_info(handle_id)
+                    handle_info.metadata["training_dataset"] = dataset
+                except Exception:
+                    pass
+                    
+            self._job_manager.update_job(
+                job_id,
+                status=JobStatus.COMPLETED,
+                completed_steps=2,
+                current_step="Training completed successfully.",
+                result={"success": True, "handle": handle_id, "fitted": True},
+            )
+            return {"success": True, "handle": handle_id}
+            
+        except Exception as e:
+            import traceback
+            from sktime_mcp.runtime.jobs import JobStatus
+            self._job_manager.update_job(
+                job_id,
+                status=JobStatus.FAILED,
+                current_step="Training failed.",
+                errors=[str(e), traceback.format_exc()],
+            )
+            return {"success": False, "error": str(e)}
 
     async def fit_predict_async(
         self,
@@ -538,143 +762,7 @@ class Executor:
             return {"success": False, "error": str(e), "job_id": job_id}
 
     # L-9: We can add more methods here to handle diverse use cases and their pipelines
-    def instantiate_pipeline(
-        self,
-        components: list[str],
-        params_list: list[dict[str, Any]] | None = None,
-    ) -> dict[str, Any]:
-        """
-        Instantiate a pipeline from a list of components.
 
-        Args:
-            components: List of estimator names in pipeline order
-            params_list: Optional list of parameter dicts for each component
-
-        Returns:
-            Dictionary with success status and handle
-        """
-        if not components:
-            return {"success": False, "error": "Pipeline cannot be empty"}
-
-        # Validate the pipeline first
-        from sktime_mcp.composition.validator import get_composition_validator
-
-        validator = get_composition_validator()
-        validation = validator.validate_pipeline(components)
-
-        if not validation.valid:
-            return {
-                "success": False,
-                "error": "Invalid pipeline composition",
-                "validation_errors": validation.errors,
-                "suggestions": validation.suggestions,
-            }
-
-        try:
-            # If only one component, just instantiate it directly
-            if len(components) == 1:
-                params = params_list[0] if params_list else {}
-                return self.instantiate(components[0], params)
-
-            # Build the pipeline
-            # Get all component nodes
-            component_instances = []
-            params_list = params_list or [{}] * len(components)
-
-            for i, comp_name in enumerate(components):
-                node = self._registry.get_estimator_by_name(comp_name)
-                if node is None:
-                    return {"success": False, "error": f"Unknown estimator: {comp_name}"}
-
-                params = params_list[i] if i < len(params_list) else {}
-                instance = node.class_ref(**params)
-                component_instances.append(instance)
-
-            # Determine the type of pipeline to create
-            # Check if all but last are transformers
-            all_transformers_except_last = all(
-                self._registry.get_estimator_by_name(comp).task == "transformer"
-                for comp in components[:-1]
-            )
-
-            final_task = self._registry.get_estimator_by_name(components[-1]).task
-
-            if all_transformers_except_last and final_task == "forecaster":
-                # Use TransformedTargetForecaster
-                from sktime.forecasting.compose import TransformedTargetForecaster
-
-                # Chain transformers if multiple
-                if len(component_instances) == 2:
-                    pipeline = TransformedTargetForecaster(
-                        [
-                            ("transformer", component_instances[0]),
-                            ("forecaster", component_instances[1]),
-                        ]
-                    )
-                else:
-                    # Multiple transformers - chain them
-                    from sktime.transformations.compose import TransformerPipeline
-
-                    transformer_pipeline = TransformerPipeline(
-                        [(f"step_{i}", comp) for i, comp in enumerate(component_instances[:-1])]
-                    )
-                    pipeline = TransformedTargetForecaster(
-                        [
-                            ("transformers", transformer_pipeline),
-                            ("forecaster", component_instances[-1]),
-                        ]
-                    )
-
-            elif all_transformers_except_last and final_task in ("classifier", "regressor"):
-                # Use sklearn-style Pipeline
-                from sktime.pipeline import Pipeline
-
-                pipeline = Pipeline(
-                    [(f"step_{i}", comp) for i, comp in enumerate(component_instances)]
-                )
-
-            elif all(
-                self._registry.get_estimator_by_name(comp).task == "transformer"
-                for comp in components
-            ):
-                # All transformers - use TransformerPipeline
-                from sktime.transformations.compose import TransformerPipeline
-
-                pipeline = TransformerPipeline(
-                    [(f"step_{i}", comp) for i, comp in enumerate(component_instances)]
-                )
-
-            else:
-                return {
-                    "success": False,
-                    "error": "Unsupported pipeline composition type",
-                    "hint": "Currently supports: transformers → forecaster, transformers → classifier/regressor, or transformer chains",
-                }
-
-            # Create a handle for the pipeline
-            pipeline_name = " → ".join(components)
-            handle_id = self._handle_manager.create_handle(
-                estimator_name=pipeline_name,
-                instance=pipeline,
-                params={"components": components, "params_list": params_list},
-            )
-
-            return {
-                "success": True,
-                "handle": handle_id,
-                "pipeline": pipeline_name,
-                "components": components,
-                "params_list": params_list,
-            }
-
-        except Exception as e:
-            import traceback
-
-            return {
-                "success": False,
-                "error": str(e),
-                "traceback": traceback.format_exc(),
-            }
 
     def list_datasets(self) -> list[str]:
         """List available demo datasets."""

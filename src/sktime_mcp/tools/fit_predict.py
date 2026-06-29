@@ -44,6 +44,7 @@ def fit_tool(
     estimator_handle: str,
     dataset: str | None = None,
     data_handle: str | None = None,
+    run_async: bool = False,
 ) -> dict[str, Any]:
     """
     Fit an estimator on a dataset.
@@ -60,6 +61,46 @@ def fit_tool(
     
     if not dataset and not data_handle:
         return {"success": False, "error": "Either 'dataset' or 'data_handle' is required."}
+    if run_async:
+        import asyncio
+        from sktime_mcp.runtime.jobs import get_job_manager
+        
+        job_manager = get_job_manager()
+        try:
+            handle_info = executor._handle_manager.get_info(estimator_handle)
+            estimator_name = handle_info.estimator_name
+        except Exception:
+            estimator_name = "Unknown"
+            
+        source_name = dataset if dataset else data_handle
+        job_id = job_manager.create_job(
+            job_type="fit",
+            estimator_handle=estimator_handle,
+            estimator_name=estimator_name,
+            dataset_name=source_name,
+            total_steps=2,
+        )
+        
+        coro = executor.fit_async(estimator_handle, dataset=dataset, data_handle=data_handle, job_id=job_id)
+        
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(coro)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            import threading
+            def run_loop(l, c):
+                asyncio.set_event_loop(l)
+                l.run_until_complete(c)
+                l.close()
+            threading.Thread(target=run_loop, args=(loop, coro), daemon=True).start()
+            
+        return {
+            "success": True,
+            "job_id": job_id,
+            "message": f"Training job started for {estimator_name}. Use check_job_status('{job_id}') to monitor progress."
+        }
 
     if data_handle is not None:
         if data_handle not in executor._data_handles:
@@ -95,6 +136,8 @@ def predict_tool(
     mode: str = "predict",
     coverage: float | list[float] = 0.9,
     alpha: float | list[float] | None = None,
+    dataset: str | None = None,
+    data_handle: str | None = None,
 ) -> dict[str, Any]:
     """
     Generate predictions from a fitted estimator.
@@ -102,12 +145,11 @@ def predict_tool(
     Args:
         estimator_handle: Handle of a fitted estimator
         horizon: Forecast horizon
-        mode: Prediction mode ("predict", "predict_interval", "predict_quantiles", "predict_proba", "predict_var")
+        mode: Prediction mode
         coverage: Coverage level for intervals
         alpha: Alpha values for quantiles
-
-    Returns:
-        Dictionary with predictions
+        dataset: Dataset for X data (for non-forecasters)
+        data_handle: Data handle for X data (for non-forecasters)
     """
     validation = _validate_horizon(horizon)
     if not validation["valid"]:
@@ -115,11 +157,33 @@ def predict_tool(
             "success": False,
             "error": validation["error"],
         }
+    
     executor = get_executor()
+    X = None
+    
+    if dataset or data_handle:
+        if dataset and data_handle:
+            return {"success": False, "error": "Provide either 'dataset' or 'data_handle', not both."}
+        
+        if data_handle is not None:
+            if data_handle not in executor._data_handles:
+                return {"success": False, "error": f"Unknown data handle: {data_handle}"}
+            data_info = executor._data_handles[data_handle]
+            # For classifiers, 'y' in data_info (the data from load) might be X
+            # But the executor load_dataset for classification returns y=X, exog=y.
+            # Thus, the features are in `data_info["y"]`.
+            X = data_info["y"]
+        else:
+            data_result = executor.load_dataset(dataset)
+            if not data_result["success"]:
+                return data_result
+            X = data_result["data"]
+            
     fh = list(range(1, horizon + 1))
     return executor.predict(
         estimator_handle,
         fh=fh,
+        X=X,
         mode=mode,
         coverage=coverage,
         alpha=alpha,
