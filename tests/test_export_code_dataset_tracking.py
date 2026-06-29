@@ -14,7 +14,7 @@ class TestExportCodeDatasetTracking:
         from sktime_mcp.tools.fit_predict import fit_tool
         from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 
-        inst = instantiate_estimator_tool("NaiveForecaster", {"strategy": "last"})
+        inst = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
         assert inst["success"], inst
         handle = inst["handle"]
 
@@ -33,7 +33,7 @@ class TestExportCodeDatasetTracking:
         from sktime_mcp.tools.fit_predict import fit_tool
         from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 
-        inst = instantiate_estimator_tool("NaiveForecaster", {"strategy": "last"})
+        inst = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
         assert inst["success"], inst
         handle = inst["handle"]
 
@@ -52,7 +52,7 @@ class TestExportCodeDatasetTracking:
         from sktime_mcp.tools.fit_predict import fit_tool
         from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 
-        inst = instantiate_estimator_tool("NaiveForecaster", {"strategy": "last"})
+        inst = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
         assert inst["success"], inst
         handle = inst["handle"]
 
@@ -71,7 +71,7 @@ class TestExportCodeDatasetTracking:
         from sktime_mcp.tools.codegen import export_code_tool
         from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 
-        inst = instantiate_estimator_tool("NaiveForecaster", {"strategy": "last"})
+        inst = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
         assert inst["success"], inst
         handle = inst["handle"]
 

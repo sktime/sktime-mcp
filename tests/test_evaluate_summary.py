@@ -15,7 +15,7 @@ class TestEvaluateSummary:
         from sktime_mcp.tools.evaluate import evaluate_estimator_tool
         from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 
-        inst = instantiate_estimator_tool("NaiveForecaster", {"strategy": "last"})
+        inst = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
         assert inst["success"], inst
         handle = inst["handle"]
 
@@ -28,7 +28,7 @@ class TestEvaluateSummary:
         from sktime_mcp.tools.evaluate import evaluate_estimator_tool
         from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 
-        inst = instantiate_estimator_tool("NaiveForecaster", {"strategy": "last"})
+        inst = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
         assert inst["success"], inst
         handle = inst["handle"]
 
@@ -51,7 +51,7 @@ class TestEvaluateSummary:
         from sktime_mcp.tools.evaluate import evaluate_estimator_tool
         from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 
-        inst = instantiate_estimator_tool("NaiveForecaster", {"strategy": "last"})
+        inst = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
         assert inst["success"], inst
         handle = inst["handle"]
 
@@ -69,7 +69,7 @@ class TestEvaluateSummary:
         from sktime_mcp.tools.evaluate import evaluate_estimator_tool
         from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 
-        inst = instantiate_estimator_tool("NaiveForecaster", {"strategy": "last"})
+        inst = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
         assert inst["success"], inst
         handle = inst["handle"]
 

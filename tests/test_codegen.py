@@ -13,8 +13,6 @@ sys.path.insert(0, "src")
 
 from sktime_mcp.tools.codegen import (
     _format_value,
-    _generate_pipeline_code,
-    _generate_single_estimator_code,
     _is_valid_var_name,
     export_code_tool,
 )
@@ -76,61 +74,6 @@ class TestFormatValue:
         assert result == "[[1, 2], [3, 4]]"
 
 
-class TestSingleEstimatorCodeGen:
-    """Tests for _generate_single_estimator_code."""
-
-    def test_generates_correct_import(self):
-        """Should produce the right import path for NaiveForecaster."""
-        result = _generate_single_estimator_code("NaiveForecaster", {})
-        assert result["success"]
-        assert "from sktime" in result["code"]
-        assert "import NaiveForecaster" in result["code"]
-
-    def test_instantiation_with_params(self):
-        """Params should appear in the generated code."""
-        result = _generate_single_estimator_code("NaiveForecaster", {"strategy": "last"})
-        assert result["success"]
-        assert 'strategy="last"' in result["code"]
-
-    def test_instantiation_without_params(self):
-        """Empty params should produce empty parentheses."""
-        result = _generate_single_estimator_code("NaiveForecaster", {})
-        assert result["success"]
-        assert "NaiveForecaster()" in result["code"]
-
-    def test_custom_var_name(self):
-        """Custom var_name should be used in the output."""
-        result = _generate_single_estimator_code("NaiveForecaster", {}, var_name="forecaster")
-        assert result["success"]
-        assert "forecaster = NaiveForecaster()" in result["code"]
-
-    def test_unknown_estimator_fails(self):
-        """Unknown estimator should return success=False."""
-        result = _generate_single_estimator_code("NotARealEstimator99999", {})
-        assert not result["success"]
-        assert "error" in result
-
-    def test_composite_params_include_step_imports(self):
-        """Composite estimator params should include imports for nested step classes."""
-        from sktime.forecasting.naive import NaiveForecaster
-        from sktime.transformations.series.difference import Differencer
-
-        result = _generate_single_estimator_code(
-            "ForecastingPipeline",
-            {
-                "steps": [
-                    ("differencer", Differencer()),
-                    ("forecaster", NaiveForecaster()),
-                ]
-            },
-            var_name="pipeline",
-        )
-
-        assert result["success"]
-        assert "import ForecastingPipeline" in result["code"]
-        assert "import Differencer" in result["code"]
-        assert "import NaiveForecaster" in result["code"]
-
 
 class TestVarNameValidation:
     """Tests for Python variable name validation in code export."""
@@ -152,62 +95,13 @@ class TestVarNameValidation:
         assert _is_valid_var_name("class") is False
 
 
-class TestPipelineCodeGen:
-    """Tests for _generate_pipeline_code."""
-
-    def test_transformer_forecaster_pipeline(self):
-        """Transformer + Forecaster should use TransformedTargetForecaster."""
-        result = _generate_pipeline_code(
-            ["Deseasonalizer", "NaiveForecaster"],
-            [{}, {}],
-        )
-        assert result["success"]
-        assert "TransformedTargetForecaster" in result["code"]
-
-    def test_all_transformers_pipeline(self):
-        """All transformers should use TransformerPipeline."""
-        result = _generate_pipeline_code(
-            ["Deseasonalizer", "Detrender"],
-            [{}, {}],
-        )
-        assert result["success"]
-        assert "TransformerPipeline" in result["code"]
-
-    def test_unknown_component_fails(self):
-        """Unknown component in pipeline should fail."""
-        result = _generate_pipeline_code(
-            ["NotRealEstimator12345", "NaiveForecaster"],
-            [{}, {}],
-        )
-        assert not result["success"]
-        assert "error" in result
-
-    def test_step_ordering(self):
-        """Steps should be numbered correctly (step_0, step_1)."""
-        result = _generate_pipeline_code(
-            ["Deseasonalizer", "NaiveForecaster"],
-            [{}, {}],
-        )
-        assert result["success"]
-        assert "step_0" in result["code"]
-        assert "step_1" in result["code"]
-
-    def test_pipeline_with_params(self):
-        """Pipeline components should include their params."""
-        result = _generate_pipeline_code(
-            ["NaiveForecaster"],
-            [{"strategy": "mean"}],
-        )
-        assert result["success"]
-        assert 'strategy="mean"' in result["code"]
-
 
 class TestExportCodeTool:
     """Tests for the main export_code_tool function."""
 
-    def _create_handle(self, name="NaiveForecaster", params=None):
+    def _create_handle(self, spec="NaiveForecaster()"):
         """Helper to create an estimator handle."""
-        result = instantiate_estimator_tool(estimator=name, params=params)
+        result = instantiate_estimator_tool(spec=spec)
         assert result["success"], f"Failed to create handle: {result}"
         return result["handle"]
 
@@ -268,7 +162,7 @@ class TestExportCodeTool:
         try:
             result = export_code_tool(handle, var_name="my_forecaster")
             assert result["success"]
-            assert "my_forecaster" in result["code"]
+            assert "my_forecaster = craft(" in result["code"]
         finally:
             self._cleanup_handle(handle)
 
@@ -287,17 +181,17 @@ class TestExportCodeTool:
 
     def test_export_with_params(self):
         """Params should appear in exported code."""
-        handle = self._create_handle("NaiveForecaster", {"strategy": "mean"})
+        handle = self._create_handle("NaiveForecaster(strategy='mean')")
         try:
             result = export_code_tool(handle)
             assert result["success"]
-            assert 'strategy="mean"' in result["code"]
+            assert "strategy='mean'" in result["code"] or 'strategy="mean"' in result["code"]
         finally:
             self._cleanup_handle(handle)
 
     def test_pipeline_handle(self):
         """Pipeline handle should return is_pipeline=True."""
-        result = instantiate_estimator_tool(components=["Deseasonalizer", "NaiveForecaster"])
+        result = instantiate_estimator_tool(spec="Deseasonalizer() * NaiveForecaster()")
         if not result["success"]:
             pytest.skip("Pipeline instantiation not available")
 

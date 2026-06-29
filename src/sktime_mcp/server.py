@@ -269,37 +269,19 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="instantiate_estimator",
             description=(
-                "Create an estimator instance with given parameters. "
-                "Pass 'estimator' for a single estimator, or 'components' "
-                "for a pipeline (list of estimator names in order). "
-                "A single-element components list is equivalent to a single estimator."
+                "Create an estimator or pipeline instance using a sktime craft specification. "
+                "The spec is a string that evaluates to an estimator, e.g., 'ARIMA(order=(1, 1, 1))' "
+                "or 'Detrender() * ARIMA()'."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "estimator": {
+                    "spec": {
                         "type": "string",
-                        "description": "Name of the estimator to instantiate",
-                    },
-                    "params": {
-                        "type": "object",
-                        "description": "Parameters for the estimator",
-                    },
-                    "components": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": (
-                            "List of estimator names in pipeline order "
-                            "(e.g., ['Detrender', 'ARIMA']). "
-                            "Mutually exclusive with 'estimator'."
-                        ),
-                    },
-                    "params_list": {
-                        "type": "array",
-                        "items": {"type": "object"},
-                        "description": "Optional list of parameter dicts for each component",
+                        "description": "Craft specification string.",
                     },
                 },
+                "required": ["spec"],
             },
         ),
         Tool(
@@ -378,6 +360,14 @@ async def list_tools() -> list[Tool]:
                     "alpha": {
                         "description": "Alpha values for quantiles (float or list of floats)",
                     },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Dataset name for providing X to predict (e.g. for classifiers)",
+                    },
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Data handle for providing X to predict (e.g. for classifiers)",
+                    },
                 },
                 "required": ["estimator_handle"],
             },
@@ -418,6 +408,33 @@ async def list_tools() -> list[Tool]:
                     },
                 },
                 "required": ["estimator_handle"],
+            },
+        ),
+        Tool(
+            name="call_method",
+            description=(
+                "Dynamically call any native method on an instantiated sktime component (e.g. 'split', 'get_alignment', '__call__'). "
+                "Use this tool to interact with non-standard scitypes like Splitters, Metrics, or Aligners that do not support "
+                "the generic 'fit' or 'predict' endpoints. Pass 'kwargs' as a dictionary of arguments."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "handle_id": {
+                        "type": "string",
+                        "description": "Memory handle ID of the instantiated component",
+                    },
+                    "method_name": {
+                        "type": "string",
+                        "description": "Name of the method to call (e.g. 'split')",
+                    },
+                    "kwargs": {
+                        "type": "object",
+                        "description": "Dictionary of keyword arguments to pass to the method. "
+                                       "Pass '_dataset' or '_data_handle' as suffixes in keys to inject memory data (e.g., {'y_dataset': 'airline'})."
+                    },
+                },
+                "required": ["handle_id", "method_name"],
             },
         ),
         # -- Execution (Macros) ----------------------------------------------
@@ -822,10 +839,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         # -- Instantiation ---------------------------------------------------
         elif name == "instantiate_estimator":
             result = instantiate_estimator_tool(
-                estimator=arguments.get("estimator"),
-                params=arguments.get("params"),
-                components=arguments.get("components"),
-                params_list=arguments.get("params_list"),
+                spec=arguments.get("spec")
             )
 
         elif name == "list_handles":
@@ -849,6 +863,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 mode=arguments.get("mode", "predict"),
                 coverage=arguments.get("coverage", 0.9),
                 alpha=arguments.get("alpha"),
+                dataset=arguments.get("dataset"),
+                data_handle=arguments.get("data_handle"),
             )
 
         elif name == "update":
@@ -860,6 +876,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         elif name == "get_fitted_params":
             result = get_fitted_params_tool(arguments["estimator_handle"])
+
+        elif name == "call_method":
+            from sktime_mcp.runtime.executor import get_executor
+            result = get_executor().call_method(
+                handle_id=arguments["handle_id"],
+                method_name=arguments["method_name"],
+                kwargs=arguments.get("kwargs", {})
+            )
 
         elif name == "evaluate_estimator":
             result = evaluate_estimator_tool(
