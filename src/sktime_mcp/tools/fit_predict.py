@@ -44,6 +44,7 @@ def fit_tool(
     estimator_handle: str,
     dataset: str | None = None,
     data_handle: str | None = None,
+    run_async: bool = False,
 ) -> dict[str, Any]:
     """
     Fit an estimator on a dataset.
@@ -60,6 +61,46 @@ def fit_tool(
     
     if not dataset and not data_handle:
         return {"success": False, "error": "Either 'dataset' or 'data_handle' is required."}
+    if run_async:
+        import asyncio
+        from sktime_mcp.runtime.jobs import get_job_manager
+        
+        job_manager = get_job_manager()
+        try:
+            handle_info = executor._handle_manager.get_info(estimator_handle)
+            estimator_name = handle_info.estimator_name
+        except Exception:
+            estimator_name = "Unknown"
+            
+        source_name = dataset if dataset else data_handle
+        job_id = job_manager.create_job(
+            job_type="fit",
+            estimator_handle=estimator_handle,
+            estimator_name=estimator_name,
+            dataset_name=source_name,
+            total_steps=2,
+        )
+        
+        coro = executor.fit_async(estimator_handle, dataset=dataset, data_handle=data_handle, job_id=job_id)
+        
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(coro)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            import threading
+            def run_loop(l, c):
+                asyncio.set_event_loop(l)
+                l.run_until_complete(c)
+                l.close()
+            threading.Thread(target=run_loop, args=(loop, coro), daemon=True).start()
+            
+        return {
+            "success": True,
+            "job_id": job_id,
+            "message": f"Training job started for {estimator_name}. Use check_job_status('{job_id}') to monitor progress."
+        }
 
     if data_handle is not None:
         if data_handle not in executor._data_handles:

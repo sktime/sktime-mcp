@@ -325,6 +325,10 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Handle from load_data_source for custom data",
                     },
+                    "run_async": {
+                        "type": "boolean",
+                        "description": "If True, runs the fit asynchronously in the background and returns a job_id.",
+                    },
                 },
                 "required": ["estimator_handle"],
             },
@@ -854,6 +858,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 estimator_handle=arguments["estimator_handle"],
                 dataset=arguments.get("dataset"),
                 data_handle=arguments.get("data_handle"),
+                run_async=arguments.get("run_async", False),
             )
 
         elif name == "predict":
