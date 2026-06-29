@@ -121,8 +121,31 @@ class Executor:
     ) -> dict[str, Any]:
         """Instantiate an estimator or pipeline from a spec and return a handle."""
         from sktime.registry import craft
+        import sktime.registry._craft as _craft_module
+        import numpy as np
+        import pandas as pd
+        
+        # Temporarily patch all_estimators to inject standard libraries into craft's registry.
+        # This allows users to pass callables like `numpy.exp` into estimators
+        # like CurveFitForecaster via the craft spec.
+        original_all = _craft_module.all_estimators
+        def mock_all_estimators(*args, **kwargs):
+            results = original_all(*args, **kwargs)
+            # results is a list of tuples: [(name, class), ...]
+            # We append numpy and pandas so they enter the register dict!
+            results.append(("np", np))
+            results.append(("numpy", np))
+            results.append(("pd", pd))
+            results.append(("pandas", pd))
+            return results
+            
+        _craft_module.all_estimators = mock_all_estimators
         try:
-            instance = craft(spec)
+            try:
+                instance = craft(spec)
+            finally:
+                _craft_module.all_estimators = original_all
+                
             estimator_name = type(instance).__name__
             handle_id = self._handle_manager.create_handle(
                 estimator_name=estimator_name,
