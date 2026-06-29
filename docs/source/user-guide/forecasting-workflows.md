@@ -11,7 +11,7 @@ Ask your assistant to search for models based on their capabilities or specific 
 
 > *Example: "Find models that can handle multivariate data" or "Show me probabilistic forecasters for forecasting."*
 
-The assistant will use the `list_estimators` tool to find matches. Common capabilities you might ask for include:
+The assistant will use the `query_registry` tool to find matches. Common capabilities you might ask for include:
 - **Prediction Intervals**: For probabilistic forecasting.
 - **Multivariate Support**: For data with multiple related time series.
 - **Missing Data Handling**: For datasets with gaps.

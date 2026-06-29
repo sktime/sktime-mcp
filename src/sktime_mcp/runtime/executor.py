@@ -20,7 +20,14 @@ from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 logger = logging.getLogger(__name__)
 
 
-# Dynamically discover all available sktime demo datasets on first access.
+def _validate_horizon(horizon: Any) -> str | None:
+    """Return error message if horizon is invalid, else None."""
+    if isinstance(horizon, bool) or not isinstance(horizon, int) or horizon <= 0:
+        return f"Invalid fh={horizon!r}. fh must be a positive integer."
+    return None
+
+
+# Dynamically discover all available sktime demo datasets at import time.
 # This replaces the old hardcoded dictionary and automatically exposes every
 # load_* function in sktime.datasets to the MCP server.
 def _discover_demo_datasets() -> dict:
@@ -49,6 +56,37 @@ def _get_demo_datasets() -> dict:
     return _DEMO_DATASETS
 
 
+# Classification demo datasets (return X_train, y_train with split parameter)
+CLASSIFICATION_DATASETS = {
+    "arrow_head": "sktime.datasets.load_arrow_head",
+    "gunpoint": "sktime.datasets.load_gunpoint",
+    "basic_motions": "sktime.datasets.load_basic_motions",
+    "italy_power_demand": "sktime.datasets.load_italy_power_demand",
+}
+
+# Regression demo datasets (return X_train, y_train with split parameter)
+REGRESSION_DATASETS = {
+    "covid_3month": "sktime.datasets.load_covid_3month",
+    "cardano_sentiment": "sktime.datasets.load_cardano_sentiment",
+}
+
+
+def _get_index_frequency_metadata(
+    index: pd.Index,
+    fallback: str | None = None,
+) -> str | None:
+    """Return a stable frequency label for metadata without assuming datetime-only indexes."""
+    if isinstance(index, (pd.DatetimeIndex, pd.PeriodIndex)):
+        freq = getattr(index, "freq", None)
+        if freq is not None:
+            return str(freq)
+        inferred = pd.infer_freq(index)
+        if inferred is not None:
+            return inferred
+
+    return fallback
+
+
 class Executor:
     """
     Execution runtime for sktime estimators.
@@ -60,10 +98,22 @@ class Executor:
         self._registry = get_registry()
         self._handle_manager = get_handle_manager()
         self._job_manager = get_job_manager()
-        self._data_handles = {}  # Store data handles
+        self._data_handles: dict[str, Any] = {}
         from sktime_mcp.config import settings
 
+        self._max_data_handles = settings.max_data_handles
         self._auto_format_enabled = settings.auto_format
+
+    def _cleanup_oldest_data(self, count: int = 10) -> None:
+        to_remove = list(self._data_handles.keys())[:count]
+        for handle_id in to_remove:
+            del self._data_handles[handle_id]
+            logger.debug("Evicted data handle %s (limit=%d)", handle_id, self._max_data_handles)
+
+    def _register_data_handle(self, handle_id: str, data: dict[str, Any]) -> None:
+        if len(self._data_handles) >= self._max_data_handles:
+            self._cleanup_oldest_data(count=max(1, self._max_data_handles // 5))
+        self._data_handles[handle_id] = data
 
     def instantiate(
         self,
@@ -200,6 +250,10 @@ class Executor:
         data_handle: str | None = None,
     ) -> dict[str, Any]:
         """Convenience method: load data, fit, and predict."""
+        horizon_error = _validate_horizon(horizon)
+        if horizon_error:
+            return {"success": False, "error": horizon_error}
+
         if dataset and data_handle:
             return {
                 "success": False,
@@ -239,6 +293,11 @@ class Executor:
         if not fit_result["success"]:
             return fit_result
 
+        # Record which dataset was used so export_code can reference it
+        if dataset:
+            handle_info = self._handle_manager.get_info(handle_id)
+            handle_info.metadata["training_dataset"] = dataset
+
         return self.predict(handle_id, fh=fh, X=X)
 
     async def fit_predict_async(
@@ -266,6 +325,10 @@ class Executor:
         Returns:
             Dictionary with success status and job_id
         """
+        horizon_error = _validate_horizon(horizon)
+        if horizon_error:
+            return {"success": False, "error": horizon_error}
+
         # Get estimator info for job tracking
         try:
             handle_info = self._handle_manager.get_info(handle_id)
@@ -452,13 +515,13 @@ class Executor:
             # Determine the type of pipeline to create
             # Check if all but last are transformers
             all_transformers_except_last = all(
-                self._registry.get_estimator_by_name(comp).task == "transformation"
+                self._registry.get_estimator_by_name(comp).task == "transformer"
                 for comp in components[:-1]
             )
 
             final_task = self._registry.get_estimator_by_name(components[-1]).task
 
-            if all_transformers_except_last and final_task == "forecasting":
+            if all_transformers_except_last and final_task == "forecaster":
                 # Use TransformedTargetForecaster
                 from sktime.forecasting.compose import TransformedTargetForecaster
 
@@ -484,7 +547,7 @@ class Executor:
                         ]
                     )
 
-            elif all_transformers_except_last and final_task in ("classification", "regression"):
+            elif all_transformers_except_last and final_task in ("classifier", "regressor"):
                 # Use sklearn-style Pipeline
                 from sktime.pipeline import Pipeline
 
@@ -493,7 +556,7 @@ class Executor:
                 )
 
             elif all(
-                self._registry.get_estimator_by_name(comp).task == "transformation"
+                self._registry.get_estimator_by_name(comp).task == "transformer"
                 for comp in components
             ):
                 # All transformers - use TransformerPipeline
@@ -588,14 +651,17 @@ class Executor:
             # Generate handle
             data_handle = f"data_{uuid.uuid4().hex[:8]}"
 
-            # Store
-            self._data_handles[data_handle] = {
-                "y": y,
-                "X": X,
-                "metadata": metadata,
-                "validation": validation_report,
-                "config": config,  # Store config for reference
-            }
+            # Store (enforces max_data_handles limit)
+            self._register_data_handle(
+                data_handle,
+                {
+                    "y": y,
+                    "X": X,
+                    "metadata": metadata,
+                    "validation": validation_report,
+                    "config": config,
+                },
+            )
 
             # Apply auto-formatting if enabled
             if getattr(self, "_auto_format_enabled", True):
@@ -604,11 +670,12 @@ class Executor:
                         data_handle, auto_infer_freq=True, fill_missing=True, remove_duplicates=True
                     )
                     if format_result["success"]:
-                        # Return the NEW handle (formatted)
+                        # Free the raw handle — the formatted copy supersedes it
+                        if data_handle in self._data_handles:
+                            del self._data_handles[data_handle]
                         return {
                             "success": True,
                             "data_handle": format_result["data_handle"],
-                            "original_handle": data_handle,
                             "metadata": format_result["metadata"],
                             "validation": validation_report,
                             "formatted": True,
@@ -710,13 +777,16 @@ class Executor:
             metadata["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
             data_handle = f"data_{uuid.uuid4().hex[:8]}"
 
-            self._data_handles[data_handle] = {
-                "y": y,
-                "X": X,
-                "metadata": metadata,
-                "validation": validation_report,
-                "config": config,
-            }
+            self._register_data_handle(
+                data_handle,
+                {
+                    "y": y,
+                    "X": X,
+                    "metadata": metadata,
+                    "validation": validation_report,
+                    "config": config,
+                },
+            )
 
             # auto-format if enabled
             if getattr(self, "_auto_format_enabled", True):
@@ -780,6 +850,7 @@ class Executor:
             "missing_filled": 0,
             "gaps_filled": 0,
         }
+        original_frequency = data_info["metadata"].get("frequency")
 
         # 1. Remove duplicates
         if remove_duplicates and y.index.duplicated().any():
@@ -796,9 +867,9 @@ class Executor:
 
         # 3. Infer and set frequency
         if auto_infer_freq:
-            freq = y.index.freq
+            freq = getattr(y.index, "freq", None)
 
-            if freq is None:
+            if freq is None and isinstance(y.index, (pd.DatetimeIndex, pd.PeriodIndex)):
                 # Try to infer
                 freq = pd.infer_freq(y.index)
 
@@ -854,14 +925,16 @@ class Executor:
         # Generate new handle
         new_handle = f"data_{uuid.uuid4().hex[:8]}"
 
-        # Store formatted data
-        self._data_handles[new_handle] = {
+        new_data = {
             "y": y,
             "X": X,
             "metadata": {
                 **data_info["metadata"],
                 "formatted": True,
-                "frequency": str(y.index.freq) if y.index.freq else changes_made.get("frequency"),
+                "frequency": _get_index_frequency_metadata(
+                    y.index,
+                    fallback=changes_made.get("frequency") or original_frequency,
+                ),
                 "rows": len(y),
                 "start_date": str(y.index.min()),
                 "end_date": str(y.index.max()),
@@ -870,13 +943,59 @@ class Executor:
             "config": data_info.get("config", {}),
             "original_handle": data_handle,
         }
+        self._register_data_handle(new_handle, new_data)
+
+        # Release the original to prevent intermediate handles from accumulating
+        if data_handle in self._data_handles:
+            del self._data_handles[data_handle]
 
         return {
             "success": True,
             "data_handle": new_handle,
-            "metadata": self._data_handles[new_handle]["metadata"],
+            "metadata": new_data["metadata"],
             "changes_made": changes_made,
         }
+
+    def fit_predict_with_data(
+        self,
+        estimator_handle: str,
+        data_handle: str,
+        horizon: int = 12,
+    ) -> dict[str, Any]:
+        """
+        Fit and predict using a data handle.
+
+        Args:
+            estimator_handle: Estimator handle from instantiate_estimator
+            data_handle: Data handle from load_data_source
+            horizon: Forecast horizon
+
+        Returns:
+            Dictionary with predictions
+        """
+        horizon_error = _validate_horizon(horizon)
+        if horizon_error:
+            return {"success": False, "error": horizon_error}
+
+        if data_handle not in self._data_handles:
+            return {
+                "success": False,
+                "error": f"Unknown data handle: {data_handle}",
+                "available_handles": list(self._data_handles.keys()),
+            }
+
+        data = self._data_handles[data_handle]
+        y = data["y"]
+        X = data.get("X")
+
+        # Fit
+        fh = list(range(1, horizon + 1))
+        fit_result = self.fit(estimator_handle, y=y, X=X, fh=fh)
+        if not fit_result["success"]:
+            return fit_result
+
+        # Predict
+        return self.predict(estimator_handle, fh=fh, X=X)
 
     def list_data_handles(self) -> dict[str, Any]:
         """
@@ -922,6 +1041,258 @@ class Executor:
                 "success": False,
                 "error": f"Data handle '{data_handle}' not found",
             }
+
+    def _load_supervised_dataset(
+        self,
+        name: str,
+        dataset_registry: dict[str, str],
+    ) -> dict[str, Any]:
+        """
+        Load a supervised (classification/regression) demo dataset.
+
+        These datasets support split='train' and split='test' parameters.
+
+        Args:
+            name: Dataset name
+            dataset_registry: The dataset registry dict to look up in
+
+        Returns:
+            Dictionary with X_train, y_train, X_test, y_test
+        """
+        if name not in dataset_registry:
+            return {
+                "success": False,
+                "error": f"Unknown dataset: {name}",
+                "available": list(dataset_registry.keys()),
+            }
+
+        try:
+            module_path = dataset_registry[name]
+            parts = module_path.rsplit(".", 1)
+            module = __import__(parts[0], fromlist=[parts[1]])
+            loader = getattr(module, parts[1])
+
+            X_train, y_train = loader(split="train")
+            X_test, y_test = loader(split="test")
+
+            return {
+                "success": True,
+                "name": name,
+                "X_train": X_train,
+                "y_train": y_train,
+                "X_test": X_test,
+                "y_test": y_test,
+                "train_shape": X_train.shape if hasattr(X_train, "shape") else len(X_train),
+                "test_shape": X_test.shape if hasattr(X_test, "shape") else len(X_test),
+                "n_classes": len(set(y_train)) if hasattr(y_train, "__iter__") else None,
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def _resolve_supervised_data(
+        self,
+        dataset: str = None,
+        X_train_handle: str = None,
+        y_train_handle: str = None,
+        X_test_handle: str = None,
+        dataset_registry: dict[str, str] = None,
+    ) -> dict[str, Any]:
+        """
+        Resolve data from either a demo dataset name or custom data handles.
+
+        Returns dict with X_train, y_train, X_test (and optionally y_test).
+        """
+        if dataset:
+            return self._load_supervised_dataset(dataset, dataset_registry)
+
+        if X_train_handle and y_train_handle and X_test_handle:
+            # Resolve from custom data handles
+            errors = []
+            for h in [X_train_handle, y_train_handle, X_test_handle]:
+                if h not in self._data_handles:
+                    errors.append(f"Data handle not found: {h}")
+            if errors:
+                return {"success": False, "error": "; ".join(errors)}
+
+            X_train_data = self._data_handles[X_train_handle]
+            y_train_data = self._data_handles[y_train_handle]
+            X_test_data = self._data_handles[X_test_handle]
+
+            # Extract the actual data from handles
+            # For X handles, use 'y' field (the main data) or 'X' if available
+            X_train = (
+                X_train_data.get("X") if X_train_data.get("X") is not None else X_train_data["y"]
+            )
+            y_train = y_train_data["y"]
+            X_test = X_test_data.get("X") if X_test_data.get("X") is not None else X_test_data["y"]
+
+            return {
+                "success": True,
+                "X_train": X_train,
+                "y_train": y_train,
+                "X_test": X_test,
+                "y_test": None,
+            }
+
+        return {
+            "success": False,
+            "error": "Provide either 'dataset' for a demo dataset, or all three handles: 'X_train_handle', 'y_train_handle', 'X_test_handle'",
+        }
+
+    def fit_predict_classification(
+        self,
+        estimator_handle: str,
+        dataset: str = None,
+        X_train_handle: str = None,
+        y_train_handle: str = None,
+        X_test_handle: str = None,
+    ) -> dict[str, Any]:
+        """
+        Fit a classifier and predict class labels.
+
+        Args:
+            estimator_handle: Handle from instantiate_estimator
+            dataset: Demo dataset name (arrow_head, gunpoint, etc.)
+            X_train_handle: Data handle for training features
+            y_train_handle: Data handle for training labels
+            X_test_handle: Data handle for test features
+
+        Returns:
+            Dictionary with predicted class labels
+        """
+        # Get the estimator instance
+        try:
+            instance = self._handle_manager.get_instance(estimator_handle)
+        except KeyError:
+            return {"success": False, "error": f"Handle not found: {estimator_handle}"}
+
+        # Resolve data
+        data = self._resolve_supervised_data(
+            dataset=dataset,
+            X_train_handle=X_train_handle,
+            y_train_handle=y_train_handle,
+            X_test_handle=X_test_handle,
+            dataset_registry=CLASSIFICATION_DATASETS,
+        )
+        if not data["success"]:
+            return data
+
+        X_train = data["X_train"]
+        y_train = data["y_train"]
+        X_test = data["X_test"]
+
+        try:
+            # Fit
+            instance.fit(X_train, y_train)
+            self._handle_manager.mark_fitted(estimator_handle)
+
+            # Predict
+            predictions = instance.predict(X_test)
+
+            # Convert predictions to serializable format
+            if hasattr(predictions, "tolist"):
+                pred_list = predictions.tolist()
+            else:
+                pred_list = list(predictions)
+
+            result = {
+                "success": True,
+                "predictions": pred_list,
+                "n_predictions": len(pred_list),
+                "classes": sorted(set(pred_list)),
+            }
+
+            # Add accuracy if ground truth is available
+            y_test = data.get("y_test")
+            if y_test is not None:
+                y_test_list = y_test.tolist() if hasattr(y_test, "tolist") else list(y_test)
+                correct = sum(1 for p, t in zip(pred_list, y_test_list, strict=False) if p == t)
+                result["accuracy"] = round(correct / len(y_test_list), 4)
+
+            return result
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def fit_predict_regression(
+        self,
+        estimator_handle: str,
+        dataset: str = None,
+        X_train_handle: str = None,
+        y_train_handle: str = None,
+        X_test_handle: str = None,
+    ) -> dict[str, Any]:
+        """
+        Fit a regressor and predict target values.
+
+        Args:
+            estimator_handle: Handle from instantiate_estimator
+            dataset: Demo dataset name (covid_3month, etc.)
+            X_train_handle: Data handle for training features
+            y_train_handle: Data handle for training target values
+            X_test_handle: Data handle for test features
+
+        Returns:
+            Dictionary with predicted values
+        """
+        # Get the estimator instance
+        try:
+            instance = self._handle_manager.get_instance(estimator_handle)
+        except KeyError:
+            return {"success": False, "error": f"Handle not found: {estimator_handle}"}
+
+        # Resolve data
+        data = self._resolve_supervised_data(
+            dataset=dataset,
+            X_train_handle=X_train_handle,
+            y_train_handle=y_train_handle,
+            X_test_handle=X_test_handle,
+            dataset_registry=REGRESSION_DATASETS,
+        )
+        if not data["success"]:
+            return data
+
+        X_train = data["X_train"]
+        y_train = data["y_train"]
+        X_test = data["X_test"]
+
+        try:
+            # Fit
+            instance.fit(X_train, y_train)
+            self._handle_manager.mark_fitted(estimator_handle)
+
+            # Predict
+            predictions = instance.predict(X_test)
+
+            # Convert predictions to serializable format
+            if hasattr(predictions, "tolist"):
+                pred_list = predictions.tolist()
+            elif isinstance(predictions, pd.Series):
+                pred_list = predictions.values.tolist()
+            else:
+                pred_list = list(predictions)
+
+            result = {
+                "success": True,
+                "predictions": pred_list,
+                "n_predictions": len(pred_list),
+            }
+
+            # Add metrics if ground truth is available
+            y_test = data.get("y_test")
+            if y_test is not None:
+                import numpy as np
+
+                y_test_arr = np.array(y_test)
+                pred_arr = np.array(pred_list)
+                mse = float(np.mean((y_test_arr - pred_arr) ** 2))
+                result["mse"] = round(mse, 6)
+                result["rmse"] = round(float(np.sqrt(mse)), 6)
+
+            return result
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
 
 _executor_instance: Executor | None = None

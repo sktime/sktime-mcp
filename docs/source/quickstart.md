@@ -44,7 +44,7 @@ Once connected, you can verify the server is working by asking your assistant:
 
 > "What forecasting models are available in sktime?"
 
-The assistant will use the `list_estimators` tool and return a list of available models for your review.
+The assistant will use the `query_registry` tool and return a list of available models for your review.
 
 ## 4. Run Your First Forecast
 

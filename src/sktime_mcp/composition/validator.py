@@ -95,48 +95,48 @@ class CompositionValidator:
     COMPOSITION_RULES: list[CompositionRule] = [
         # Transformers can precede forecasters
         CompositionRule(
-            source_task="transformation",
-            target_task="forecasting",
+            source_task="transformer",
+            target_task="forecaster",
             composition_type=CompositionType.FORECASTING_PIPELINE,
             position="before",
             description="Transformers can be applied before forecasters in a pipeline",
         ),
         # Transformers can be chained
         CompositionRule(
-            source_task="transformation",
-            target_task="transformation",
+            source_task="transformer",
+            target_task="transformer",
             composition_type=CompositionType.TRANSFORMER_PIPELINE,
             position="before",
             description="Transformers can be chained together",
         ),
         # Forecasters can be ensembled
         CompositionRule(
-            source_task="forecasting",
-            target_task="forecasting",
+            source_task="forecaster",
+            target_task="forecaster",
             composition_type=CompositionType.ENSEMBLE,
             position="any",
             description="Forecasters can be combined in an ensemble",
         ),
         # Classifiers can be ensembled
         CompositionRule(
-            source_task="classification",
-            target_task="classification",
+            source_task="classifier",
+            target_task="classifier",
             composition_type=CompositionType.ENSEMBLE,
             position="any",
             description="Classifiers can be combined in an ensemble",
         ),
         # Transformers can precede classifiers
         CompositionRule(
-            source_task="transformation",
-            target_task="classification",
+            source_task="transformer",
+            target_task="classifier",
             composition_type=CompositionType.PIPELINE,
             position="before",
             description="Transformers can be applied before classifiers",
         ),
         # Transformers can precede regressors
         CompositionRule(
-            source_task="transformation",
-            target_task="regression",
+            source_task="transformer",
+            target_task="regressor",
             composition_type=CompositionType.PIPELINE,
             position="before",
             description="Transformers can be applied before regressors",
@@ -213,6 +213,16 @@ class CompositionValidator:
             current_name, current_node = nodes[i]
             next_name, next_node = nodes[i + 1]
 
+            # In linear pipelines, forecaster -> forecaster is invalid.
+            # The forecasting->forecasting rule is for ensemble composition,
+            # not sequential pipeline chaining.
+            if current_node.task == next_node.task == "forecaster":
+                errors.append(
+                    f"Cannot chain forecasters '{current_node.name}' → '{next_node.name}' directly. "
+                    "Use an ensemble or multiplexer instead."
+                )
+                continue
+
             # Check if this composition is valid
             valid_pair, pair_errors, pair_warnings = self._check_pair_compatibility(
                 current_node, next_node
@@ -224,7 +234,7 @@ class CompositionValidator:
 
         # Check final component is executable (forecaster, classifier, etc.)
         final_name, final_node = nodes[-1]
-        if final_node.task == "transformation":
+        if final_node.task == "transformer":
             errors.append(
                 f"Pipeline ends with transformer '{final_name}'. "
                 "The final component should be a forecaster, classifier, or regressor."
@@ -272,12 +282,12 @@ class CompositionValidator:
 
         if applicable_rule is None:
             # No rule found - check if it's an obvious error
-            if first.task == second.task == "forecasting":
+            if first.task == second.task == "forecaster":
                 errors.append(
                     f"Cannot chain forecasters '{first.name}' → '{second.name}' directly. "
                     "Use an ensemble or multiplexer instead."
                 )
-            elif first.task in ("classification", "regression") and second.task != first.task:
+            elif first.task in ("classifier", "regressor") and second.task != first.task:
                 errors.append(
                     f"Invalid composition: {first.task} '{first.name}' → {second.task} '{second.name}'"
                 )
@@ -364,7 +374,7 @@ class CompositionValidator:
         Suggest a valid pipeline for a given task.
 
         Args:
-            task: Target task (e.g., "forecasting")
+            task: Target scitype (e.g., "forecaster")
             requirements: Optional requirements (e.g., {"handles_missing": True})
 
         Returns:
@@ -372,14 +382,14 @@ class CompositionValidator:
         """
         suggestions = []
 
-        if task == "forecasting":
+        if task == "forecaster":
             # Suggest common preprocessing → forecaster pipeline
             if requirements and requirements.get("handles_missing"):
                 suggestions.append("Imputer")
 
             # Get a suitable forecaster
             forecasters = self._registry.get_all_estimators(
-                task="forecasting",
+                task="forecaster",
                 tags=requirements if requirements else None,
             )
 
@@ -389,9 +399,9 @@ class CompositionValidator:
             else:
                 suggestions.append("NaiveForecaster")  # Fallback
 
-        elif task == "classification":
+        elif task == "classifier":
             # Suggest transformer → classifier
-            classifiers = self._registry.get_all_estimators(task="classification")
+            classifiers = self._registry.get_all_estimators(task="classifier")
             if classifiers:
                 suggestions.append(classifiers[0].name)
 

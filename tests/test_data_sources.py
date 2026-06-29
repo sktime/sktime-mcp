@@ -68,6 +68,25 @@ class TestPandasAdapter:
 class TestExecutorDataIntegration:
     """Executor can load data sources and run fit_predict via data handles."""
 
+    def test_load_data_source_auto_format_supports_rangeindex(self, caplog):
+        """Integer-indexed data should not trip datetime-only auto-format logic."""
+        executor = get_executor()
+
+        config = {
+            "type": "pandas",
+            "data": {
+                "y": [1, 2, 3, 4],
+            },
+        }
+
+        with caplog.at_level("WARNING"):
+            result = executor.load_data_source(config)
+
+        assert result["success"]
+        assert result["formatted"] is True
+        assert result["metadata"]["frequency"] == "Integer"
+        assert "Auto-formatting failed" not in caplog.text
+
     def test_load_and_predict_with_data_handle(self):
         executor = get_executor()
 

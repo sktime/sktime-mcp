@@ -20,7 +20,6 @@ from sktime_mcp.tools.codegen import (
 )
 from sktime_mcp.tools.instantiate import (
     instantiate_estimator_tool,
-    instantiate_pipeline_tool,
 )
 
 
@@ -111,6 +110,27 @@ class TestSingleEstimatorCodeGen:
         assert not result["success"]
         assert "error" in result
 
+    def test_composite_params_include_step_imports(self):
+        """Composite estimator params should include imports for nested step classes."""
+        from sktime.forecasting.naive import NaiveForecaster
+        from sktime.transformations.series.difference import Differencer
+
+        result = _generate_single_estimator_code(
+            "ForecastingPipeline",
+            {
+                "steps": [
+                    ("differencer", Differencer()),
+                    ("forecaster", NaiveForecaster()),
+                ]
+            },
+            var_name="pipeline",
+        )
+
+        assert result["success"]
+        assert "import ForecastingPipeline" in result["code"]
+        assert "import Differencer" in result["code"]
+        assert "import NaiveForecaster" in result["code"]
+
 
 class TestVarNameValidation:
     """Tests for Python variable name validation in code export."""
@@ -187,7 +207,7 @@ class TestExportCodeTool:
 
     def _create_handle(self, name="NaiveForecaster", params=None):
         """Helper to create an estimator handle."""
-        result = instantiate_estimator_tool(name, params)
+        result = instantiate_estimator_tool(estimator=name, params=params)
         assert result["success"], f"Failed to create handle: {result}"
         return result["handle"]
 
@@ -277,7 +297,7 @@ class TestExportCodeTool:
 
     def test_pipeline_handle(self):
         """Pipeline handle should return is_pipeline=True."""
-        result = instantiate_pipeline_tool(["Deseasonalizer", "NaiveForecaster"])
+        result = instantiate_estimator_tool(components=["Deseasonalizer", "NaiveForecaster"])
         if not result["success"]:
             pytest.skip("Pipeline instantiation not available")
 

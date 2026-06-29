@@ -1,0 +1,38 @@
+# =============================================================================
+# Docker Compose for sktime-mcp
+#
+# Usage:
+#   docker compose build          # build the image
+#   docker compose run sktime-mcp # run with stdio (interactive, for MCP clients)
+#
+# Notes:
+#   - MCP uses stdio transport, so `docker compose run` with stdin attached is the
+#     correct invocation rather than `docker compose up` (which is for daemons).
+#   - The models volume persists saved models across container restarts.
+# =============================================================================
+
+services:
+  sktime-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sktime-mcp:latest
+    container_name: sktime-mcp
+
+    # Keep stdin open, but avoid allocating a pseudo-TTY so MCP gets raw JSON-RPC over stdio.
+    stdin_open: true
+    tty: false  # MCP JSON-RPC needs raw stdin, not a pseudo-TTY
+
+    environment:
+      - SKTIME_MCP_LOG_LEVEL=${SKTIME_MCP_LOG_LEVEL:-WARNING}
+      - SKTIME_MCP_AUTO_FORMAT=${SKTIME_MCP_AUTO_FORMAT:-true}
+      - SKTIME_MCP_JOB_MAX_AGE_HOURS=${SKTIME_MCP_JOB_MAX_AGE_HOURS:-24}
+      - SKTIME_MCP_JOB_CLEANUP_INTERVAL=${SKTIME_MCP_JOB_CLEANUP_INTERVAL:-3600}
+
+    volumes:
+      # Persist saved models outside the container
+      - sktime-models:/home/mcp/models
+
+volumes:
+  sktime-models:
+    driver: local

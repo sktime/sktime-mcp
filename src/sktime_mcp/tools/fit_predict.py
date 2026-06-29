@@ -12,7 +12,7 @@ from sktime_mcp.runtime.executor import get_executor
 logger = logging.getLogger(__name__)
 
 
-def _validate_horizon(horizon: int) -> dict[str, Any]:
+def _validate_horizon(horizon: Any) -> dict[str, Any]:
     """
     Validate the horizon parameter.
     Checks if the horizon parameter is strictly integer or not
@@ -31,9 +31,7 @@ def _validate_horizon(horizon: int) -> dict[str, Any]:
     if horizon <= 0:
         return {
             "valid": False,
-            "error": (
-                f"'horizon' must be greater than 0, got {horizon}. Example: {{\"horizon\": 12}}"
-            ),
+            "error": f"Invalid horizon={horizon}. horizon must be a positive integer greater than 0.",
             "warnings": warnings,
         }
     return {"valid": True, "warnings": warnings}
@@ -70,26 +68,43 @@ def fit_predict_tool(
     """
     validation = _validate_horizon(horizon)
     if not validation["valid"]:
-        return {
-            "success": False,
-            "error": validation["error"],
-        }
-    if dataset and data_handle:
-        return {
-            "success": False,
-            "error": "Provide either 'dataset' or 'data_handle', not both.",
-        }
+        return {"success": False, "error": validation["error"]}
 
-    if data_handle is None and (not dataset or not str(dataset).strip()):
-        return {
-            "success": False,
-            "error": (
-                "Either 'dataset' (e.g. 'airline') or "
-                "'data_handle' (from load_data_source) is required."
-            ),
-        }
     executor = get_executor()
     return executor.fit_predict(estimator_handle, dataset, horizon, data_handle=data_handle)
+
+
+def fit_tool(
+    estimator_handle: str,
+    dataset: str,
+    data_handle: str | None = None,
+) -> dict[str, Any]:
+    """
+    Fit an estimator on a dataset.
+
+    Args:
+        estimator_handle: Handle from instantiate_estimator
+        dataset: Name of demo dataset
+        data_handle: Optional handle from load_data_source for custom data
+    """
+    executor = get_executor()
+    if data_handle is not None:
+        if data_handle not in executor._data_handles:
+            return {
+                "success": False,
+                "error": f"Unknown data handle: {data_handle}",
+            }
+        data_info = executor._data_handles[data_handle]
+        y = data_info["y"]
+        X = data_info.get("X")
+    else:
+        data_result = executor.load_dataset(dataset)
+        if not data_result["success"]:
+            return data_result
+        y = data_result["data"]
+        X = data_result.get("exog")
+
+    return executor.fit(estimator_handle, y, X=X)
 
 
 def predict_tool(
@@ -185,6 +200,10 @@ def fit_predict_async_tool(
 
     import asyncio
 
+    validation = _validate_horizon(horizon)
+    if not validation["valid"]:
+        return {"success": False, "error": validation["error"]}
+
     from sktime_mcp.runtime.jobs import get_job_manager
 
     executor = get_executor()
@@ -210,13 +229,6 @@ def fit_predict_async_tool(
         total_steps=3,
     )
 
-    # Schedule the async coroutine on the event loop
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
     coro = executor.fit_predict_async(
         estimator_handle,
         dataset=dataset,
@@ -224,7 +236,18 @@ def fit_predict_async_tool(
         horizon=horizon,
         job_id=job_id,
     )
-    asyncio.run_coroutine_threadsafe(coro, loop)
+
+    # Schedule the async coroutine on the event loop
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(coro)
+    except RuntimeError:
+        # No running event loop (e.g. sync test or CLI environment)
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(coro)
+        finally:
+            loop.close()
 
     return {
         "success": True,
