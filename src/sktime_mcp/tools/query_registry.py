@@ -4,6 +4,7 @@ Provides the query_registry tool.
 """
 
 import difflib
+import json
 from typing import Any
 
 from sktime_mcp.registry.interface import get_registry
@@ -11,7 +12,7 @@ from sktime_mcp.registry.interface import get_registry
 
 def query_registry_tool(
     task: str | None = None,
-    tags: dict[str, Any] | None = None,
+    tags: dict[str, Any] | str | None = None,
     query: str | None = None,
     limit: int = 50,
     offset: int = 0,
@@ -28,7 +29,8 @@ def query_registry_tool(
         task: Filter by scitype (e.g., "forecaster", "classifier", "regressor",
               "transformer", "detector", "metric").
               Set to "tag" or "tags" to query available capability tags.
-        tags: Filter estimators by capability tags. Example: {"capability:pred_int": True}
+        tags: Filter estimators by capability tags. Can be a dictionary or a JSON string.
+              Example JSON string: '{"capability:pred_int": true}'.
               Ignored when task="tag".
         query: Search by name/description (substring, case-insensitive).
         limit: Maximum number of results to return (default: 50). Ignored when task="tag".
@@ -91,6 +93,14 @@ def query_registry_tool(
 
         # Validate tag keys if provided
         if tags is not None:
+            if isinstance(tags, str):
+                try:
+                    tags = json.loads(tags)
+                except json.JSONDecodeError as e:
+                    return {"success": False, "error": f"Invalid JSON string in 'tags': {e}"}
+            if not isinstance(tags, dict):
+                return {"success": False, "error": "tags must be a dictionary or a JSON string."}
+
             valid_tag_keys = {t["tag"] for t in registry.get_available_tags()}
             invalid_keys = [k for k in tags if k not in valid_tag_keys]
             if invalid_keys:
