@@ -11,14 +11,14 @@ class TestExportCodeDatasetTracking:
     def test_fit_predict_stores_training_dataset_in_metadata(self):
         """After fit_predict, the handle metadata must record the dataset name."""
         from sktime_mcp.runtime.handles import get_handle_manager
-        from sktime_mcp.tools.fit_predict import fit_predict_tool
+        from sktime_mcp.tools.fit_predict import fit_tool
         from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 
         inst = instantiate_estimator_tool("NaiveForecaster", {"strategy": "last"})
         assert inst["success"], inst
         handle = inst["handle"]
 
-        result = fit_predict_tool(handle, "lynx", horizon=3)
+        result = fit_tool(handle, "lynx")
         assert result["success"], result
 
         hm = get_handle_manager()
@@ -30,14 +30,14 @@ class TestExportCodeDatasetTracking:
     def test_export_code_uses_training_dataset_by_default(self):
         """export_code include_fit_example=True must use the training dataset, not 'airline'."""
         from sktime_mcp.tools.codegen import export_code_tool
-        from sktime_mcp.tools.fit_predict import fit_predict_tool
+        from sktime_mcp.tools.fit_predict import fit_tool
         from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 
         inst = instantiate_estimator_tool("NaiveForecaster", {"strategy": "last"})
         assert inst["success"], inst
         handle = inst["handle"]
 
-        fit_result = fit_predict_tool(handle, "lynx", horizon=3)
+        fit_result = fit_tool(handle, "lynx")
         assert fit_result["success"], fit_result
 
         code_result = export_code_tool(handle, include_fit_example=True)
@@ -49,14 +49,14 @@ class TestExportCodeDatasetTracking:
     def test_export_code_explicit_dataset_overrides_metadata(self):
         """An explicit dataset argument to export_code must take priority over metadata."""
         from sktime_mcp.tools.codegen import export_code_tool
-        from sktime_mcp.tools.fit_predict import fit_predict_tool
+        from sktime_mcp.tools.fit_predict import fit_tool
         from sktime_mcp.tools.instantiate import instantiate_estimator_tool
 
         inst = instantiate_estimator_tool("NaiveForecaster", {"strategy": "last"})
         assert inst["success"], inst
         handle = inst["handle"]
 
-        fit_result = fit_predict_tool(handle, "lynx", horizon=3)
+        fit_result = fit_tool(handle, "lynx")
         assert fit_result["success"], fit_result
 
         # Explicitly request airline even though model was trained on lynx

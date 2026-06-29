@@ -10,8 +10,10 @@ from sktime_mcp.tools.describe_component import (
 )
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
-    fit_predict_async_tool,
-    fit_predict_tool,
+    fit_tool,
+    predict_tool,
+    update_tool,
+    get_fitted_params_tool,
 )
 from sktime_mcp.tools.format_tools import format_time_series_tool
 from sktime_mcp.tools.inspect_data import inspect_data_tool
@@ -42,8 +44,10 @@ __all__ = [
     "list_handles_tool",
     "release_handle_tool",
     "load_model_tool",
-    "fit_predict_tool",
-    "fit_predict_async_tool",
+    "fit_tool",
+    "predict_tool",
+    "update_tool",
+    "get_fitted_params_tool",
     "evaluate_estimator_tool",
     "load_data_source_tool",
     "release_data_handle_tool",
