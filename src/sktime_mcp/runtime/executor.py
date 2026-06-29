@@ -206,6 +206,9 @@ class Executor:
         handle_id: str,
         fh: int | list[int] | None = None,
         X: Any | None = None,
+        mode: str = "predict",
+        coverage: float | list[float] = 0.9,
+        alpha: float | list[float] | None = None,
     ) -> dict[str, Any]:
         """Generate predictions."""
         try:
@@ -220,27 +223,102 @@ class Executor:
             if fh is None:
                 fh = list(range(1, 13))
 
-            predictions = instance.predict(fh=fh, X=X) if X is not None else instance.predict(fh=fh)
+            kwargs = {}
+            if X is not None:
+                kwargs["X"] = X
 
+            if mode == "predict":
+                predictions = instance.predict(fh=fh, **kwargs)
+            elif mode == "predict_interval":
+                predictions = instance.predict_interval(fh=fh, coverage=coverage, **kwargs)
+            elif mode == "predict_quantiles":
+                predictions = instance.predict_quantiles(fh=fh, alpha=alpha, **kwargs)
+            elif mode == "predict_proba":
+                predictions = instance.predict_proba(fh=fh, **kwargs)
+            elif mode == "predict_var":
+                predictions = instance.predict_var(fh=fh, **kwargs)
+            else:
+                return {"success": False, "error": f"Unknown prediction mode: {mode}"}
+
+            from sktime_mcp.server import sanitize_for_json
+            
             if isinstance(predictions, pd.Series):
-                # Convert index to string to avoid JSON serialization issues with Period/DatetimeIndex
                 predictions_copy = predictions.copy()
                 predictions_copy.index = predictions_copy.index.astype(str)
                 result = predictions_copy.to_dict()
             elif isinstance(predictions, pd.DataFrame):
                 predictions_copy = predictions.copy()
                 predictions_copy.index = predictions_copy.index.astype(str)
+                # Need to handle multiindex columns if they exist (like in predict_interval)
+                if isinstance(predictions_copy.columns, pd.MultiIndex):
+                    # Flatten multiindex for JSON serialization
+                    predictions_copy.columns = ["_".join(map(str, col)) for col in predictions_copy.columns.values]
                 result = predictions_copy.to_dict(orient="list")
             else:
-                result = predictions.tolist() if hasattr(predictions, "tolist") else predictions
+                result = sanitize_for_json(predictions)
 
-            return {
+            out = {
                 "success": True,
-                "predictions": result,
                 "horizon": len(fh) if hasattr(fh, "__len__") else fh,
+                "mode": mode
             }
+            if mode == "predict":
+                out["predictions"] = result
+            elif mode == "predict_interval":
+                out["intervals"] = result
+                out["coverage"] = coverage
+            elif mode == "predict_quantiles":
+                out["quantiles"] = result
+                out["alpha"] = alpha
+            else:
+                out["predictions"] = result
+            return out
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def update(
+        self,
+        handle_id: str,
+        y: Any,
+        X: Any | None = None,
+        update_params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Update a fitted estimator with new data."""
+        try:
+            instance = self._handle_manager.get_instance(handle_id)
+        except KeyError:
+            return {"success": False, "error": f"Handle not found: {handle_id}"}
+
+        if not self._handle_manager.is_fitted(handle_id):
+            return {"success": False, "error": "Estimator not fitted"}
+
+        try:
+            kwargs = update_params or {}
+            if X is not None:
+                instance.update(y, X=X, **kwargs)
+            else:
+                instance.update(y, **kwargs)
+            return {"success": True, "handle": handle_id, "message": "Estimator updated successfully"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def get_fitted_params(self, handle_id: str) -> dict[str, Any]:
+        """Get fitted parameters from an estimator."""
+        try:
+            instance = self._handle_manager.get_instance(handle_id)
+        except KeyError:
+            return {"success": False, "error": f"Handle not found: {handle_id}"}
+            
+        if not self._handle_manager.is_fitted(handle_id):
+            return {"success": False, "error": "Estimator not fitted"}
+            
+        try:
+            from sktime_mcp.server import sanitize_for_json
+            params = instance.get_fitted_params()
+            return {"success": True, "fitted_params": sanitize_for_json(params)}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
 
     def fit_predict(
         self,

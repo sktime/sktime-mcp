@@ -34,10 +34,6 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 from sktime_mcp.config import settings
-from sktime_mcp.tools.classify import (
-    fit_predict_classification_tool,
-    fit_predict_regression_tool,
-)
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_tool,
@@ -48,8 +44,10 @@ from sktime_mcp.tools.describe_component import (
 )
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
-    fit_predict_async_tool,
-    fit_predict_tool,
+    fit_tool,
+    predict_tool,
+    update_tool,
+    get_fitted_params_tool,
 )
 from sktime_mcp.tools.inspect_data import inspect_data_tool
 from sktime_mcp.tools.instantiate import (
@@ -325,11 +323,10 @@ async def list_tools() -> list[Tool]:
         ),
         # -- Execution -------------------------------------------------------
         Tool(
-            name="fit_predict",
+            name="fit",
             description=(
-                "Fit an estimator and generate predictions. "
-                "Provide exactly one of: dataset (demo name such as airline, sunspots) "
-                "or data_handle (from load_data_source for custom data)."
+                "Fit an estimator on a dataset. "
+                "Provide exactly one of: dataset (demo name) or data_handle (custom data)."
             ),
             inputSchema={
                 "type": "object",
@@ -344,51 +341,86 @@ async def list_tools() -> list[Tool]:
                     },
                     "data_handle": {
                         "type": "string",
-                        "description": (
-                            "Handle from load_data_source (use this instead "
-                            "of dataset for custom data)"
-                        ),
-                    },
-                    "horizon": {
-                        "type": "integer",
-                        "description": "Forecast horizon (default: 12)",
-                        "default": 12,
+                        "description": "Handle from load_data_source for custom data",
                     },
                 },
                 "required": ["estimator_handle"],
             },
         ),
         Tool(
-            name="fit_predict_async",
+            name="predict",
             description=(
-                "Fit an estimator and generate predictions in the background. "
-                "Provide exactly ONE of 'dataset' (built-in demo name) "
-                "or 'data_handle' (from load_data_source)."
+                "Generate predictions from a fitted estimator. "
+                "Supports different modes like predict, predict_interval, predict_quantiles."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "estimator_handle": {
                         "type": "string",
-                        "description": "Handle from instantiate_estimator",
-                    },
-                    "dataset": {
-                        "type": "string",
-                        "description": "Demo dataset name: airline, sunspots, lynx, etc.",
-                    },
-                    "data_handle": {
-                        "type": "string",
-                        "description": "Data handle from load_data_source (e.g. 'data_abc123')",
+                        "description": "Handle of a fitted estimator",
                     },
                     "horizon": {
                         "type": "integer",
                         "description": "Forecast horizon (default: 12)",
                         "default": 12,
                     },
+                    "mode": {
+                        "type": "string",
+                        "description": "Prediction mode",
+                        "enum": ["predict", "predict_interval", "predict_quantiles", "predict_proba", "predict_var"],
+                        "default": "predict",
+                    },
+                    "coverage": {
+                        "description": "Coverage level for intervals (float or list of floats)",
+                        "default": 0.9,
+                    },
+                    "alpha": {
+                        "description": "Alpha values for quantiles (float or list of floats)",
+                    },
                 },
                 "required": ["estimator_handle"],
             },
         ),
+        Tool(
+            name="update",
+            description=(
+                "Update a fitted estimator with new data."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle of a fitted estimator",
+                    },
+                    "dataset": {
+                        "type": "string",
+                        "description": "Dataset name: airline, sunspots, lynx, etc.",
+                    },
+                    "data_handle": {
+                        "type": "string",
+                        "description": "Handle from load_data_source for custom data",
+                    },
+                },
+                "required": ["estimator_handle"],
+            },
+        ),
+        Tool(
+            name="get_fitted_params",
+            description="Get fitted parameters from an estimator",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "estimator_handle": {
+                        "type": "string",
+                        "description": "Handle of a fitted estimator",
+                    },
+                },
+                "required": ["estimator_handle"],
+            },
+        ),
+        # -- Execution (Macros) ----------------------------------------------
         Tool(
             name="evaluate_estimator",
             description="Evaluate an estimator using cross-validation on a dataset",
@@ -759,66 +791,6 @@ async def list_tools() -> list[Tool]:
                 "required": ["job_id"],
             },
         ),
-        Tool(
-            name="fit_predict_classification",
-            description="Fit a time series classifier on training data and predict class labels on test data. Use with classification estimators like RocketClassifier, HIVECOTEV2, etc.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "estimator_handle": {
-                        "type": "string",
-                        "description": "Handle from instantiate_estimator (must be a classifier)",
-                    },
-                    "dataset": {
-                        "type": "string",
-                        "description": "Demo dataset name: arrow_head, gunpoint, basic_motions, italy_power_demand",
-                    },
-                    "X_train_handle": {
-                        "type": "string",
-                        "description": "Data handle for custom training features",
-                    },
-                    "y_train_handle": {
-                        "type": "string",
-                        "description": "Data handle for custom training labels",
-                    },
-                    "X_test_handle": {
-                        "type": "string",
-                        "description": "Data handle for custom test features",
-                    },
-                },
-                "required": ["estimator_handle"],
-            },
-        ),
-        Tool(
-            name="fit_predict_regression",
-            description="Fit a time series regressor on training data and predict continuous target values on test data. Use with regression estimators like TimeSeriesForestRegressor, etc.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "estimator_handle": {
-                        "type": "string",
-                        "description": "Handle from instantiate_estimator (must be a regressor)",
-                    },
-                    "dataset": {
-                        "type": "string",
-                        "description": "Demo dataset name: covid_3month, cardano_sentiment",
-                    },
-                    "X_train_handle": {
-                        "type": "string",
-                        "description": "Data handle for custom training features",
-                    },
-                    "y_train_handle": {
-                        "type": "string",
-                        "description": "Data handle for custom training target values",
-                    },
-                    "X_test_handle": {
-                        "type": "string",
-                        "description": "Data handle for custom test features",
-                    },
-                },
-                "required": ["estimator_handle"],
-            },
-        ),
     ]
 
 
@@ -863,21 +835,31 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = release_handle_tool(arguments["handle"])
 
         # -- Execution -------------------------------------------------------
-        elif name == "fit_predict":
-            result = fit_predict_tool(
-                arguments["estimator_handle"],
-                arguments.get("dataset", ""),
-                arguments.get("horizon", 12),
-                data_handle=arguments.get("data_handle"),
-            )
-
-        elif name == "fit_predict_async":
-            result = fit_predict_async_tool(
+        elif name == "fit":
+            result = fit_tool(
                 estimator_handle=arguments["estimator_handle"],
                 dataset=arguments.get("dataset"),
                 data_handle=arguments.get("data_handle"),
-                horizon=arguments.get("horizon", 12),
             )
+
+        elif name == "predict":
+            result = predict_tool(
+                estimator_handle=arguments["estimator_handle"],
+                horizon=arguments.get("horizon", 12),
+                mode=arguments.get("mode", "predict"),
+                coverage=arguments.get("coverage", 0.9),
+                alpha=arguments.get("alpha"),
+            )
+
+        elif name == "update":
+            result = update_tool(
+                estimator_handle=arguments["estimator_handle"],
+                dataset=arguments.get("dataset"),
+                data_handle=arguments.get("data_handle"),
+            )
+
+        elif name == "get_fitted_params":
+            result = get_fitted_params_tool(arguments["estimator_handle"])
 
         elif name == "evaluate_estimator":
             result = evaluate_estimator_tool(
@@ -986,24 +968,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
 
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
-        elif name == "fit_predict_classification":
-            result = fit_predict_classification_tool(
-                estimator_handle=arguments["estimator_handle"],
-                dataset=arguments.get("dataset"),
-                X_train_handle=arguments.get("X_train_handle"),
-                y_train_handle=arguments.get("y_train_handle"),
-                X_test_handle=arguments.get("X_test_handle"),
-            )
-            result = sanitize_for_json(result)
-        elif name == "fit_predict_regression":
-            result = fit_predict_regression_tool(
-                estimator_handle=arguments["estimator_handle"],
-                dataset=arguments.get("dataset"),
-                X_train_handle=arguments.get("X_train_handle"),
-                y_train_handle=arguments.get("y_train_handle"),
-                X_test_handle=arguments.get("X_test_handle"),
-            )
-            result = sanitize_for_json(result)
         else:
             result = {"error": f"Unknown tool: {name}"}
 

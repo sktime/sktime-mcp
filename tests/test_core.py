@@ -296,9 +296,9 @@ class TestTools:
         assert calls["serialization_format"] == "pickle"
 
     @pytest.mark.parametrize("horizon", [0, -3])
-    def test_fit_predict_tool_rejects_invalid_horizon(self, horizon):
-        """fit_predict_tool should validate horizon before calling sktime internals."""
-        from sktime_mcp.tools.fit_predict import fit_predict_tool
+    def test_predict_tool_rejects_invalid_horizon(self, horizon):
+        """predict_tool should validate horizon before calling sktime internals."""
+        from sktime_mcp.tools.fit_predict import predict_tool
         from sktime_mcp.tools.instantiate import instantiate_estimator_tool, release_handle_tool
 
         inst = instantiate_estimator_tool(estimator="NaiveForecaster", params={"strategy": "last"})
@@ -306,9 +306,8 @@ class TestTools:
         handle = inst["handle"]
 
         try:
-            result = fit_predict_tool(
+            result = predict_tool(
                 estimator_handle=handle,
-                dataset="airline",
                 horizon=horizon,
             )
         finally:
