@@ -568,8 +568,10 @@ class Executor:
     async def fit_async(
         self,
         handle_id: str,
-        dataset: str | None = None,
-        data_handle: str | None = None,
+        X_dataset: str | None = None,
+        y_dataset: str | None = None,
+        X_handle: str | None = None,
+        y_handle: str | None = None,
         job_id: str | None = None,
     ) -> dict[str, Any]:
         """Async version of fit with job tracking."""
@@ -626,10 +628,10 @@ class Executor:
             if not fit_result["success"]:
                 raise ValueError(fit_result["error"])
                 
-            if dataset:
+            if X_dataset or y_dataset:
                 try:
                     handle_info = self._handle_manager.get_info(handle_id)
-                    handle_info.metadata["training_dataset"] = dataset
+                    handle_info.metadata["training_dataset"] = X_dataset or y_dataset
                 except Exception:
                     pass
                     
