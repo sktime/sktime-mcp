@@ -48,7 +48,11 @@ class PandasAdapter(DataSourceAdapter):
 
         if time_col:
             # User specified time column
-            if time_col not in df.columns:
+            if isinstance(time_col, list):
+                missing = [c for c in time_col if c not in df.columns]
+                if missing:
+                    raise ValueError(f"Time columns {missing} not found in data")
+            elif time_col not in df.columns:
                 raise ValueError(f"Time column '{time_col}' not found in data")
             df = df.set_index(time_col)
         elif not isinstance(df.index, (pd.DatetimeIndex, pd.RangeIndex, pd.Index)):
@@ -58,7 +62,7 @@ class PandasAdapter(DataSourceAdapter):
                 df = df.set_index(time_col)
 
         # Only ensure datetime index if it's already specified or looks like one
-        if not isinstance(df.index, pd.DatetimeIndex) and time_col:
+        if not isinstance(df.index, (pd.DatetimeIndex, pd.MultiIndex)) and time_col:
             try:
                 df.index = pd.to_datetime(df.index)
             except Exception as e:
@@ -126,9 +130,9 @@ class PandasAdapter(DataSourceAdapter):
         warnings = []
 
         # Check for sktime-compatible index
-        if not isinstance(data.index, (pd.DatetimeIndex, pd.RangeIndex, pd.PeriodIndex, pd.Index)):
+        if not isinstance(data.index, (pd.DatetimeIndex, pd.RangeIndex, pd.PeriodIndex, pd.Index, pd.MultiIndex)):
             errors.append(
-                "Index must be DatetimeIndex, PeriodIndex, or RangeIndex for sktime forecasting"
+                "Index must be DatetimeIndex, PeriodIndex, RangeIndex, or MultiIndex for sktime forecasting"
             )
 
         # Additional check: if it's a generic Index, ensure it's at least numeric or string-period-like
@@ -154,7 +158,7 @@ class PandasAdapter(DataSourceAdapter):
             warnings.append(f"Missing values detected: {missing_pct[missing_pct > 0].to_dict()}")
 
         # Check for duplicate indices
-        if data.index.duplicated().any():
+        if not isinstance(data.index, pd.MultiIndex) and data.index.duplicated().any():
             dup_count = data.index.duplicated().sum()
             errors.append(f"Duplicate time indices found: {dup_count} duplicates")
 

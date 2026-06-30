@@ -199,7 +199,18 @@ class Executor:
             data = loader()
 
             if isinstance(data, tuple):
-                y, X = data[0], data[1] if len(data) > 1 else None
+                # sktime classifier/clusterer datasets typically return (X, y)
+                # whereas forecaster datasets typically return (y) or (y, X)
+                # Let's check the shape/type to be safe, or just hardcode known ones
+                if name in ("arrow_head", "italy_power_demand", "basic_motions", "gunpoint", "osuleaf", "plaid"):
+                    X, y = data[0], data[1] if len(data) > 1 else None
+                    # swap them back for our internal representation where 'data' is the primary object requested
+                    return {
+                        "success": True, "name": name,
+                        "data": X, "exog": y, "type": str(type(X).__name__)
+                    }
+                else:
+                    y, X = data[0], data[1] if len(data) > 1 else None
             else:
                 y, X = data, None
 
@@ -247,23 +258,23 @@ class Executor:
             obj_type = instance.get_class_tag("object_type", "")
             if obj_type in ("classifier", "regressor"):
                 is_classifier_or_regressor = True
-            elif obj_type in ("transformer", "clusterer"):
+            elif obj_type == "transformer":
                 is_transformer = True
 
         try:
             if is_classifier_or_regressor:
-                # For classifiers/regressors, y from load_dataset might actually be the feature (X_data) 
-                # because the loader returns X, y. But fit_predict.py extracts y=data, X=exog.
-                # So if X is None, 'y' contains X, and we can't fit because labels are missing.
-                # Actually, our executor.load_dataset maps (X, y) -> y=X, exog=y for classifiers.
-                # So the argument 'y' here is actually X (features), and 'X' here is y (labels).
-                # Therefore we call instance.fit(y, X).
-                instance.fit(y, X)
+                # With decoupled X and y handles, X is features and y is labels
+                instance.fit(X, y)
             elif is_transformer:
                 if X is not None:
                     instance.fit(y, X)
                 else:
                     instance.fit(y)
+            elif obj_type == "clusterer":
+                if y is not None:
+                    instance.fit(X, y)
+                else:
+                    instance.fit(X)
             else:
                 # Assume forecaster or similar default
                 if fh is not None:
@@ -284,6 +295,7 @@ class Executor:
         handle_id: str,
         fh: int | list[int] | None = None,
         X: Any | None = None,
+        y: Any | None = None,
         mode: str = "predict",
         coverage: float | list[float] = 0.9,
         alpha: float | list[float] | None = None,
@@ -320,6 +332,8 @@ class Executor:
             kwargs = {}
             if X is not None:
                 kwargs["X"] = X
+            if y is not None:
+                kwargs["y"] = y
 
             if is_classifier_or_regressor:
                 # Classifiers take X in predict (and we mapped X in fit_predict to X)

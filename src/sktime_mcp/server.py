@@ -307,8 +307,8 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="fit",
             description=(
-                "Fit an estimator on a dataset. "
-                "Provide exactly one of: dataset (demo name) or data_handle (custom data)."
+                "Fit an estimator on data. "
+                "Provide explicit X_handle and/y_handle (or datasets) depending on the estimator's scitype."
             ),
             inputSchema={
                 "type": "object",
@@ -317,13 +317,24 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Handle from instantiate_estimator",
                     },
-                    "dataset": {
+                    "X_handle": {
                         "type": "string",
-                        "description": "Dataset name: airline, sunspots, lynx, etc.",
+                        "description": "Optional: Handle from load_data_source for X data (features, panel, etc.)",
                     },
-                    "data_handle": {
+                    "y_handle": {
                         "type": "string",
-                        "description": "Handle from load_data_source for custom data",
+                        "description": "Optional: Handle from load_data_source for y data (target, labels, etc.)",
+                    },
+                    "X_dataset": {
+                        "type": "string",
+                        "description": "Optional: Demo dataset name for X data",
+                    },
+                    "y_dataset": {
+                        "type": "string",
+                        "description": "Optional: Demo dataset name for y data",
+                    },
+                    "fh": {
+                        "description": "Optional: Forecast horizon (e.g. 12 or [1,2,3]) to pass to fit",
                     },
                     "run_async": {
                         "type": "boolean",
@@ -364,13 +375,21 @@ async def list_tools() -> list[Tool]:
                     "alpha": {
                         "description": "Alpha values for quantiles (float or list of floats)",
                     },
-                    "dataset": {
+                    "X_handle": {
                         "type": "string",
-                        "description": "Dataset name for providing X to predict (e.g. for classifiers)",
+                        "description": "Optional: Handle from load_data_source for X data",
                     },
-                    "data_handle": {
+                    "y_handle": {
                         "type": "string",
-                        "description": "Data handle for providing X to predict (e.g. for classifiers)",
+                        "description": "Optional: Handle from load_data_source for y data (needed for annotators)",
+                    },
+                    "X_dataset": {
+                        "type": "string",
+                        "description": "Optional: Demo dataset name for X data",
+                    },
+                    "y_dataset": {
+                        "type": "string",
+                        "description": "Optional: Demo dataset name for y data",
                     },
                 },
                 "required": ["estimator_handle"],
@@ -388,13 +407,21 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Handle of a fitted estimator",
                     },
-                    "dataset": {
+                    "X_handle": {
                         "type": "string",
-                        "description": "Dataset name: airline, sunspots, lynx, etc.",
+                        "description": "Optional: Handle for X data",
                     },
-                    "data_handle": {
+                    "y_handle": {
                         "type": "string",
-                        "description": "Handle from load_data_source for custom data",
+                        "description": "Optional: Handle for y data",
+                    },
+                    "X_dataset": {
+                        "type": "string",
+                        "description": "Optional: Demo dataset for X data",
+                    },
+                    "y_dataset": {
+                        "type": "string",
+                        "description": "Optional: Demo dataset for y data",
                     },
                 },
                 "required": ["estimator_handle"],
@@ -856,8 +883,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         elif name == "fit":
             result = fit_tool(
                 estimator_handle=arguments["estimator_handle"],
-                dataset=arguments.get("dataset"),
-                data_handle=arguments.get("data_handle"),
+                X_handle=arguments.get("X_handle"),
+                y_handle=arguments.get("y_handle"),
+                X_dataset=arguments.get("X_dataset"),
+                y_dataset=arguments.get("y_dataset"),
+                fh=arguments.get("fh"),
                 run_async=arguments.get("run_async", False),
             )
 
@@ -868,15 +898,19 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 mode=arguments.get("mode", "predict"),
                 coverage=arguments.get("coverage", 0.9),
                 alpha=arguments.get("alpha"),
-                dataset=arguments.get("dataset"),
-                data_handle=arguments.get("data_handle"),
+                X_handle=arguments.get("X_handle"),
+                y_handle=arguments.get("y_handle"),
+                X_dataset=arguments.get("X_dataset"),
+                y_dataset=arguments.get("y_dataset"),
             )
 
         elif name == "update":
             result = update_tool(
                 estimator_handle=arguments["estimator_handle"],
-                dataset=arguments.get("dataset"),
-                data_handle=arguments.get("data_handle"),
+                X_handle=arguments.get("X_handle"),
+                y_handle=arguments.get("y_handle"),
+                X_dataset=arguments.get("X_dataset"),
+                y_dataset=arguments.get("y_dataset"),
             )
 
         elif name == "get_fitted_params":

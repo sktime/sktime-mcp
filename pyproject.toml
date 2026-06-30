@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sktime-mcp"
-version = "0.1.0"
+version = "0.1.1"
 description = "MCP (Model Context Protocol) layer for sktime - Registry-Driven for LLMs"
 readme = "README.md"
 license = { file = "LICENSE" }

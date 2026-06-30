@@ -18,7 +18,7 @@ class TestExportCodeDatasetTracking:
         assert inst["success"], inst
         handle = inst["handle"]
 
-        result = fit_tool(handle, "lynx")
+        result = fit_tool(handle, y_dataset="lynx")
         assert result["success"], result
 
         hm = get_handle_manager()
@@ -37,7 +37,7 @@ class TestExportCodeDatasetTracking:
         assert inst["success"], inst
         handle = inst["handle"]
 
-        fit_result = fit_tool(handle, "lynx")
+        fit_result = fit_tool(handle, y_dataset="lynx")
         assert fit_result["success"], fit_result
 
         code_result = export_code_tool(handle, include_fit_example=True)
@@ -56,7 +56,7 @@ class TestExportCodeDatasetTracking:
         assert inst["success"], inst
         handle = inst["handle"]
 
-        fit_result = fit_tool(handle, "lynx")
+        fit_result = fit_tool(handle, y_dataset="lynx")
         assert fit_result["success"], fit_result
 
         # Explicitly request airline even though model was trained on lynx
