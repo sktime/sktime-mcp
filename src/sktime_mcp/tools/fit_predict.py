@@ -103,12 +103,17 @@ def fit_tool(
             job_type="fit", estimator_handle=estimator_handle,
             estimator_name=estimator_name, dataset_name=source_name, total_steps=2
         )
-        # We need to adapt fit_async for X, y. Since fit_async takes dataset/data_handle,
-        # we might need to modify fit_async too. For now we pass None and it might fail, 
-        # so let's update fit_async in executor as well if needed.
-        # But actually let's just run fit sync for now if async is hard to patch
-        pass # Will fix async below in a broader patch if needed
-
+        asyncio.create_task(
+            executor.fit_async(
+                handle_id=estimator_handle,
+                X_dataset=X_dataset,
+                y_dataset=y_dataset,
+                X_handle=X_handle,
+                y_handle=y_handle,
+                job_id=job_id
+            )
+        )
+        return {"success": True, "job_id": job_id, "status": "running"}
     fit_result = executor.fit(estimator_handle, y=y, X=X, fh=fh)
     
     if fit_result.get("success") and y_dataset:
