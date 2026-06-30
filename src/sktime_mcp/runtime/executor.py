@@ -120,6 +120,15 @@ class Executor:
         spec: str,
     ) -> dict[str, Any]:
         """Instantiate an estimator or pipeline from a spec and return a handle."""
+        import importlib
+        importlib.invalidate_caches()
+        
+        try:
+            from sktime.utils.dependencies._dependencies import _get_installed_packages_private
+            _get_installed_packages_private.cache_clear()
+        except ImportError:
+            pass
+        
         from sktime.registry import craft
         import sktime.registry._craft as _craft_module
         import numpy as np
@@ -160,9 +169,14 @@ class Executor:
             }
         except Exception as e:
             import traceback
+            import sys
+            error_msg = str(e)
+            if "requires package" in error_msg or "pip install" in error_msg or "ModuleNotFoundError" in type(e).__name__:
+                error_msg += f"\n\n(Hint for AI: To install missing dependencies, use the server's exact python environment by running: `{sys.executable} -m pip install <package_name>`)"
+            
             return {
                 "success": False,
-                "error": str(e),
+                "error": error_msg,
                 "traceback": traceback.format_exc(),
             }
 
