@@ -572,6 +572,7 @@ class Executor:
         y_dataset: str | None = None,
         X_handle: str | None = None,
         y_handle: str | None = None,
+        fh: Any | None = None,
         job_id: str | None = None,
     ) -> dict[str, Any]:
         """Async version of fit with job tracking."""
@@ -583,32 +584,45 @@ class Executor:
             self._job_manager.update_job(job_id, status=JobStatus.RUNNING)
 
             # Step 1: Load data
-            if data_handle:
-                self._job_manager.update_job(
-                    job_id,
-                    completed_steps=0,
-                    current_step=f"Loading data from handle '{data_handle}'...",
-                )
-                await asyncio.sleep(0.01)
-                
-                if data_handle not in self._data_handles:
-                    raise ValueError(f"Unknown data handle: {data_handle}")
-                data_info = self._data_handles[data_handle]
-                y = data_info["y"]
-                X = data_info.get("X")
-            else:
-                self._job_manager.update_job(
-                    job_id,
-                    completed_steps=0,
-                    current_step=f"Loading dataset '{dataset}'...",
-                )
-                await asyncio.sleep(0.01)
-                
-                data_result = self.load_dataset(dataset)
+            self._job_manager.update_job(
+                job_id,
+                completed_steps=0,
+                current_step="Loading data...",
+            )
+            await asyncio.sleep(0.01)
+
+            y = None
+            X = None
+            data_result = None
+
+            if y_handle:
+                if y_handle not in self._data_handles:
+                    raise ValueError(f"Unknown data handle: {y_handle}")
+                y = self._data_handles[y_handle]["y"]
+            elif y_dataset:
+                data_result = self.load_dataset(y_dataset)
                 if not data_result["success"]:
                     raise ValueError(data_result["error"])
                 y = data_result["data"]
-                X = data_result.get("exog")
+                # Some datasets like arrowhead return X in data and y in exog or vice-versa
+                if data_result.get("exog") is not None and X is None and X_handle is None and X_dataset is None:
+                    X = data_result["exog"]
+
+            if X_handle:
+                if X_handle not in self._data_handles:
+                    raise ValueError(f"Unknown data handle: {X_handle}")
+                X = self._data_handles[X_handle]["y"] # 'y' stores primary obj
+            elif X_dataset:
+                # If they passed the same dataset to both X and y, avoid re-loading or overwriting incorrectly
+                if X_dataset == y_dataset and data_result and data_result.get("success"):
+                    # We already loaded y_dataset, X could be in data_result["exog"] or data_result["data"]
+                    # fit_tool uses: X = data_result["data"], y = data_result.get("exog") or vice versa
+                    pass 
+                else:
+                    data_res = self.load_dataset(X_dataset)
+                    if not data_res["success"]:
+                        raise ValueError(data_res["error"])
+                    X = data_res["data"]
                 
             # Step 2: Fit model
             self._job_manager.update_job(
@@ -622,7 +636,7 @@ class Executor:
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 def run_fit():
-                    return self.fit(handle_id, y, X=X)
+                    return self.fit(handle_id, y, X=X, fh=fh)
                 fit_result = await loop.run_in_executor(pool, run_fit)
             
             if not fit_result["success"]:
@@ -631,7 +645,7 @@ class Executor:
             if X_dataset or y_dataset:
                 try:
                     handle_info = self._handle_manager.get_info(handle_id)
-                    handle_info.metadata["training_dataset"] = X_dataset or y_dataset
+                    handle_info.metadata["training_dataset"] = y_dataset or X_dataset
                 except Exception:
                     pass
                     

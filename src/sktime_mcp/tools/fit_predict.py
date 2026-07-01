@@ -110,6 +110,7 @@ def fit_tool(
                 y_dataset=y_dataset,
                 X_handle=X_handle,
                 y_handle=y_handle,
+                fh=fh,
                 job_id=job_id
             )
         )
