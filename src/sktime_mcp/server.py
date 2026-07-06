@@ -743,7 +743,34 @@ async def list_tools() -> list[Tool]:
                     "path": {
                         "type": "string",
                         "description": "Optional local file path to save the plot (e.g., '/tmp/plot.png'). If omitted, returns base64.",
-                    }
+                    },
+                    "figsize": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "description": "Figure size as [width, height] in inches (default: [12, 6]).",
+                    },
+                    "dpi": {
+                        "type": "integer",
+                        "description": "Resolution in dots per inch (default: 150).",
+                        "default": 150,
+                    },
+                    "markers": {
+                        "description": "Marker style(s) for data points (e.g., 'o', ['.', 'x']).",
+                    },
+                    "x_label": {
+                        "type": "string",
+                        "description": "Custom x-axis label.",
+                    },
+                    "y_label": {
+                        "type": "string",
+                        "description": "Custom y-axis label.",
+                    },
+                    "image_format": {
+                        "type": "string",
+                        "description": "Image output format: 'png' (default), 'svg', or 'webp'.",
+                        "enum": ["png", "svg", "webp"],
+                        "default": "png",
+                    },
                 },
                 "required": ["data_handles"],
             },
@@ -1025,6 +1052,12 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 labels=arguments.get("labels"),
                 title=arguments.get("title"),
                 path=arguments.get("path"),
+                figsize=arguments.get("figsize"),
+                dpi=arguments.get("dpi"),
+                markers=arguments.get("markers"),
+                x_label=arguments.get("x_label"),
+                y_label=arguments.get("y_label"),
+                image_format=arguments.get("image_format", "png"),
             )
 
         # -- Export / Persistence --------------------------------------------

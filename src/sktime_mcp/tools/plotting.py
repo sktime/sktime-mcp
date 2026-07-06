@@ -1,20 +1,113 @@
+"""
+Visualization tool for sktime MCP.
+
+Plots one or more time series using sktime's native plotting utilities,
+returning the result as a saved file or a base64-encoded image string.
+"""
+
 import base64
 import io
 import logging
+from typing import Any, List, Optional, Sequence, Tuple, Union
+
+import matplotlib
 import pandas as pd
-from typing import Any, List, Optional
-import logging
-from typing import Any, List, Optional
+
+matplotlib.use("Agg")  # headless-safe backend, must be called before pyplot
+import matplotlib.pyplot as plt  # noqa: E402
 
 from sktime_mcp.runtime.executor import get_executor
 
 logger = logging.getLogger(__name__)
 
+# Default plot dimensions
+_DEFAULT_FIGSIZE = (12, 6)
+_DEFAULT_DPI = 150
+_SUPPORTED_FORMATS = {"png", "svg", "webp"}
+
+
+def _resolve_series(
+    handle: str,
+    executor: Any,
+) -> pd.Series | pd.DataFrame:
+    """Resolve a data handle to a pandas Series/DataFrame.
+
+    Raises KeyError if the handle is not found.
+    """
+    if handle not in executor._data_handles:
+        raise KeyError(handle)
+    return executor._data_handles[handle]["y"]
+
+
+def _coerce_indices(series_list: List) -> List:
+    """Coerce mixed PeriodIndex / DatetimeIndex / string Index to DatetimeIndex.
+
+    Modifies the series **in-place** and returns the same list.
+    """
+    has_period = any(isinstance(s.index, pd.PeriodIndex) for s in series_list)
+    has_datetime = any(isinstance(s.index, pd.DatetimeIndex) for s in series_list)
+    has_string = any(
+        type(s.index).__name__ == "Index" and pd.api.types.is_string_dtype(s.index)
+        for s in series_list
+    )
+
+    mixed = sum([has_period, has_datetime, has_string]) > 1
+    if not mixed:
+        return series_list
+
+    logger.info("Coercing mixed index types to DatetimeIndex for plotting")
+    for i, s in enumerate(series_list):
+        try:
+            if isinstance(s.index, pd.PeriodIndex):
+                series_list[i] = s.copy()
+                series_list[i].index = s.index.to_timestamp()
+            elif not isinstance(s.index, pd.DatetimeIndex):
+                series_list[i] = s.copy()
+                series_list[i].index = pd.to_datetime(s.index)
+        except Exception as e:
+            logger.warning("Failed to coerce index for series %d: %s", i, e)
+
+    return series_list
+
+
+def _reconcile_labels(
+    labels: Optional[List[str]],
+    n_series: int,
+) -> Optional[List[str]]:
+    """Return a label list that exactly matches *n_series*.
+
+    - If *labels* is ``None``, returns ``None`` (sktime will auto-label).
+    - If the lengths match, returns *labels* unchanged.
+    - If they differ, pads with ``"Series N"`` or truncates, and logs a warning.
+    """
+    if labels is None:
+        return None
+    if len(labels) == n_series:
+        return labels
+
+    logger.warning(
+        "Label count (%d) does not match series count (%d); adjusting.",
+        len(labels),
+        n_series,
+    )
+    if len(labels) < n_series:
+        return labels + [
+            f"Series {i}" for i in range(len(labels), n_series)
+        ]
+    return labels[:n_series]
+
+
 def plot_series_tool(
-    data_handles: List[str], 
-    labels: Optional[List[str]] = None, 
-    title: Optional[str] = None, 
-    path: Optional[str] = None
+    data_handles: List[str],
+    labels: Optional[List[str]] = None,
+    title: Optional[str] = None,
+    path: Optional[str] = None,
+    figsize: Optional[List[float]] = None,
+    dpi: Optional[int] = None,
+    markers: Optional[Union[str, List[str]]] = None,
+    x_label: Optional[str] = None,
+    y_label: Optional[str] = None,
+    image_format: str = "png",
 ) -> dict[str, Any]:
     """Plot one or more time series natively.
 
@@ -23,75 +116,129 @@ def plot_series_tool(
     data_handles : list of str
         List of data handle IDs to plot (e.g. train, test, forecasts).
     labels : list of str, optional
-        Labels for each series.
+        Labels for each series. If the count does not match the number
+        of data handles, it is silently padded or truncated.
     title : str, optional
         Title of the plot.
     path : str, optional
         Path to save the plot. If not provided, returns base64 encoded image.
+    figsize : list of float, optional
+        Figure size as ``[width, height]`` in inches. Default ``[12, 6]``.
+    dpi : int, optional
+        Resolution in dots per inch. Default ``150``.
+    markers : str or list of str, optional
+        Marker style(s) for data points (e.g. ``"o"``, ``[".", "x"]``).
+        Passed through to ``sktime.utils.plotting.plot_series``.
+    x_label : str, optional
+        Custom label for the x-axis.
+    y_label : str, optional
+        Custom label for the y-axis.
+    image_format : str, optional
+        Image output format: ``"png"`` (default), ``"svg"``, or ``"webp"``.
 
     Returns
     -------
     dict
-        Dictionary containing success status and path/base64 string.
+        Dictionary containing success status, path or base64 string,
+        and plot metadata (``n_series``, ``labels_used``, ``figsize``,
+        ``dpi``).
     """
+    # --- validate image format ---------------------------------------------
+    fmt = image_format.lower()
+    if fmt not in _SUPPORTED_FORMATS:
+        return {
+            "success": False,
+            "error": (
+                f"Unsupported image format '{image_format}'. "
+                f"Choose from: {sorted(_SUPPORTED_FORMATS)}"
+            ),
+        }
+
     try:
         from sktime.utils.plotting import plot_series
-        import matplotlib.pyplot as plt
     except ImportError:
-        return {"success": False, "error": "matplotlib and sktime plotting utils are required."}
+        return {
+            "success": False,
+            "error": "matplotlib and sktime plotting utils are required.",
+        }
 
     executor = get_executor()
-    
-    series_to_plot = []
-    
+
+    # --- resolve data handles -----------------------------------------------
+    series_to_plot: list = []
+    missing: list[str] = []
+
     for handle in data_handles:
-        if handle not in executor._data_handles:
-            return {"success": False, "error": f"Data handle '{handle}' not found."}
-        series = executor._data_handles[handle]["y"]
-        series_to_plot.append(series)
+        try:
+            series_to_plot.append(_resolve_series(handle, executor))
+        except KeyError:
+            missing.append(handle)
 
+    if missing:
+        return {
+            "success": False,
+            "error": f"Data handle(s) not found: {missing}",
+            "available_handles": list(executor._data_handles.keys()),
+        }
+
+    # --- prepare plotting args ---------------------------------------------
     try:
-        # sktime requires all series to have the same index type
-        # Check if we have a mix of PeriodIndex and DatetimeIndex
-        has_period = any(isinstance(s.index, pd.PeriodIndex) for s in series_to_plot)
-        has_datetime = any(isinstance(s.index, pd.DatetimeIndex) for s in series_to_plot)
-        has_string = any(type(s.index).__name__ == "Index" and pd.api.types.is_string_dtype(s.index) for s in series_to_plot)
-        
-        if (has_period and has_datetime) or (has_period and has_string) or (has_datetime and has_string):
-            # Coerce everything to DatetimeIndex for plotting
-            logger.info("Coercing mixed index types to DatetimeIndex for plotting")
-            for i in range(len(series_to_plot)):
-                try:
-                    if isinstance(series_to_plot[i].index, pd.PeriodIndex):
-                        series_to_plot[i].index = series_to_plot[i].index.to_timestamp()
-                    else:
-                        series_to_plot[i].index = pd.to_datetime(series_to_plot[i].index)
-                except Exception as e:
-                    logger.warning(f"Failed to coerce index for series {i}: {e}")
+        series_to_plot = _coerce_indices(series_to_plot)
+        labels = _reconcile_labels(labels, len(series_to_plot))
 
-        if labels and len(labels) != len(series_to_plot):
-            logger.warning("Length of labels does not match number of series.")
-            # Adjust labels or just pass it and let sktime handle, but it might crash
-            # Let's pass it anyway or truncate/extend it if we want to be safe.
-            # actually plot_series takes labels but it should match.
+        effective_figsize = tuple(figsize) if figsize else _DEFAULT_FIGSIZE
+        effective_dpi = dpi if dpi else _DEFAULT_DPI
 
-        fig, ax = plot_series(*series_to_plot, labels=labels)
+        # Build kwargs for plot_series
+        plot_kwargs: dict[str, Any] = {}
+        if markers is not None:
+            plot_kwargs["markers"] = markers
+
+        fig, ax = plot_series(
+            *series_to_plot,
+            labels=labels,
+            **plot_kwargs,
+        )
+
+        # Resize figure after creation (plot_series creates its own figure)
+        fig.set_size_inches(effective_figsize)
+        fig.set_dpi(effective_dpi)
+
         if title:
             ax.set_title(title)
-        
-        result = {"success": True}
+        if x_label:
+            ax.set_xlabel(x_label)
+        if y_label:
+            ax.set_ylabel(y_label)
+
+        # --- output ---------------------------------------------------------
+        result: dict[str, Any] = {
+            "success": True,
+            "n_series": len(series_to_plot),
+            "labels_used": labels or [
+                f"Series {i}" for i in range(len(series_to_plot))
+            ],
+            "figsize": list(effective_figsize),
+            "dpi": effective_dpi,
+            "image_format": fmt,
+        }
+
         if path:
-            fig.savefig(path, bbox_inches='tight')
+            fig.savefig(path, format=fmt, bbox_inches="tight", dpi=effective_dpi)
             result["path"] = path
         else:
             buf = io.BytesIO()
-            fig.savefig(buf, format="png", bbox_inches='tight')
+            fig.savefig(buf, format=fmt, bbox_inches="tight", dpi=effective_dpi)
             buf.seek(0)
-            img_base64 = base64.b64encode(buf.read()).decode("utf-8")
-            result["image_base64"] = img_base64
-            
+            result["image_base64"] = base64.b64encode(buf.read()).decode("utf-8")
+
         plt.close(fig)
         return result
+
     except Exception as e:
         logger.exception("Error plotting series")
-        return {"success": False, "error": str(e)}
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": type(e).__name__,
+        }
