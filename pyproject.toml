@@ -36,6 +36,7 @@ dependencies = [
     "fastapi>=0.100.0",
     "uvicorn>=0.22.0",
     "sse-starlette>=1.6.1",
+    "mlflow>=2.0",
 ]
 
 [project.optional-dependencies]
