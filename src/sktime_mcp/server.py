@@ -874,15 +874,15 @@ async def list_tools() -> list[Tool]:
 @server.call_tool()
 async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Handle tool calls."""
-    import sys
-    import site
     import importlib
-    
+    import site
+    import sys
+
     # Ensure user site-packages is in sys.path (solves Docker non-root dynamic install issue)
     user_site = site.getusersitepackages()
     if user_site not in sys.path:
         sys.path.append(user_site)
-        
+
     # Invalidate import caches so newly installed packages are immediately visible
     importlib.invalidate_caches()
 
@@ -1066,7 +1066,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
 
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
-            
+
         # -- System ----------------------------------------------------------
         elif name == "run_command":
             result = run_command_tool(arguments["command"])

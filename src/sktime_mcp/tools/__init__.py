@@ -32,9 +32,9 @@ from sktime_mcp.tools.list_available_data import list_available_data_tool
 from sktime_mcp.tools.query_registry import (
     query_registry_tool,
 )
+from sktime_mcp.tools.run_command import run_command_tool
 from sktime_mcp.tools.save_data import save_data_tool
 from sktime_mcp.tools.save_model import save_model_tool
-from sktime_mcp.tools.run_command import run_command_tool
 from sktime_mcp.tools.split_data import split_data_tool
 from sktime_mcp.tools.transform_data import transform_data_tool
 
