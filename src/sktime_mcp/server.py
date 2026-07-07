@@ -65,6 +65,7 @@ from sktime_mcp.tools.list_available_data import list_available_data_tool
 from sktime_mcp.tools.query_registry import (
     query_registry_tool,
 )
+from sktime_mcp.tools.run_command import run_command_tool
 from sktime_mcp.tools.save_data import save_data_tool
 from sktime_mcp.tools.save_model import save_model_tool
 from sktime_mcp.tools.split_data import split_data_tool
@@ -843,6 +844,25 @@ async def list_tools() -> list[Tool]:
                 "required": ["job_id"],
             },
         ),
+        # -- System ----------------------------------------------------------
+        Tool(
+            name="run_command",
+            description=(
+                "Run an arbitrary CLI/bash command inside the sktime container. "
+                "Use this to install missing python packages (e.g., 'pip install mlflow') "
+                "or inspect the file system."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The bash command to run",
+                    },
+                },
+                "required": ["command"],
+            },
+        ),
     ]
 
 
@@ -854,6 +874,18 @@ async def list_tools() -> list[Tool]:
 @server.call_tool()
 async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Handle tool calls."""
+    import sys
+    import site
+    import importlib
+    
+    # Ensure user site-packages is in sys.path (solves Docker non-root dynamic install issue)
+    user_site = site.getusersitepackages()
+    if user_site not in sys.path:
+        sys.path.append(user_site)
+        
+    # Invalidate import caches so newly installed packages are immediately visible
+    importlib.invalidate_caches()
+
     logger.info(f"=== Tool Call: {name} ===")
     logger.info(f"Arguments: {json.dumps(arguments, indent=2)}")
 
@@ -1034,6 +1066,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
 
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
+            
+        # -- System ----------------------------------------------------------
+        elif name == "run_command":
+            result = run_command_tool(arguments["command"])
         else:
             result = {"error": f"Unknown tool: {name}"}
 
