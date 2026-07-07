@@ -19,9 +19,7 @@ class TestInstantiateEstimatorValidation:
 
     def test_valid_spec_succeeds(self):
         """Valid spec with a real estimator should succeed."""
-        result = instantiate_estimator_tool(
-            spec="NaiveForecaster(strategy='last')"
-        )
+        result = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
         assert result["success"] is True
         assert "handle" in result
 

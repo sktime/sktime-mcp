@@ -8,7 +8,6 @@ multiple elements create a validated pipeline.
 
 from typing import Any
 
-from sktime_mcp.registry.interface import get_registry
 from sktime_mcp.runtime.executor import get_executor
 from sktime_mcp.runtime.handles import get_handle_manager
 

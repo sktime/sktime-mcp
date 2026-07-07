@@ -74,7 +74,6 @@ class TestFormatValue:
         assert result == "[[1, 2], [3, 4]]"
 
 
-
 class TestVarNameValidation:
     """Tests for Python variable name validation in code export."""
 
@@ -93,7 +92,6 @@ class TestVarNameValidation:
     def test_keyword_invalid(self):
         """Python keywords should be rejected."""
         assert _is_valid_var_name("class") is False
-
 
 
 class TestExportCodeTool:

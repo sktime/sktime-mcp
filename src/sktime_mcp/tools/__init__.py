@@ -11,9 +11,9 @@ from sktime_mcp.tools.describe_component import (
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_tool,
+    get_fitted_params_tool,
     predict_tool,
     update_tool,
-    get_fitted_params_tool,
 )
 from sktime_mcp.tools.format_tools import format_time_series_tool
 from sktime_mcp.tools.inspect_data import inspect_data_tool
