@@ -8,13 +8,9 @@ returning the result as a saved file or a base64-encoded image string.
 import base64
 import io
 import logging
-from typing import Any, List, Optional, Sequence, Tuple, Union
+from typing import Any
 
-import matplotlib
 import pandas as pd
-
-matplotlib.use("Agg")  # headless-safe backend, must be called before pyplot
-import matplotlib.pyplot as plt  # noqa: E402
 
 from sktime_mcp.runtime.executor import get_executor
 
@@ -39,7 +35,7 @@ def _resolve_series(
     return executor._data_handles[handle]["y"]
 
 
-def _coerce_indices(series_list: List) -> List:
+def _coerce_indices(series_list: list) -> list:
     """Coerce mixed PeriodIndex / DatetimeIndex / string Index to DatetimeIndex.
 
     Modifies the series **in-place** and returns the same list.
@@ -71,9 +67,9 @@ def _coerce_indices(series_list: List) -> List:
 
 
 def _reconcile_labels(
-    labels: Optional[List[str]],
+    labels: list[str] | None,
     n_series: int,
-) -> Optional[List[str]]:
+) -> list[str] | None:
     """Return a label list that exactly matches *n_series*.
 
     - If *labels* is ``None``, returns ``None`` (sktime will auto-label).
@@ -91,22 +87,20 @@ def _reconcile_labels(
         n_series,
     )
     if len(labels) < n_series:
-        return labels + [
-            f"Series {i}" for i in range(len(labels), n_series)
-        ]
+        return labels + [f"Series {i}" for i in range(len(labels), n_series)]
     return labels[:n_series]
 
 
 def plot_series_tool(
-    data_handles: List[str],
-    labels: Optional[List[str]] = None,
-    title: Optional[str] = None,
-    path: Optional[str] = None,
-    figsize: Optional[List[float]] = None,
-    dpi: Optional[int] = None,
-    markers: Optional[Union[str, List[str]]] = None,
-    x_label: Optional[str] = None,
-    y_label: Optional[str] = None,
+    data_handles: list[str],
+    labels: list[str] | None = None,
+    title: str | None = None,
+    path: str | None = None,
+    figsize: list[float] | None = None,
+    dpi: int | None = None,
+    markers: str | list[str] | None = None,
+    x_label: str | None = None,
+    y_label: str | None = None,
     image_format: str = "png",
 ) -> dict[str, Any]:
     """Plot one or more time series natively.
@@ -155,6 +149,10 @@ def plot_series_tool(
         }
 
     try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
         from sktime.utils.plotting import plot_series
     except ImportError:
         return {
@@ -215,9 +213,7 @@ def plot_series_tool(
         result: dict[str, Any] = {
             "success": True,
             "n_series": len(series_to_plot),
-            "labels_used": labels or [
-                f"Series {i}" for i in range(len(series_to_plot))
-            ],
+            "labels_used": labels or [f"Series {i}" for i in range(len(series_to_plot))],
             "figsize": list(effective_figsize),
             "dpi": effective_dpi,
             "image_format": fmt,
