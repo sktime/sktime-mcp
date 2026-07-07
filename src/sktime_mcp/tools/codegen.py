@@ -7,7 +7,6 @@ Generates Python code to recreate estimators and pipelines.
 import keyword
 from typing import Any
 
-from sktime_mcp.registry.interface import get_registry
 from sktime_mcp.runtime.executor import _get_demo_datasets
 from sktime_mcp.runtime.handles import get_handle_manager
 
@@ -35,9 +34,6 @@ def _format_value(value: Any) -> str:
     else:
         # For complex objects, try to represent as str
         return repr(value)
-
-
-
 
 
 def _is_valid_var_name(var_name: str) -> bool:

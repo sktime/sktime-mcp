@@ -45,9 +45,9 @@ from sktime_mcp.tools.describe_component import (
 from sktime_mcp.tools.evaluate import evaluate_estimator_tool
 from sktime_mcp.tools.fit_predict import (
     fit_tool,
+    get_fitted_params_tool,
     predict_tool,
     update_tool,
-    get_fitted_params_tool,
 )
 from sktime_mcp.tools.inspect_data import inspect_data_tool
 from sktime_mcp.tools.instantiate import (
@@ -65,6 +65,7 @@ from sktime_mcp.tools.list_available_data import list_available_data_tool
 from sktime_mcp.tools.query_registry import (
     query_registry_tool,
 )
+from sktime_mcp.tools.run_command import run_command_tool
 from sktime_mcp.tools.save_data import save_data_tool
 from sktime_mcp.tools.save_model import save_model_tool
 from sktime_mcp.tools.split_data import split_data_tool
@@ -366,7 +367,13 @@ async def list_tools() -> list[Tool]:
                     "mode": {
                         "type": "string",
                         "description": "Prediction mode",
-                        "enum": ["predict", "predict_interval", "predict_quantiles", "predict_proba", "predict_var"],
+                        "enum": [
+                            "predict",
+                            "predict_interval",
+                            "predict_quantiles",
+                            "predict_proba",
+                            "predict_var",
+                        ],
                         "default": "predict",
                     },
                     "coverage": {
@@ -398,9 +405,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="update",
-            description=(
-                "Update a fitted estimator with new data."
-            ),
+            description=("Update a fitted estimator with new data."),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -463,7 +468,7 @@ async def list_tools() -> list[Tool]:
                     "kwargs": {
                         "type": "object",
                         "description": "Dictionary of keyword arguments to pass to the method. "
-                                       "Pass '_dataset' or '_data_handle' as suffixes in keys to inject memory data (e.g., {'y_dataset': 'airline'})."
+                        "Pass '_dataset' or '_data_handle' as suffixes in keys to inject memory data (e.g., {'y_dataset': 'airline'}).",
                     },
                 },
                 "required": ["handle_id", "method_name"],
@@ -899,6 +904,25 @@ async def list_tools() -> list[Tool]:
                 "required": ["job_id"],
             },
         ),
+        # -- System ----------------------------------------------------------
+        Tool(
+            name="run_command",
+            description=(
+                "Run an arbitrary CLI/bash command inside the sktime container. "
+                "Use this to install missing python packages (e.g., 'pip install mlflow') "
+                "or inspect the file system."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The bash command to run",
+                    },
+                },
+                "required": ["command"],
+            },
+        ),
     ]
 
 
@@ -910,6 +934,18 @@ async def list_tools() -> list[Tool]:
 @server.call_tool()
 async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Handle tool calls."""
+    import importlib
+    import site
+    import sys
+
+    # Ensure user site-packages is in sys.path (solves Docker non-root dynamic install issue)
+    user_site = site.getusersitepackages()
+    if user_site not in sys.path:
+        sys.path.append(user_site)
+
+    # Invalidate import caches so newly installed packages are immediately visible
+    importlib.invalidate_caches()
+
     logger.info(f"=== Tool Call: {name} ===")
     logger.info(f"Arguments: {json.dumps(arguments, indent=2)}")
 
@@ -929,9 +965,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         # -- Instantiation ---------------------------------------------------
         elif name == "instantiate_estimator":
-            result = instantiate_estimator_tool(
-                spec=arguments.get("spec")
-            )
+            result = instantiate_estimator_tool(spec=arguments.get("spec"))
 
         elif name == "list_handles":
             result = list_handles_tool()
@@ -978,10 +1012,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         elif name == "call_method":
             from sktime_mcp.runtime.executor import get_executor
+
             result = get_executor().call_method(
                 handle_id=arguments["handle_id"],
                 method_name=arguments["method_name"],
-                kwargs=arguments.get("kwargs", {})
+                kwargs=arguments.get("kwargs", {}),
             )
 
         elif name == "evaluate_estimator":
@@ -1106,6 +1141,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
 
             result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
+
+        # -- System ----------------------------------------------------------
+        elif name == "run_command":
+            result = run_command_tool(arguments["command"])
         else:
             result = {"error": f"Unknown tool: {name}"}
 

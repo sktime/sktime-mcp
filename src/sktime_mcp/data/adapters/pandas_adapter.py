@@ -130,7 +130,9 @@ class PandasAdapter(DataSourceAdapter):
         warnings = []
 
         # Check for sktime-compatible index
-        if not isinstance(data.index, (pd.DatetimeIndex, pd.RangeIndex, pd.PeriodIndex, pd.Index, pd.MultiIndex)):
+        if not isinstance(
+            data.index, (pd.DatetimeIndex, pd.RangeIndex, pd.PeriodIndex, pd.Index, pd.MultiIndex)
+        ):
             errors.append(
                 "Index must be DatetimeIndex, PeriodIndex, RangeIndex, or MultiIndex for sktime forecasting"
             )

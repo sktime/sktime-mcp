@@ -121,23 +121,26 @@ class Executor:
     ) -> dict[str, Any]:
         """Instantiate an estimator or pipeline from a spec and return a handle."""
         import importlib
+
         importlib.invalidate_caches()
-        
+
         try:
             from sktime.utils.dependencies._dependencies import _get_installed_packages_private
+
             _get_installed_packages_private.cache_clear()
         except ImportError:
             pass
-        
-        from sktime.registry import craft
-        import sktime.registry._craft as _craft_module
+
         import numpy as np
         import pandas as pd
-        
+        import sktime.registry._craft as _craft_module
+        from sktime.registry import craft
+
         # Temporarily patch all_estimators to inject standard libraries into craft's registry.
         # This allows users to pass callables like `numpy.exp` into estimators
         # like CurveFitForecaster via the craft spec.
         original_all = _craft_module.all_estimators
+
         def mock_all_estimators(*args, **kwargs):
             results = original_all(*args, **kwargs)
             # results is a list of tuples: [(name, class), ...]
@@ -147,14 +150,14 @@ class Executor:
             results.append(("pd", pd))
             results.append(("pandas", pd))
             return results
-            
+
         _craft_module.all_estimators = mock_all_estimators
         try:
             try:
                 instance = craft(spec)
             finally:
                 _craft_module.all_estimators = original_all
-                
+
             estimator_name = type(instance).__name__
             handle_id = self._handle_manager.create_handle(
                 estimator_name=estimator_name,
@@ -168,12 +171,17 @@ class Executor:
                 "spec": spec,
             }
         except Exception as e:
-            import traceback
             import sys
+            import traceback
+
             error_msg = str(e)
-            if "requires package" in error_msg or "pip install" in error_msg or "ModuleNotFoundError" in type(e).__name__:
+            if (
+                "requires package" in error_msg
+                or "pip install" in error_msg
+                or "ModuleNotFoundError" in type(e).__name__
+            ):
                 error_msg += f"\n\n(Hint for AI: To install missing dependencies, use the server's exact python environment by running: `{sys.executable} -m pip install <package_name>`)"
-            
+
             return {
                 "success": False,
                 "error": error_msg,
@@ -202,12 +210,22 @@ class Executor:
                 # sktime classifier/clusterer datasets typically return (X, y)
                 # whereas forecaster datasets typically return (y) or (y, X)
                 # Let's check the shape/type to be safe, or just hardcode known ones
-                if name in ("arrow_head", "italy_power_demand", "basic_motions", "gunpoint", "osuleaf", "plaid"):
+                if name in (
+                    "arrow_head",
+                    "italy_power_demand",
+                    "basic_motions",
+                    "gunpoint",
+                    "osuleaf",
+                    "plaid",
+                ):
                     X, y = data[0], data[1] if len(data) > 1 else None
                     # swap them back for our internal representation where 'data' is the primary object requested
                     return {
-                        "success": True, "name": name,
-                        "data": X, "exog": y, "type": str(type(X).__name__)
+                        "success": True,
+                        "name": name,
+                        "data": X,
+                        "exog": y,
+                        "type": str(type(X).__name__),
                     }
                 else:
                     y, X = data[0], data[1] if len(data) > 1 else None
@@ -242,8 +260,8 @@ class Executor:
         obj_type = getattr(instance, "get_class_tag", lambda x, y: "")("object_type", "")
         if not hasattr(instance, "fit"):
             return {
-                "success": False, 
-                "error": f"The {obj_type or 'estimator'} scitype does not support fit(). Please use the 'call_method' tool to interact with its native methods."
+                "success": False,
+                "error": f"The {obj_type or 'estimator'} scitype does not support fit(). Please use the 'call_method' tool to interact with its native methods.",
             }
 
         # Check scitype to determine how to call fit
@@ -251,7 +269,7 @@ class Executor:
         # - Forecasters: fit(y, X=None, fh=None)
         # - Classifiers/Regressors: fit(X, y)
         # - Transformers/Clusterers: fit(X, y=None)
-        
+
         is_classifier_or_regressor = False
         is_transformer = False
         if hasattr(instance, "get_class_tag"):
@@ -288,6 +306,7 @@ class Executor:
             return {"success": True, "handle": handle_id, "fitted": True}
         except Exception as e:
             import traceback
+
             return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
 
     def predict(
@@ -307,10 +326,14 @@ class Executor:
             return {"success": False, "error": f"Handle not found: {handle_id}"}
 
         obj_type = getattr(instance, "get_class_tag", lambda x, y: "")("object_type", "")
-        if not hasattr(instance, "predict") and mode == "predict" and not (hasattr(instance, "transform") and obj_type == "transformer"):
+        if (
+            not hasattr(instance, "predict")
+            and mode == "predict"
+            and not (hasattr(instance, "transform") and obj_type == "transformer")
+        ):
             return {
-                "success": False, 
-                "error": f"The {obj_type or 'estimator'} scitype does not support predict(). Please use the 'call_method' tool to interact with its native methods."
+                "success": False,
+                "error": f"The {obj_type or 'estimator'} scitype does not support predict(). Please use the 'call_method' tool to interact with its native methods.",
             }
 
         if not self._handle_manager.is_fitted(handle_id):
@@ -348,7 +371,9 @@ class Executor:
             elif is_transformer:
                 if mode == "predict":
                     if obj_type == "clusterer":
-                        predictions = instance.predict(X) if X is not None else instance.predict(fh=fh) # some clusterers might use predict(X)
+                        predictions = (
+                            instance.predict(X) if X is not None else instance.predict(fh=fh)
+                        )  # some clusterers might use predict(X)
                     else:
                         # For transformer, transform is basically the predict equivalent if X is passed
                         if X is not None:
@@ -372,7 +397,7 @@ class Executor:
                     return {"success": False, "error": f"Unknown prediction mode: {mode}"}
 
             from sktime_mcp.server import sanitize_for_json
-            
+
             if isinstance(predictions, pd.Series):
                 predictions_copy = predictions.copy()
                 predictions_copy.index = predictions_copy.index.astype(str)
@@ -383,7 +408,9 @@ class Executor:
                 # Need to handle multiindex columns if they exist (like in predict_interval)
                 if isinstance(predictions_copy.columns, pd.MultiIndex):
                     # Flatten multiindex for JSON serialization
-                    predictions_copy.columns = ["_".join(map(str, col)) for col in predictions_copy.columns.values]
+                    predictions_copy.columns = [
+                        "_".join(map(str, col)) for col in predictions_copy.columns.values
+                    ]
                 result = predictions_copy.to_dict(orient="list")
             else:
                 result = sanitize_for_json(predictions)
@@ -391,7 +418,7 @@ class Executor:
             out = {
                 "success": True,
                 "horizon": len(fh) if hasattr(fh, "__len__") else fh,
-                "mode": mode
+                "mode": mode,
             }
             if mode == "predict":
                 out["predictions"] = result
@@ -418,16 +445,19 @@ class Executor:
             instance = self._handle_manager.get_instance(handle_id)
         except KeyError:
             return {"success": False, "error": f"Handle not found: {handle_id}"}
-        
+
         if not hasattr(instance, method_name):
             obj_type = getattr(instance, "get_class_tag", lambda x, y: "")("object_type", "")
-            return {"success": False, "error": f"The {obj_type or 'estimator'} does not have a method '{method_name}'."}
+            return {
+                "success": False,
+                "error": f"The {obj_type or 'estimator'} does not have a method '{method_name}'.",
+            }
 
         kwargs = kwargs or {}
-        
+
         try:
             method = getattr(instance, method_name)
-            
+
             # Map data_handle and dataset from kwargs if they exist
             # This allows the LLM to pass 'dataset': 'airline' and we inject the actual data
             for k, v in list(kwargs.items()):
@@ -447,20 +477,24 @@ class Executor:
                         return {"success": False, "error": f"Unknown data handle: {v}"}
 
             result = method(**kwargs)
-            
+
             from sktime_mcp.server import sanitize_for_json
+
             if hasattr(result, "to_dict"):
-                if isinstance(result, __import__("pandas").DataFrame) and isinstance(result.columns, __import__("pandas").MultiIndex):
+                if isinstance(result, __import__("pandas").DataFrame) and isinstance(
+                    result.columns, __import__("pandas").MultiIndex
+                ):
                     result.columns = ["_".join(map(str, col)) for col in result.columns.values]
                     sanitized = result.to_dict(orient="list")
                 else:
                     sanitized = result.to_dict()
             else:
                 sanitized = sanitize_for_json(result)
-            
+
             return {"success": True, "result": sanitized}
         except Exception as e:
             import traceback
+
             return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
 
     def update(
@@ -485,7 +519,11 @@ class Executor:
                 instance.update(y, X=X, **kwargs)
             else:
                 instance.update(y, **kwargs)
-            return {"success": True, "handle": handle_id, "message": "Estimator updated successfully"}
+            return {
+                "success": True,
+                "handle": handle_id,
+                "message": "Estimator updated successfully",
+            }
         except Exception as e:
             return {"success": False, "error": str(e)}
 
@@ -495,17 +533,17 @@ class Executor:
             instance = self._handle_manager.get_instance(handle_id)
         except KeyError:
             return {"success": False, "error": f"Handle not found: {handle_id}"}
-            
+
         if not self._handle_manager.is_fitted(handle_id):
             return {"success": False, "error": "Estimator not fitted"}
-            
+
         try:
             from sktime_mcp.server import sanitize_for_json
+
             params = instance.get_fitted_params()
             return {"success": True, "fitted_params": sanitize_for_json(params)}
         except Exception as e:
             return {"success": False, "error": str(e)}
-
 
     def fit_predict(
         self,
@@ -572,69 +610,89 @@ class Executor:
         y_dataset: str | None = None,
         X_handle: str | None = None,
         y_handle: str | None = None,
+        fh: Any | None = None,
         job_id: str | None = None,
     ) -> dict[str, Any]:
         """Async version of fit with job tracking."""
         try:
             import asyncio
+
             from sktime_mcp.runtime.jobs import JobStatus
-            
+
             # Update status to RUNNING
             self._job_manager.update_job(job_id, status=JobStatus.RUNNING)
 
             # Step 1: Load data
-            if data_handle:
-                self._job_manager.update_job(
-                    job_id,
-                    completed_steps=0,
-                    current_step=f"Loading data from handle '{data_handle}'...",
-                )
-                await asyncio.sleep(0.01)
-                
-                if data_handle not in self._data_handles:
-                    raise ValueError(f"Unknown data handle: {data_handle}")
-                data_info = self._data_handles[data_handle]
-                y = data_info["y"]
-                X = data_info.get("X")
+            self._job_manager.update_job(
+                job_id,
+                completed_steps=0,
+                current_step="Loading data...",
+            )
+            await asyncio.sleep(0.01)
+
+            X = None
+            y = None
+
+            if X_handle:
+                if X_handle not in self._data_handles:
+                    raise ValueError(f"Unknown X data handle: {X_handle}")
+                X = self._data_handles[X_handle]["y"]
+
+            if y_handle:
+                if y_handle not in self._data_handles:
+                    raise ValueError(f"Unknown y data handle: {y_handle}")
+                y = self._data_handles[y_handle]["y"]
+
+            if X_dataset and X_dataset == y_dataset:
+                data_res = self.load_dataset(X_dataset)
+                if not data_res["success"]:
+                    raise ValueError(data_res["error"])
+                if data_res.get("exog") is not None:
+                    X = data_res["data"]
+                    y = data_res["exog"]
+                else:
+                    y = data_res["data"]
             else:
-                self._job_manager.update_job(
-                    job_id,
-                    completed_steps=0,
-                    current_step=f"Loading dataset '{dataset}'...",
-                )
-                await asyncio.sleep(0.01)
-                
-                data_result = self.load_dataset(dataset)
-                if not data_result["success"]:
-                    raise ValueError(data_result["error"])
-                y = data_result["data"]
-                X = data_result.get("exog")
-                
+                if X_dataset:
+                    data_res = self.load_dataset(X_dataset)
+                    if not data_res["success"]:
+                        raise ValueError(data_res["error"])
+                    X = data_res["data"]
+
+                if y_dataset:
+                    data_res = self.load_dataset(y_dataset)
+                    if not data_res["success"]:
+                        raise ValueError(data_res["error"])
+                    y = data_res["data"]
+
             # Step 2: Fit model
             self._job_manager.update_job(
                 job_id,
                 completed_steps=1,
                 current_step="Fitting model (this may take a while)...",
             )
-            
+
             # Run fit in thread pool so it doesn't block async loop
             loop = asyncio.get_running_loop()
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor() as pool:
+
                 def run_fit():
-                    return self.fit(handle_id, y, X=X)
+                    return self.fit(handle_id, y, X=X, fh=fh)
+
                 fit_result = await loop.run_in_executor(pool, run_fit)
-            
+
             if not fit_result["success"]:
                 raise ValueError(fit_result["error"])
-                
+
             if X_dataset or y_dataset:
                 try:
                     handle_info = self._handle_manager.get_info(handle_id)
-                    handle_info.metadata["training_dataset"] = X_dataset or y_dataset
+                    handle_info.metadata["training_dataset"] = y_dataset or X_dataset
                 except Exception:
                     pass
-                    
+
             self._job_manager.update_job(
                 job_id,
                 status=JobStatus.COMPLETED,
@@ -643,10 +701,12 @@ class Executor:
                 result={"success": True, "handle": handle_id, "fitted": True},
             )
             return {"success": True, "handle": handle_id}
-            
+
         except Exception as e:
             import traceback
+
             from sktime_mcp.runtime.jobs import JobStatus
+
             self._job_manager.update_job(
                 job_id,
                 status=JobStatus.FAILED,
@@ -815,7 +875,6 @@ class Executor:
             return {"success": False, "error": str(e), "job_id": job_id}
 
     # L-9: We can add more methods here to handle diverse use cases and their pipelines
-
 
     def list_datasets(self) -> list[str]:
         """List available demo datasets."""
