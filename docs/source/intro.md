@@ -96,21 +96,18 @@ Add this to your `claude_desktop_config.json`:
 
 | Section | Description |
 | :--- | :--- |
-| [**Use Cases**](use-cases.md) | Step-by-step workflows for coders and business users. |
+| [**Quickstart**](quickstart.md) | Fastest route to running the sktime-mcp server and connecting it to a client. |
 | [**User Guide**](user-guide.md) | Comprehensive manual on using tools, workflows, and best practices. |
-| [**Usage Examples**](usage-examples.md) | Example scripts and advanced usage patterns. |
-| [**Background Jobs**](background-jobs.md) | Running long operations asynchronously. |
-| [**Data Sources**](data-sources.md) | Comprehensive guide to loading data from SQL, Files, and Pandas. |
-| [**Architecture**](architecture.md) | High-level system design, data flow, and limitations. |
-| [**Implementation**](implementation.md) | Detailed code walkthrough and file breakdown. |
-| [**Developer Guide**](dev-guide.md) | Contributing guidelines, testing, and extending the server. |
+| [**Concepts**](concepts.md) | Core concepts, handles, and asynchronous operations. |
+| [**Architecture**](developer/architecture.md) | High-level system design, data flow, and limitations. |
+| [**Contributing**](developer/contributing.md) | Contributing guidelines, testing, and extending the server. |
 
 ---
 
 
 ## 🚀 Get Started
 
-- See [Use Cases](use-cases.md) for step-by-step workflows.
+- See [Quickstart](quickstart.md) to start the server.
 - See [User Guide](user-guide.md) for detailed instructions and advanced features.
 
-[Get Started Now](use-cases.md){ .md-button .md-button--primary }
+[Get Started Now](quickstart.md){ .md-button .md-button--primary }

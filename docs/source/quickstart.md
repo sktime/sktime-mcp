@@ -7,7 +7,7 @@ This guide provides the fastest route to running the `sktime-mcp` server and con
 Once installed, you can start the MCP server directly from your terminal:
 
 ```bash
-sktime-mcp
+uvx sktime-mcp
 ```
 
 By default, the server communicates over standard input/output (stdio).
@@ -28,7 +28,8 @@ Add the following configuration to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "sktime": {
-      "command": "sktime-mcp"
+      "command": "uvx",
+      "args": ["sktime-mcp"]
     }
   }
 }

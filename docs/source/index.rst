@@ -25,11 +25,7 @@ The Semantic Engine for Time-Series Forecasting with Large Language Models.
    :maxdepth: 2
    :caption: User Guide
 
-   user-guide/data-management
-   user-guide/forecasting-workflows
-   user-guide/pipelines
-   user-guide/async-operations
-   user-guide/persistence
+   user-guide
 
 .. toctree::
    :maxdepth: 2
