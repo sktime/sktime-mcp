@@ -97,9 +97,7 @@ class TestPlotSeriesTool:
 
     def test_unsupported_format(self):
         _register_series("s1", _make_airline_like())
-        result = plot_series_tool(
-            data_handles=["s1"], image_format="bmp"
-        )
+        result = plot_series_tool(data_handles=["s1"], image_format="bmp")
         assert result["success"] is False
         assert "Unsupported image format" in result["error"]
 
@@ -195,9 +193,7 @@ class TestPlotSeriesTool:
     def test_mixed_handles_partial_missing(self):
         """When some handles exist and some don't, report all missing."""
         _register_series("real", _make_airline_like())
-        result = plot_series_tool(
-            data_handles=["real", "fake1", "fake2"]
-        )
+        result = plot_series_tool(data_handles=["real", "fake1", "fake2"])
         assert result["success"] is False
         assert "fake1" in result["error"]
         assert "fake2" in result["error"]
