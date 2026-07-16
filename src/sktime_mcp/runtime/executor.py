@@ -866,14 +866,13 @@ class Executor:
                 if isinstance(result, __import__("pandas").DataFrame) and isinstance(
                     result.columns, __import__("pandas").MultiIndex
                 ):
+                    result = result.copy()
                     result.columns = ["_".join(map(str, col)) for col in result.columns.values]
-                    sanitized = result.to_dict(orient="list")
+                    result = result.to_dict(orient="list")
                 else:
-                    sanitized = result.to_dict()
-            else:
-                sanitized = sanitize_for_json(result)
+                    result = result.to_dict()
 
-            return {"success": True, "result": sanitized}
+            return {"success": True, "result": sanitize_for_json(result)}
         except Exception as e:
             logger.error("%s failed: %s", type(e).__name__, e, exc_info=True)
             return {"success": False, "error": str(e)}
