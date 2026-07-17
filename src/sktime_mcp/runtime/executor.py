@@ -188,6 +188,15 @@ class Executor:
             self._cleanup_oldest_data(count=max(1, self._max_data_handles // 5))
         self._data_handles[handle_id] = data
 
+    def _resolve_source(self, source: str) -> dict[str, Any]:
+        """Resolve a source id to a series, trying data_handle then demo dataset."""
+        if source in self._data_handles:
+            return {"success": True, "data": self._data_handles[source]["y"]}
+        res = self.load_dataset(source)
+        if res["success"]:
+            return {"success": True, "data": res["data"]}
+        return res
+
     def instantiate(
         self,
         spec: str,
@@ -971,23 +980,17 @@ class Executor:
             except KeyError as err:
                 raise ValueError(f"Handle not found: {handle_id}") from err
 
-            if y in self._data_handles:
-                _y = self._data_handles[y]["y"]
-            else:
-                data_res = self.load_dataset(y)
-                if not data_res["success"]:
-                    raise ValueError(data_res["error"])
-                _y = data_res["data"]
+            y_res = self._resolve_source(y)
+            if not y_res["success"]:
+                raise ValueError(y_res["error"])
+            _y = y_res["data"]
 
             _X = None
             if X:
-                if X in self._data_handles:
-                    _X = self._data_handles[X]["y"]
-                else:
-                    data_res = self.load_dataset(X)
-                    if not data_res["success"]:
-                        raise ValueError(data_res["error"])
-                    _X = data_res["data"]
+                x_res = self._resolve_source(X)
+                if not x_res["success"]:
+                    raise ValueError(x_res["error"])
+                _X = x_res["data"]
 
             scoring = None
             if metric:

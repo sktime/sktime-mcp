@@ -14,16 +14,6 @@ from sktime_mcp.runtime.jobs import get_job_manager
 logger = logging.getLogger(__name__)
 
 
-def _resolve_y_source(executor: Any, source: str) -> dict[str, Any]:
-    """Resolve a data source id to a series, trying data_handle then demo dataset."""
-    if source in executor._data_handles:
-        return {"success": True, "data": executor._data_handles[source]["y"]}
-    res = executor.load_dataset(source)
-    if res["success"]:
-        return {"success": True, "data": res["data"]}
-    return res
-
-
 def evaluate_tool(
     estimator_handle: str,
     y: str,
@@ -73,14 +63,14 @@ def evaluate_tool(
     except KeyError:
         return {"success": False, "error": f"Handle not found: {estimator_handle}"}
 
-    y_res = _resolve_y_source(executor, y)
+    y_res = executor._resolve_source(y)
     if not y_res["success"]:
         return y_res
     _y = y_res["data"]
 
     _X = None
     if X:
-        x_res = _resolve_y_source(executor, X)
+        x_res = executor._resolve_source(X)
         if not x_res["success"]:
             return x_res
         _X = x_res["data"]
