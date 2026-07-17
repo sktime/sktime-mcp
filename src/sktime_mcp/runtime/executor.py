@@ -87,6 +87,79 @@ def _get_index_frequency_metadata(
     return fallback
 
 
+def _resolve_metric_scoring(metric_name: str) -> Any | None:
+    """Return an instantiated sktime forecasting metric by name, or None if not found."""
+    try:
+        from sktime.registry import all_estimators
+    except ImportError:  # pragma: no cover
+        return None
+    try:
+        metrics_df = all_estimators("metric", as_dataframe=True)
+        row = metrics_df[metrics_df["name"] == metric_name]
+        if row.empty:
+            return None
+        return row.iloc[0]["object"]()
+    except Exception as e:
+        logger.warning(f"Failed to resolve metric '{metric_name}': {e}")
+        return None
+
+
+def _run_evaluate(
+    instance: Any,
+    y: Any,
+    X: Any,
+    cv_folds: int,
+    scoring: Any | None,
+    initial_window: int | None,
+) -> tuple[list[dict[str, Any]], dict[str, float], dict[str, dict[str, float]]]:
+    """
+    Run sktime.evaluate with an expanding-window splitter and summarize results.
+
+    Returns
+    -------
+    fold_results : list of dict
+        Per-fold rows from sktime.evaluate.
+    metrics : dict
+        Mean value per ``test_*`` metric column.
+    summary : dict
+        Mean, std, min, max per ``test_*`` metric column.
+    """
+    from sktime.forecasting.model_evaluation import evaluate
+
+    try:
+        from sktime.split import ExpandingWindowSplitter
+    except ImportError:  # pragma: no cover - sktime < 0.29
+        from sktime.forecasting.model_selection import ExpandingWindowSplitter
+
+    n = len(y)
+    if initial_window is not None:
+        win = initial_window
+    else:
+        folds = max(1, min(int(cv_folds), max(1, n - 1)))
+        win = max(1, n - folds)
+    cv = ExpandingWindowSplitter(initial_window=win, step_length=1, fh=[1])
+
+    results = evaluate(forecaster=instance, y=y, X=X, cv=cv, scoring=scoring)
+    if "estimator" in results.columns:
+        results = results.drop(columns=["estimator"])
+
+    fold_results = results.to_dict(orient="records")
+    metric_cols = [
+        c for c in results.select_dtypes(include="number").columns if c.startswith("test_")
+    ]
+    metrics = {c: float(results[c].mean()) for c in metric_cols}
+    summary = {
+        c: {
+            "mean": float(results[c].mean()),
+            "std": float(results[c].std()),
+            "min": float(results[c].min()),
+            "max": float(results[c].max()),
+        }
+        for c in metric_cols
+    }
+    return fold_results, metrics, summary
+
+
 class Executor:
     """
     Execution runtime for sktime estimators.
@@ -873,6 +946,100 @@ class Executor:
             logger.exception(f"Error in async fit_predict for job {job_id}")
             self._job_manager.update_job(job_id, status=JobStatus.FAILED, errors=[str(e)])
             return {"success": False, "error": str(e), "job_id": job_id}
+
+    async def evaluate_async(
+        self,
+        handle_id: str,
+        y: str,
+        *,
+        X: str | None = None,
+        cv_folds: int = 3,
+        metric: str | None = None,
+        initial_window: int | None = None,
+        job_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Async version of evaluate with job tracking."""
+        try:
+            self._job_manager.update_job(job_id, status=JobStatus.RUNNING)
+
+            # Step 1: Load data
+            self._job_manager.update_job(job_id, completed_steps=0, current_step="Loading data...")
+            await asyncio.sleep(0.01)
+
+            try:
+                instance = self._handle_manager.get_instance(handle_id)
+            except KeyError as err:
+                raise ValueError(f"Handle not found: {handle_id}") from err
+
+            if y in self._data_handles:
+                _y = self._data_handles[y]["y"]
+            else:
+                data_res = self.load_dataset(y)
+                if not data_res["success"]:
+                    raise ValueError(data_res["error"])
+                _y = data_res["data"]
+
+            _X = None
+            if X:
+                if X in self._data_handles:
+                    _X = self._data_handles[X]["y"]
+                else:
+                    data_res = self.load_dataset(X)
+                    if not data_res["success"]:
+                        raise ValueError(data_res["error"])
+                    _X = data_res["data"]
+
+            scoring = None
+            if metric:
+                scoring = _resolve_metric_scoring(metric)
+                if scoring is None:
+                    raise ValueError(f"Unknown metric: {metric}")
+
+            # Step 2: Run cross-validation
+            self._job_manager.update_job(
+                job_id, completed_steps=1, current_step="Running cross-validation..."
+            )
+            await asyncio.sleep(0.01)
+
+            loop = asyncio.get_running_loop()
+            fold_results, metrics, summary = await loop.run_in_executor(
+                None,
+                lambda: _run_evaluate(instance, _y, _X, cv_folds, scoring, initial_window),
+            )
+
+            # Step 3: Summarize results
+            self._job_manager.update_job(
+                job_id, completed_steps=2, current_step="Summarizing results..."
+            )
+            await asyncio.sleep(0.01)
+
+            result = {
+                "success": True,
+                "metrics": metrics,
+                "fold_results": fold_results,
+                "summary": summary,
+                "cv_folds_run": len(fold_results),
+                "cv_folds_requested": cv_folds,
+            }
+            self._job_manager.update_job(
+                job_id,
+                status=JobStatus.COMPLETED,
+                completed_steps=3,
+                current_step="Evaluation completed.",
+                result=result,
+            )
+            return result
+
+        except Exception as e:
+            import traceback
+
+            self._job_manager.update_job(
+                job_id,
+                status=JobStatus.FAILED,
+                current_step="Evaluation failed.",
+                errors=[str(e), traceback.format_exc()],
+            )
+            return {"success": False, "error": str(e)}
 
     # L-9: We can add more methods here to handle diverse use cases and their pipelines
 

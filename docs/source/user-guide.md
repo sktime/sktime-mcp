@@ -434,7 +434,7 @@ The full tool reference is in the project documentation: https://sktime.github.i
 | Discover what sktime can do | `list_available_data`, `query_registry`, `describe_component` | Find demo data, estimators, tags, and component details. |
 | Bring data into the session | `load_data_source`, `inspect_data`, `transform_data`, `split_data`, `save_data` | Load files, inline data, SQL, or URLs into handles; inspect, clean, split, and persist them. |
 | Build and run models | `instantiate_estimator`, `fit`, `predict`, `update`, `get_fitted_params`, `call_method` | Create sktime estimators or pipelines, fit them, forecast, update, or call native methods. |
-| Evaluate and reproduce | `evaluate_estimator`, `export_code`, `save_model`, `load_model` | Cross-validate, generate Python code, and persist fitted models. |
+| Evaluate and reproduce | `evaluate`, `export_code`, `save_model`, `load_model` | Cross-validate, generate Python code, and persist fitted models. |
 | Manage runtime state | `list_handles`, `release_handle`, `release_data_handle`, `list_jobs`, `check_job_status`, `cancel_job` | See what is in memory, clean it up, and track async work. |
 
 The practical mental model is simple: prompts create tool calls, tool calls create handles, and handles let later prompts continue the workflow.
@@ -545,7 +545,7 @@ A retail analyst wants a quick demand forecast for the next planning cycle. The 
 
 **Expected tool behavior**
 
-`list_available_data` -> `describe_component` -> `instantiate_estimator` -> `fit` -> `predict` -> `evaluate_estimator` -> `get_fitted_params` -> `export_code`
+`list_available_data` -> `describe_component` -> `instantiate_estimator` -> `fit` -> `predict` -> `evaluate` -> `get_fitted_params` -> `export_code`
 
 For persistence, use the most appropriate route:
 
@@ -795,7 +795,7 @@ These limitations matter before building expectations around the tool.
 - Optional estimators may need optional dependencies. Missing dependency errors are expected for some advanced models.
 - Forecasting workflows are the most polished. Classification, detection, splitters, metrics, and other scitypes are reachable, but may need `call_method` or more explicit prompts.
 - Some prediction results are returned as structured text or JSON, not as persistent data handles. Save them through exported code or client-side file writing when needed.
-- `evaluate_estimator` is strongest on demo datasets today. Custom train/test evaluation is a promising extension.
+- `evaluate` is strongest on demo datasets today. Custom train/test evaluation is a promising extension.
 
 
 ## 6. Wrap-Up

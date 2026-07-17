@@ -249,7 +249,7 @@ The full tool reference is in the project documentation: https://sktime.github.i
 | Discover what sktime can do | `list_available_data`, `query_registry`, `describe_component` | Find demo data, estimators, tags, and component details. |
 | Bring data into the session | `load_data_source`, `inspect_data`, `transform_data`, `split_data`, `save_data` | Load files, inline data, SQL, or URLs into handles; inspect, clean, split, and persist them. |
 | Build and run models | `instantiate_estimator`, `fit`, `predict`, `update`, `get_fitted_params`, `call_method` | Create sktime estimators or pipelines, fit them, forecast, update, or call native methods. |
-| Evaluate and reproduce | `evaluate_estimator`, `export_code`, `save_model`, `load_model` | Cross-validate, generate Python code, and persist fitted models. |
+| Evaluate and reproduce | `evaluate`, `export_code`, `save_model`, `load_model` | Cross-validate, generate Python code, and persist fitted models. |
 | Manage runtime state | `list_handles`, `release_handle`, `release_data_handle`, `list_jobs`, `check_job_status`, `cancel_job` | See what is in memory, clean it up, and track async work. |
 
 The practical mental model is simple: prompts create tool calls, tool calls create handles, and handles let later prompts continue the workflow.

@@ -42,7 +42,7 @@ from sktime_mcp.tools.data_tools import (
 from sktime_mcp.tools.describe_component import (
     describe_component_tool,
 )
-from sktime_mcp.tools.evaluate import evaluate_estimator_tool
+from sktime_mcp.tools.evaluate import evaluate_tool
 from sktime_mcp.tools.fit_predict import (
     fit_tool,
     get_fitted_params_tool,
@@ -476,8 +476,11 @@ async def list_tools() -> list[Tool]:
         ),
         # -- Execution (Macros) ----------------------------------------------
         Tool(
-            name="evaluate_estimator",
-            description="Evaluate an estimator using cross-validation on a dataset",
+            name="evaluate",
+            description=(
+                "Cross-validate an estimator on a dataset. "
+                "Dataset and data handle inputs supported for y and X."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -485,17 +488,33 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Handle from instantiate_estimator",
                     },
-                    "dataset": {
+                    "y": {
                         "type": "string",
-                        "description": "Dataset name: airline, sunspots, lynx, etc.",
+                        "description": "Target time series: data_handle id or demo dataset name (e.g. 'airline').",
+                    },
+                    "X": {
+                        "type": "string",
+                        "description": "Optional: exogenous time series data_handle id or demo dataset name.",
                     },
                     "cv_folds": {
                         "type": "integer",
-                        "description": "Number of cross-validation folds (default: 3)",
+                        "description": "Number of cross-validation folds (default: 3). Ignored if initial_window is set.",
                         "default": 3,
                     },
+                    "metric": {
+                        "type": "string",
+                        "description": "Optional: performance metric name (e.g. 'MeanAbsolutePercentageError').",
+                    },
+                    "initial_window": {
+                        "type": "integer",
+                        "description": "Optional: initial training window size for expanding-window CV.",
+                    },
+                    "run_async": {
+                        "type": "boolean",
+                        "description": "If true, runs evaluation as a background job and returns a job_id.",
+                    },
                 },
-                "required": ["estimator_handle", "dataset"],
+                "required": ["estimator_handle", "y"],
             },
         ),
         # -- Data ------------------------------------------------------------
@@ -1019,11 +1038,15 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 kwargs=arguments.get("kwargs", {}),
             )
 
-        elif name == "evaluate_estimator":
-            result = evaluate_estimator_tool(
-                arguments["estimator_handle"],
-                arguments["dataset"],
-                arguments.get("cv_folds", 3),
+        elif name == "evaluate":
+            result = evaluate_tool(
+                estimator_handle=arguments["estimator_handle"],
+                y=arguments["y"],
+                X=arguments.get("X"),
+                cv_folds=arguments.get("cv_folds", 3),
+                metric=arguments.get("metric"),
+                initial_window=arguments.get("initial_window"),
+                run_async=arguments.get("run_async", False),
             )
 
         # -- Data ------------------------------------------------------------

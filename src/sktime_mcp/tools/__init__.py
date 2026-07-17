@@ -8,7 +8,7 @@ from sktime_mcp.tools.data_tools import (
 from sktime_mcp.tools.describe_component import (
     describe_component_tool,
 )
-from sktime_mcp.tools.evaluate import evaluate_estimator_tool
+from sktime_mcp.tools.evaluate import evaluate_tool
 from sktime_mcp.tools.fit_predict import (
     fit_tool,
     get_fitted_params_tool,
@@ -50,7 +50,7 @@ __all__ = [
     "predict_tool",
     "update_tool",
     "get_fitted_params_tool",
-    "evaluate_estimator_tool",
+    "evaluate_tool",
     "load_data_source_tool",
     "release_data_handle_tool",
     "list_available_data_tool",

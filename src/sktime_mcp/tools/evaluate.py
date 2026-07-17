@@ -1,89 +1,115 @@
 """
 evaluate tool for sktime MCP.
 
-Executes cross-validation on an estimator.
+Cross-validates an estimator on a dataset.
 """
 
+import asyncio
 import logging
 from typing import Any
 
-from sktime.forecasting.model_evaluation import evaluate
-
-try:
-    from sktime.split import ExpandingWindowSplitter
-except ImportError:  # pragma: no cover - sktime < 0.29
-    from sktime.forecasting.model_selection import ExpandingWindowSplitter
-
-from sktime_mcp.runtime.executor import get_executor
+from sktime_mcp.runtime.executor import _resolve_metric_scoring, _run_evaluate, get_executor
+from sktime_mcp.runtime.jobs import get_job_manager
 
 logger = logging.getLogger(__name__)
 
 
-def evaluate_estimator_tool(
+def _resolve_y_source(executor: Any, source: str) -> dict[str, Any]:
+    """Resolve a data source id to a series, trying data_handle then demo dataset."""
+    if source in executor._data_handles:
+        return {"success": True, "data": executor._data_handles[source]["y"]}
+    res = executor.load_dataset(source)
+    if res["success"]:
+        return {"success": True, "data": res["data"]}
+    return res
+
+
+def evaluate_tool(
     estimator_handle: str,
-    dataset: str,
+    y: str,
+    X: str | None = None,
     cv_folds: int = 3,
+    metric: str | None = None,
+    initial_window: int | None = None,
+    run_async: bool = False,
 ) -> dict[str, Any]:
     """
-    Evaluate an estimator using cross-validation.
+    Cross-validate an estimator on a dataset.
 
-    Args:
-        estimator_handle: Handle from instantiate_estimator
-        dataset: Name of demo dataset
-        cv_folds: Number of folds for Splitter
-
-    Returns:
-        Dictionary with cross-validation results
+    y and X accept data_handle ids or built-in demo dataset names.
+    Set run_async=True to run as a background job.
     """
     executor = get_executor()
+
+    if run_async:
+        job_manager = get_job_manager()
+        try:
+            estimator_name = executor._handle_manager.get_info(estimator_handle).estimator_name
+        except Exception:
+            estimator_name = "Unknown"
+
+        job_id = job_manager.create_job(
+            job_type="evaluate",
+            estimator_handle=estimator_handle,
+            estimator_name=estimator_name,
+            dataset_name=y,
+            total_steps=3,
+        )
+        asyncio.create_task(
+            executor.evaluate_async(
+                handle_id=estimator_handle,
+                y=y,
+                X=X,
+                cv_folds=cv_folds,
+                metric=metric,
+                initial_window=initial_window,
+                job_id=job_id,
+            )
+        )
+        return {"success": True, "job_id": job_id, "status": "running"}
 
     try:
         instance = executor._handle_manager.get_instance(estimator_handle)
     except KeyError:
         return {"success": False, "error": f"Handle not found: {estimator_handle}"}
 
-    data_result = executor.load_dataset(dataset)
-    if not data_result["success"]:
-        return data_result
+    y_res = _resolve_y_source(executor, y)
+    if not y_res["success"]:
+        return y_res
+    _y = y_res["data"]
 
-    y = data_result["data"]
-    X = data_result.get("exog")
+    _X = None
+    if X:
+        x_res = _resolve_y_source(executor, X)
+        if not x_res["success"]:
+            return x_res
+        _X = x_res["data"]
+
+    scoring = None
+    if metric:
+        scoring = _resolve_metric_scoring(metric)
+        if scoring is None:
+            return {
+                "success": False,
+                "error": (
+                    f"Unknown metric: {metric}. "
+                    "Check available metrics with query_registry(task='metric')."
+                ),
+            }
 
     try:
-        n = len(y)
-        folds = max(1, min(int(cv_folds), max(1, n - 1)))
-        # Exactly `folds` backtest windows: train grows, last fold uses n-1 obs before last point.
-        initial_window = max(1, n - folds)
-        cv = ExpandingWindowSplitter(initial_window=initial_window, step_length=1, fh=[1])
-
-        results = evaluate(forecaster=instance, y=y, X=X, cv=cv)
-
-        # Convert index or objects to strings suitable for JSON output if needed
-        # We drop objects that are complex (like estimator instances themselves) from the output
-        if "estimator" in results.columns:
-            results = results.drop(columns=["estimator"])
-
-        metrics = results.to_dict(orient="records")
-
-        # Build per-metric summary (mean/std/min/max) over numeric columns only
-        numeric_cols = results.select_dtypes(include="number").columns.tolist()
-        summary = {
-            col: {
-                "mean": float(results[col].mean()),
-                "std": float(results[col].std()),
-                "min": float(results[col].min()),
-                "max": float(results[col].max()),
-            }
-            for col in numeric_cols
-        }
-
-        return {
-            "success": True,
-            "summary": summary,
-            "results": metrics,
-            "cv_folds_run": len(metrics),
-            "cv_folds_requested": int(cv_folds),
-        }
+        fold_results, metrics, summary = _run_evaluate(
+            instance, _y, _X, cv_folds, scoring, initial_window
+        )
     except Exception as e:
         logger.exception("Error during evaluate")
         return {"success": False, "error": str(e)}
+
+    return {
+        "success": True,
+        "metrics": metrics,
+        "fold_results": fold_results,
+        "summary": summary,
+        "cv_folds_run": len(fold_results),
+        "cv_folds_requested": cv_folds,
+    }
