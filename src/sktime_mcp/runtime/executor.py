@@ -1414,7 +1414,7 @@ class Executor:
         Fit and predict using a data handle.
 
         Args:
-            estimator_handle: Estimator handle from instantiate_estimator
+            estimator_handle: Estimator handle from instantiate
             data_handle: Data handle from load_data_source
             horizon: Forecast horizon
 
@@ -1599,7 +1599,7 @@ class Executor:
         Fit a classifier and predict class labels.
 
         Args:
-            estimator_handle: Handle from instantiate_estimator
+            estimator_handle: Handle from instantiate
             dataset: Demo dataset name (arrow_head, gunpoint, etc.)
             X_train_handle: Data handle for training features
             y_train_handle: Data handle for training labels
@@ -1674,7 +1674,7 @@ class Executor:
         Fit a regressor and predict target values.
 
         Args:
-            estimator_handle: Handle from instantiate_estimator
+            estimator_handle: Handle from instantiate
             dataset: Demo dataset name (covid_3month, etc.)
             X_train_handle: Data handle for training features
             y_train_handle: Data handle for training target values

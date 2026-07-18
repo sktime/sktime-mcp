@@ -1,9 +1,8 @@
 """
-Unified instantiate_estimator tool for sktime MCP.
+Unified instantiate tool for sktime MCP.
 
-Creates executable estimator instances and pipelines from a list of
-component names.  A single-element list creates a plain estimator;
-multiple elements create a validated pipeline.
+Creates executable estimator instances and pipelines from a sktime craft
+specification string and returns a handle registered in server memory.
 """
 
 from typing import Any
@@ -12,7 +11,7 @@ from sktime_mcp.runtime.executor import get_executor
 from sktime_mcp.runtime.handles import get_handle_manager
 
 
-def instantiate_estimator_tool(
+def instantiate_tool(
     spec: str,
 ) -> dict[str, Any]:
     """Create an estimator or pipeline instance using craft and return a handle.
@@ -36,11 +35,6 @@ def instantiate_estimator_tool(
 
     executor = get_executor()
     return executor.instantiate(spec)
-
-
-# Keep the old name as a thin alias for backward compatibility in tests
-# and downstream code that hasn't been updated yet.
-instantiate_pipeline_tool = instantiate_estimator_tool
 
 
 def release_handle_tool(handle: str) -> dict[str, Any]:

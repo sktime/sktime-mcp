@@ -245,9 +245,9 @@ class TestTools:
     def test_predict_tool_rejects_invalid_horizon(self, horizon):
         """predict_tool should validate horizon before calling sktime internals."""
         from sktime_mcp.tools.fit_predict import predict_tool
-        from sktime_mcp.tools.instantiate import instantiate_estimator_tool, release_handle_tool
+        from sktime_mcp.tools.instantiate import instantiate_tool, release_handle_tool
 
-        inst = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
+        inst = instantiate_tool(spec="NaiveForecaster(strategy='last')")
         assert inst["success"]
         handle = inst["handle"]
 

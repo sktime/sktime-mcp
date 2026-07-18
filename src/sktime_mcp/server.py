@@ -51,7 +51,7 @@ from sktime_mcp.tools.fit_predict import (
 )
 from sktime_mcp.tools.inspect_data import inspect_data_tool
 from sktime_mcp.tools.instantiate import (
-    instantiate_estimator_tool,
+    instantiate_tool,
     list_handles_tool,
     load_model_tool,
     release_handle_tool,
@@ -269,7 +269,7 @@ async def list_tools() -> list[Tool]:
         ),
         # -- Instantiation ---------------------------------------------------
         Tool(
-            name="instantiate_estimator",
+            name="instantiate",
             description=(
                 "Create an estimator or pipeline instance using a sktime craft specification. "
                 "The spec is a string that evaluates to an estimator, e.g., 'ARIMA(order=(1, 1, 1))' "
@@ -317,7 +317,7 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "estimator_handle": {
                         "type": "string",
-                        "description": "Handle from instantiate_estimator",
+                        "description": "Handle from instantiate",
                     },
                     "X_handle": {
                         "type": "string",
@@ -486,7 +486,7 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "estimator_handle": {
                         "type": "string",
-                        "description": "Handle from instantiate_estimator",
+                        "description": "Handle from instantiate",
                     },
                     "y": {
                         "type": "string",
@@ -983,8 +983,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = describe_component_tool(name=arguments["name"])
 
         # -- Instantiation ---------------------------------------------------
-        elif name == "instantiate_estimator":
-            result = instantiate_estimator_tool(spec=arguments.get("spec"))
+        elif name == "instantiate":
+            result = instantiate_tool(spec=arguments.get("spec"))
 
         elif name == "list_handles":
             result = list_handles_tool()

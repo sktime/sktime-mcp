@@ -12,9 +12,9 @@ class TestExportCodeDatasetTracking:
         """After fit_predict, the handle metadata must record the dataset name."""
         from sktime_mcp.runtime.handles import get_handle_manager
         from sktime_mcp.tools.fit_predict import fit_tool
-        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+        from sktime_mcp.tools.instantiate import instantiate_tool
 
-        inst = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
+        inst = instantiate_tool(spec="NaiveForecaster(strategy='last')")
         assert inst["success"], inst
         handle = inst["handle"]
 
@@ -31,9 +31,9 @@ class TestExportCodeDatasetTracking:
         """export_code include_fit_example=True must use the training dataset, not 'airline'."""
         from sktime_mcp.tools.codegen import export_code_tool
         from sktime_mcp.tools.fit_predict import fit_tool
-        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+        from sktime_mcp.tools.instantiate import instantiate_tool
 
-        inst = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
+        inst = instantiate_tool(spec="NaiveForecaster(strategy='last')")
         assert inst["success"], inst
         handle = inst["handle"]
 
@@ -50,9 +50,9 @@ class TestExportCodeDatasetTracking:
         """An explicit dataset argument to export_code must take priority over metadata."""
         from sktime_mcp.tools.codegen import export_code_tool
         from sktime_mcp.tools.fit_predict import fit_tool
-        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+        from sktime_mcp.tools.instantiate import instantiate_tool
 
-        inst = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
+        inst = instantiate_tool(spec="NaiveForecaster(strategy='last')")
         assert inst["success"], inst
         handle = inst["handle"]
 
@@ -69,9 +69,9 @@ class TestExportCodeDatasetTracking:
     def test_export_code_falls_back_to_airline_without_fit(self):
         """export_code on a never-fitted handle must fall back to 'airline'."""
         from sktime_mcp.tools.codegen import export_code_tool
-        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+        from sktime_mcp.tools.instantiate import instantiate_tool
 
-        inst = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
+        inst = instantiate_tool(spec="NaiveForecaster(strategy='last')")
         assert inst["success"], inst
         handle = inst["handle"]
 

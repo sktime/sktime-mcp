@@ -31,7 +31,7 @@ def save_model_tool(
     Save an instantiated estimator to a local path or URI using sktime+MLflow.
 
     Args:
-        estimator_handle: Handle ID from instantiate_estimator / instantiate_pipeline
+        estimator_handle: Handle ID from instantiate
         path: Local directory or URI where the model should be saved
         mlflow_params: Optional extra keyword arguments for sktime MLflow save_model
 

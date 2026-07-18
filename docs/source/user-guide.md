@@ -433,7 +433,7 @@ The full tool reference is in the project documentation: https://sktime.github.i
 | --- | --- | --- |
 | Discover what sktime can do | `list_available_data`, `query_registry`, `describe_component` | Find demo data, estimators, tags, and component details. |
 | Bring data into the session | `load_data_source`, `inspect_data`, `transform_data`, `split_data`, `save_data` | Load files, inline data, SQL, or URLs into handles; inspect, clean, split, and persist them. |
-| Build and run models | `instantiate_estimator`, `fit`, `predict`, `update`, `get_fitted_params`, `call_method` | Create sktime estimators or pipelines, fit them, forecast, update, or call native methods. |
+| Build and run models | `instantiate`, `fit`, `predict`, `update`, `get_fitted_params`, `call_method` | Create sktime estimators or pipelines, fit them, forecast, update, or call native methods. |
 | Evaluate and reproduce | `evaluate`, `export_code`, `save_model`, `load_model` | Cross-validate, generate Python code, and persist fitted models. |
 | Manage runtime state | `list_handles`, `release_handle`, `release_data_handle`, `list_jobs`, `check_job_status`, `cancel_job` | See what is in memory, clean it up, and track async work. |
 
@@ -545,7 +545,7 @@ A retail analyst wants a quick demand forecast for the next planning cycle. The 
 
 **Expected tool behavior**
 
-`list_available_data` -> `describe_component` -> `instantiate_estimator` -> `fit` -> `predict` -> `evaluate` -> `get_fitted_params` -> `export_code`
+`list_available_data` -> `describe_component` -> `instantiate` -> `fit` -> `predict` -> `evaluate` -> `get_fitted_params` -> `export_code`
 
 For persistence, use the most appropriate route:
 
@@ -676,7 +676,7 @@ A sales operations team has monthly revenue data exported from a business system
 
 **Expected tool behavior**
 
-`load_data_source` -> `inspect_data` -> `transform_data` -> `save_data` -> `split_data` -> `instantiate_estimator` -> `fit` -> `predict` -> `release_data_handle` -> `release_handle`
+`load_data_source` -> `inspect_data` -> `transform_data` -> `save_data` -> `split_data` -> `instantiate` -> `fit` -> `predict` -> `release_data_handle` -> `release_handle`
 
 **Expected outcome**
 
@@ -758,7 +758,7 @@ A quality-monitoring team has sensor traces from a production process. Each trac
 
 **Expected tool behavior**
 
-`list_available_data` -> `query_registry` -> `instantiate_estimator` -> `fit` -> `predict` -> `get_fitted_params`
+`list_available_data` -> `query_registry` -> `instantiate` -> `fit` -> `predict` -> `get_fitted_params`
 
 **Expected outcome**
 

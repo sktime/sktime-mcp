@@ -65,7 +65,7 @@ def export_code_tool(
 
     Example:
         >>> # First create an estimator
-        >>> result = instantiate_estimator_tool("ARIMA", {"order": [1, 1, 1]})
+        >>> result = instantiate_tool("ARIMA", {"order": [1, 1, 1]})
         >>> handle = result["handle"]
         >>>
         >>> # Export as code

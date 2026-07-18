@@ -13,9 +13,9 @@ class TestEvaluateSummary:
     def test_evaluate_returns_summary_key(self):
         """evaluate_tool result must include a 'summary' key."""
         from sktime_mcp.tools.evaluate import evaluate_tool
-        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+        from sktime_mcp.tools.instantiate import instantiate_tool
 
-        inst = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
+        inst = instantiate_tool(spec="NaiveForecaster(strategy='last')")
         assert inst["success"], inst
         handle = inst["handle"]
 
@@ -26,9 +26,9 @@ class TestEvaluateSummary:
     def test_summary_contains_expected_stat_keys(self):
         """Each metric in summary must have mean, std, min, max."""
         from sktime_mcp.tools.evaluate import evaluate_tool
-        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+        from sktime_mcp.tools.instantiate import instantiate_tool
 
-        inst = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
+        inst = instantiate_tool(spec="NaiveForecaster(strategy='last')")
         assert inst["success"], inst
         handle = inst["handle"]
 
@@ -47,9 +47,9 @@ class TestEvaluateSummary:
     def test_summary_mean_between_min_and_max(self):
         """Sanity check: mean must be between min and max for each metric."""
         from sktime_mcp.tools.evaluate import evaluate_tool
-        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+        from sktime_mcp.tools.instantiate import instantiate_tool
 
-        inst = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
+        inst = instantiate_tool(spec="NaiveForecaster(strategy='last')")
         assert inst["success"], inst
         handle = inst["handle"]
 
@@ -65,9 +65,9 @@ class TestEvaluateSummary:
     def test_fold_results_present(self):
         """The 'fold_results' list must contain per-fold metric dicts."""
         from sktime_mcp.tools.evaluate import evaluate_tool
-        from sktime_mcp.tools.instantiate import instantiate_estimator_tool
+        from sktime_mcp.tools.instantiate import instantiate_tool
 
-        inst = instantiate_estimator_tool(spec="NaiveForecaster(strategy='last')")
+        inst = instantiate_tool(spec="NaiveForecaster(strategy='last')")
         assert inst["success"], inst
         handle = inst["handle"]
 
