@@ -4,12 +4,15 @@ Job management for long-running operations in sktime MCP.
 Handles background training jobs with progress tracking and status updates.
 """
 
+import logging
 import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class JobStatus(Enum):
@@ -127,6 +130,10 @@ class JobManager:
 
     def __init__(self):
         self.jobs: dict[str, JobInfo] = {}
+        # Retained references to the background asyncio tasks running each job,
+        # so cancel_job can actually cancel the running coroutine (not just flip
+        # the status). Keyed by job_id.
+        self._tasks: dict[str, Any] = {}
         self.lock = threading.Lock()
 
     def create_job(
@@ -166,6 +173,29 @@ class JobManager:
             )
 
         return job_id
+
+    def register_task(self, job_id: str, task: Any) -> None:
+        """Associate a background asyncio task with a job.
+
+        Retaining the task reference lets ``cancel_job`` cancel the running
+        coroutine, and prevents the event loop from garbage-collecting a
+        still-pending task. A done callback clears the reference and surfaces
+        any exception that would otherwise be swallowed by fire-and-forget.
+        """
+        with self.lock:
+            self._tasks[job_id] = task
+        task.add_done_callback(lambda t: self._on_task_done(job_id, t))
+
+    def _on_task_done(self, job_id: str, task: Any) -> None:
+        """Done callback: drop the task reference and log unhandled errors."""
+        with self.lock:
+            self._tasks.pop(job_id, None)
+        # A cancelled task raises on .exception(); nothing to report there.
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("Background job %s failed with an unhandled exception: %r", job_id, exc)
 
     def update_job(
         self,
@@ -282,6 +312,13 @@ class JobManager:
 
         Returns:
             True if job was cancelled, False if not found or already completed
+
+        Notes:
+            Cancellation is cooperative. The background task is cancelled at its
+            next await point, which stops any remaining job steps. Work already
+            running inside a thread-pool executor (e.g. a single fit call) cannot
+            be force-killed and runs to completion, but its result is discarded
+            because update_job ignores late updates on a CANCELLED job.
         """
         with self.lock:
             if job_id not in self.jobs:
@@ -290,12 +327,18 @@ class JobManager:
             job = self.jobs[job_id]
 
             # Can only cancel pending or running jobs
-            if job.status in (JobStatus.PENDING, JobStatus.RUNNING):
-                job.status = JobStatus.CANCELLED
-                job.end_time = datetime.now()
-                return True
+            if job.status not in (JobStatus.PENDING, JobStatus.RUNNING):
+                return False
 
-            return False
+            job.status = JobStatus.CANCELLED
+            job.end_time = datetime.now()
+            task = self._tasks.get(job_id)
+
+        # Cancel outside the lock: the task's done callback also takes the lock.
+        if task is not None and not task.done():
+            task.cancel()
+
+        return True
 
     def cleanup_old_jobs(self, max_age_hours: int = 24) -> int:
         """
@@ -314,6 +357,7 @@ class JobManager:
 
             for job_id in old_job_ids:
                 del self.jobs[job_id]
+                self._tasks.pop(job_id, None)
 
             return len(old_job_ids)
 
@@ -330,6 +374,7 @@ class JobManager:
         with self.lock:
             if job_id in self.jobs:
                 del self.jobs[job_id]
+                self._tasks.pop(job_id, None)
                 return True
             return False
 

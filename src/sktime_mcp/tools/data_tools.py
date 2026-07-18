@@ -98,7 +98,8 @@ def load_data_source_tool(
         # Schedule the async coroutine on the event loop
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(coro)
+            task = loop.create_task(coro)
+            job_manager.register_task(job_id, task)
         except RuntimeError:
             # No running event loop (e.g. sync test or CLI environment)
             loop = asyncio.new_event_loop()

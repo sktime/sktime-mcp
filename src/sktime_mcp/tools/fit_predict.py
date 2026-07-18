@@ -108,7 +108,7 @@ def fit_tool(
             dataset_name=source_name,
             total_steps=2,
         )
-        asyncio.create_task(
+        task = asyncio.create_task(
             executor.fit_async(
                 handle_id=estimator_handle,
                 X_dataset=X_dataset,
@@ -119,6 +119,7 @@ def fit_tool(
                 job_id=job_id,
             )
         )
+        job_manager.register_task(job_id, task)
         return {"success": True, "job_id": job_id, "status": "running"}
     fit_result = executor.fit(estimator_handle, y=y, X=X, fh=fh)
 
@@ -178,7 +179,7 @@ def predict_tool(
             horizon=horizon,
             total_steps=2,
         )
-        asyncio.create_task(
+        task = asyncio.create_task(
             executor.predict_async(
                 handle_id=estimator_handle,
                 horizon=horizon,
@@ -192,6 +193,7 @@ def predict_tool(
                 job_id=job_id,
             )
         )
+        job_manager.register_task(job_id, task)
         return {"success": True, "job_id": job_id, "status": "running"}
 
     X = None

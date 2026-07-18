@@ -45,7 +45,7 @@ def evaluate_tool(
             dataset_name=y,
             total_steps=3,
         )
-        asyncio.create_task(
+        task = asyncio.create_task(
             executor.evaluate_async(
                 handle_id=estimator_handle,
                 y=y,
@@ -56,6 +56,7 @@ def evaluate_tool(
                 job_id=job_id,
             )
         )
+        job_manager.register_task(job_id, task)
         return {"success": True, "job_id": job_id, "status": "running"}
 
     try:
