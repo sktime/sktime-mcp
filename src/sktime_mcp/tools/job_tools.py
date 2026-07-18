@@ -121,24 +121,3 @@ def cancel_job_tool(job_id: str, delete: bool = False) -> dict[str, Any]:
         "success": False,
         "error": (f"Job is already '{job.status.value}'. Use delete=true to remove the record."),
     }
-
-
-def cleanup_old_jobs_tool(max_age_hours: int = 24) -> dict[str, Any]:
-    """
-    Clean up old jobs.
-
-    Args:
-        max_age_hours: Maximum age in hours (default: 24)
-
-    Returns:
-        Dictionary with number of jobs removed
-    """
-    job_manager = get_job_manager()
-
-    count = job_manager.cleanup_old_jobs(max_age_hours)
-
-    return {
-        "success": True,
-        "message": f"Removed {count} old job(s)",
-        "count": count,
-    }

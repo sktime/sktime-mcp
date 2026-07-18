@@ -1158,18 +1158,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 delete=arguments.get("delete", False),
             )
 
-        elif name == "delete_job":
-            # Deprecated — kept for backward compatibility
-            logger.warning("delete_job is deprecated; use cancel_job(delete=true)")
-            result = cancel_job_tool(arguments["job_id"], delete=True)
-
-        elif name == "cleanup_old_jobs":
-            # Deprecated — now runs automatically on a periodic timer
-            logger.warning("cleanup_old_jobs is deprecated; jobs are cleaned up automatically")
-            from sktime_mcp.tools.job_tools import cleanup_old_jobs_tool
-
-            result = cleanup_old_jobs_tool(arguments.get("max_age_hours", 24))
-
         # -- System ----------------------------------------------------------
         elif name == "run_command":
             result = run_command_tool(arguments["command"])
