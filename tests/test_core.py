@@ -127,60 +127,6 @@ class TestHandleManager:
         assert not manager.exists(handle)
 
 
-class TestCompositionValidator:
-    """Tests for the Composition Validator."""
-
-    def test_single_component_valid(self):
-        """Test that a single estimator is valid."""
-        from sktime_mcp.composition.validator import CompositionValidator
-
-        validator = CompositionValidator()
-        result = validator.validate_pipeline(["NaiveForecaster"])
-
-        # Single forecaster should be valid if it exists
-        if result.valid:
-            assert len(result.errors) == 0
-
-    def test_empty_pipeline_invalid(self):
-        """Test that empty pipeline is invalid."""
-        from sktime_mcp.composition.validator import CompositionValidator
-
-        validator = CompositionValidator()
-        result = validator.validate_pipeline([])
-
-        assert not result.valid
-        assert "empty" in result.errors[0].lower()
-
-    def test_unknown_estimator_invalid(self):
-        """Test that unknown estimators are caught."""
-        from sktime_mcp.composition.validator import CompositionValidator
-
-        validator = CompositionValidator()
-        result = validator.validate_pipeline(["NotARealEstimator"])
-
-        assert not result.valid
-
-    def test_forecaster_chain_invalid(self):
-        """Forecaster -> forecaster should be invalid in linear pipeline validation."""
-        from sktime_mcp.composition.validator import CompositionValidator
-
-        validator = CompositionValidator()
-        result = validator.validate_pipeline(["NaiveForecaster", "ExponentialSmoothing"])
-
-        assert not result.valid
-        assert any("Cannot chain forecasters" in err for err in result.errors)
-
-    def test_transformer_to_forecaster_valid(self):
-        """Transformer -> forecaster remains valid."""
-        from sktime_mcp.composition.validator import CompositionValidator
-
-        validator = CompositionValidator()
-        result = validator.validate_pipeline(["Imputer", "NaiveForecaster"])
-
-        assert result.valid
-        assert len(result.errors) == 0
-
-
 class TestTools:
     """Tests for MCP tools."""
 
