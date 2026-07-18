@@ -115,6 +115,59 @@ def test_list_jobs():
     job_manager.delete_job(job3)
 
 
+def test_list_jobs_offset_slicing():
+    """JobManager.list_jobs offset/limit returns the correct newest-first slice."""
+    job_manager = get_job_manager()
+    ids = [job_manager.create_job("fit", f"off{i}", "ARIMA") for i in range(4)]
+
+    try:
+        newest_first = job_manager.list_jobs()
+        first_two = job_manager.list_jobs(limit=2, offset=0)
+        next_two = job_manager.list_jobs(limit=2, offset=2)
+
+        assert [j.job_id for j in first_two] == [j.job_id for j in newest_first[:2]]
+        assert [j.job_id for j in next_two] == [j.job_id for j in newest_first[2:4]]
+        # first and second page must not overlap
+        assert {j.job_id for j in first_two}.isdisjoint({j.job_id for j in next_two})
+    finally:
+        for jid in ids:
+            job_manager.delete_job(jid)
+
+
+def test_list_jobs_tool_pagination_metadata():
+    """list_jobs_tool reports total/offset/limit/has_more and paginates disjointly."""
+    from sktime_mcp.tools.job_tools import list_jobs_tool
+
+    job_manager = get_job_manager()
+    ids = [job_manager.create_job("fit", f"pg{i}", "ARIMA") for i in range(5)]
+
+    try:
+        page1 = list_jobs_tool(limit=2, offset=0)
+        assert page1["success"]
+        assert page1["limit"] == 2
+        assert page1["offset"] == 0
+        assert page1["count"] == 2
+        assert page1["total"] >= 5
+        assert page1["has_more"] is True
+
+        page2 = list_jobs_tool(limit=2, offset=2)
+        assert page2["offset"] == 2
+        assert page2["count"] == 2
+        assert {j["job_id"] for j in page1["jobs"]}.isdisjoint({j["job_id"] for j in page2["jobs"]})
+
+        # Offset beyond the end yields an empty page with has_more False
+        beyond = list_jobs_tool(limit=2, offset=page1["total"] + 10)
+        assert beyond["count"] == 0
+        assert beyond["has_more"] is False
+
+        # Negative offset is rejected
+        bad = list_jobs_tool(offset=-1)
+        assert not bad["success"]
+    finally:
+        for jid in ids:
+            job_manager.delete_job(jid)
+
+
 def test_cancel_job():
     """Test cancelling a job."""
     job_manager = get_job_manager()

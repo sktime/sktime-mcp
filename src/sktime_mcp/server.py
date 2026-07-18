@@ -898,8 +898,13 @@ async def list_tools() -> list[Tool]:
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Maximum number of jobs to return (default: 20)",
+                        "description": "Maximum number of jobs to return per page (default: 20)",
                         "default": 20,
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "Number of jobs to skip for pagination (default: 0)",
+                        "default": 0,
                     },
                 },
             },
@@ -1150,6 +1155,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = list_jobs_tool(
                 arguments.get("status"),
                 arguments.get("limit", 20),
+                offset=arguments.get("offset", 0),
             )
 
         elif name == "cancel_job":

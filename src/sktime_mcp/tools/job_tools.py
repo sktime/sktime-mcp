@@ -40,16 +40,19 @@ def check_job_status_tool(job_id: str) -> dict[str, Any]:
 def list_jobs_tool(
     status: str | None = None,
     limit: int = 20,
+    offset: int = 0,
 ) -> dict[str, Any]:
     """
-    List all background jobs.
+    List background jobs with offset/limit pagination.
 
     Args:
         status: Filter by status (pending, running, completed, failed, cancelled)
-        limit: Maximum number of jobs to return
+        limit: Maximum number of jobs to return in this page
+        offset: Number of jobs to skip (for paging through results)
 
     Returns:
-        Dictionary with list of jobs
+        Dictionary with the page of jobs plus pagination metadata
+        (total, offset, limit, has_more).
     """
     job_manager = get_job_manager()
 
@@ -78,11 +81,22 @@ def list_jobs_tool(
             "error": "limit must be a positive integer.",
         }
 
-    jobs = job_manager.list_jobs(status=status_filter, limit=limit)
+    if offset < 0:
+        return {
+            "success": False,
+            "error": "offset must be a non-negative integer.",
+        }
+
+    total = job_manager.count_jobs(status=status_filter)
+    jobs = job_manager.list_jobs(status=status_filter, limit=limit, offset=offset)
 
     return {
         "success": True,
         "count": len(jobs),
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "has_more": offset + len(jobs) < total,
         "jobs": [job.to_dict() for job in jobs],
     }
 

@@ -246,16 +246,21 @@ class JobManager:
         self,
         status: JobStatus | None = None,
         limit: int | None = None,
+        offset: int = 0,
     ) -> list[JobInfo]:
         """
-        List all jobs, optionally filtered by status.
+        List jobs, optionally filtered by status, with offset/limit pagination.
+
+        Jobs are ordered newest-first, then ``offset`` items are skipped and up
+        to ``limit`` are returned. Use ``count_jobs`` for the total page count.
 
         Args:
             status: Filter by status (None = all jobs)
-            limit: Maximum number of jobs to return
+            limit: Maximum number of jobs to return (None = no limit)
+            offset: Number of jobs to skip from the start of the ordered list
 
         Returns:
-            List of JobInfo objects
+            List of JobInfo objects for the requested page
         """
         with self.lock:
             jobs = list(self.jobs.values())
@@ -267,11 +272,20 @@ class JobManager:
             # Sort by creation time (newest first)
             jobs.sort(key=lambda j: j.created_at, reverse=True)
 
-            # Apply limit
+            # Apply pagination: skip `offset`, then take up to `limit`
+            if offset:
+                jobs = jobs[offset:]
             if limit is not None:
                 jobs = jobs[:limit]
 
             return jobs
+
+    def count_jobs(self, status: JobStatus | None = None) -> int:
+        """Return the total number of jobs matching an optional status filter."""
+        with self.lock:
+            if status is None:
+                return len(self.jobs)
+            return sum(1 for j in self.jobs.values() if j.status == status)
 
     def cancel_job(self, job_id: str) -> bool:
         """
