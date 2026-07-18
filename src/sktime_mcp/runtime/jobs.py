@@ -27,7 +27,7 @@ class JobInfo:
     """Information about a background job."""
 
     job_id: str
-    job_type: str  # "fit", "fit_predict", "transform", etc.
+    job_type: str  # "fit", "predict", "evaluate", "transform", etc.
     estimator_handle: str
     status: JobStatus = JobStatus.PENDING
     created_at: datetime = field(default_factory=datetime.now)
@@ -142,7 +142,7 @@ class JobManager:
         Create a new job and return its ID.
 
         Args:
-            job_type: Type of job (fit, fit_predict, etc.)
+            job_type: Type of job (fit, predict, evaluate, etc.)
             estimator_handle: Handle of the estimator
             estimator_name: Name of the estimator
             dataset_name: Name of the dataset (if applicable)

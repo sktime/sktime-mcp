@@ -111,12 +111,12 @@ class TestExecutorDataIntegration:
         est_result = executor.instantiate(spec="NaiveForecaster(strategy='last')")
         assert est_result["success"]
 
-        pred_result = executor.fit_predict(
-            est_result["handle"],
-            "",
-            5,
-            data_handle=result["data_handle"],
-        )
+        data = executor._data_handles[result["data_handle"]]
+        fh = list(range(1, 6))
+        fit_result = executor.fit(est_result["handle"], y=data["y"], X=data.get("X"), fh=fh)
+        assert fit_result["success"]
+
+        pred_result = executor.predict(est_result["handle"], fh=fh, X=data.get("X"))
         assert pred_result["success"]
         assert len(pred_result["predictions"]) == 5
 

@@ -51,7 +51,7 @@ def save_model_tool(
             "success": False,
             "error": (
                 f"Estimator '{handle_info.estimator_name}' (handle: {estimator_handle}) "
-                "has not been fitted. Call fit_predict before saving."
+                "has not been fitted. Call fit before saving."
             ),
         }
 

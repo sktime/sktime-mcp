@@ -103,7 +103,7 @@ def export_code_tool(
 
     # Optionally add fit/predict example
     if include_fit_example:
-        # Priority: explicit argument > dataset used during fit_predict > "airline" fallback
+        # Priority: explicit argument > dataset used during fit > "airline" fallback
         effective_dataset = dataset or handle_info.metadata.get("training_dataset") or "airline"
         # Resolve the dataset loader from discovered demo datasets
         demo_datasets = _get_demo_datasets()
