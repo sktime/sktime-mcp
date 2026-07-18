@@ -12,7 +12,7 @@ from sktime.forecasting.model_evaluation import evaluate
 try:
     from sktime.split import ExpandingWindowSplitter
 except ImportError:  # pragma: no cover - sktime < 0.29
-    from sktime.forecasting.model_selection import ExpandingWindowSplitter
+    from sktime.split import ExpandingWindowSplitter
 
 from sktime_mcp.runtime.executor import get_executor
 
