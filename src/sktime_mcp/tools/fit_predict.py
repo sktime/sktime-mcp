@@ -142,9 +142,12 @@ def predict_tool(
     y_dataset: str | None = None,
     X_handle: str | None = None,
     y_handle: str | None = None,
+    run_async: bool = False,
 ) -> dict[str, Any]:
     """
     Generate predictions from a fitted estimator.
+
+    Set run_async=True to run as a background job and return a job_id.
     """
     validation = _validate_horizon(horizon)
     if not validation["valid"]:
@@ -154,6 +157,43 @@ def predict_tool(
         }
 
     executor = get_executor()
+
+    if run_async:
+        import asyncio
+
+        from sktime_mcp.runtime.jobs import get_job_manager
+
+        job_manager = get_job_manager()
+        try:
+            estimator_name = executor._handle_manager.get_info(estimator_handle).estimator_name
+        except Exception:
+            estimator_name = "Unknown"
+
+        source_name = y_dataset or y_handle or "data"
+        job_id = job_manager.create_job(
+            job_type="predict",
+            estimator_handle=estimator_handle,
+            estimator_name=estimator_name,
+            dataset_name=source_name,
+            horizon=horizon,
+            total_steps=2,
+        )
+        asyncio.create_task(
+            executor.predict_async(
+                handle_id=estimator_handle,
+                horizon=horizon,
+                mode=mode,
+                coverage=coverage,
+                alpha=alpha,
+                X_dataset=X_dataset,
+                y_dataset=y_dataset,
+                X_handle=X_handle,
+                y_handle=y_handle,
+                job_id=job_id,
+            )
+        )
+        return {"success": True, "job_id": job_id, "status": "running"}
+
     X = None
     y = None
 

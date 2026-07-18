@@ -399,6 +399,10 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Optional: Demo dataset name for y data",
                     },
+                    "run_async": {
+                        "type": "boolean",
+                        "description": "If true, runs prediction as a background job and returns a job_id.",
+                    },
                 },
                 "required": ["estimator_handle"],
             },
@@ -1015,6 +1019,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 y_handle=arguments.get("y_handle"),
                 X_dataset=arguments.get("X_dataset"),
                 y_dataset=arguments.get("y_dataset"),
+                run_async=arguments.get("run_async", False),
             )
 
         elif name == "update":

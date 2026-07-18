@@ -516,6 +516,104 @@ class Executor:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    async def predict_async(
+        self,
+        handle_id: str,
+        *,
+        horizon: int = 12,
+        mode: str = "predict",
+        coverage: float | list[float] = 0.9,
+        alpha: float | list[float] | None = None,
+        X_dataset: str | None = None,
+        y_dataset: str | None = None,
+        X_handle: str | None = None,
+        y_handle: str | None = None,
+        job_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Async version of predict with job tracking."""
+        try:
+            self._job_manager.update_job(job_id, status=JobStatus.RUNNING)
+
+            # Step 1: Load data
+            self._job_manager.update_job(job_id, completed_steps=0, current_step="Loading data...")
+            await asyncio.sleep(0.01)
+
+            X = None
+            y = None
+
+            if X_handle:
+                if X_handle not in self._data_handles:
+                    raise ValueError(f"Unknown X data handle: {X_handle}")
+                X = self._data_handles[X_handle]["y"]
+
+            if y_handle:
+                if y_handle not in self._data_handles:
+                    raise ValueError(f"Unknown y data handle: {y_handle}")
+                y = self._data_handles[y_handle]["y"]
+
+            if X_dataset and X_dataset == y_dataset:
+                data_res = self.load_dataset(X_dataset)
+                if not data_res["success"]:
+                    raise ValueError(data_res.get("error", "Failed to load dataset"))
+                X = data_res["data"]
+                y = data_res.get("exog")
+            else:
+                if X_dataset:
+                    data_res = self.load_dataset(X_dataset)
+                    if not data_res["success"]:
+                        raise ValueError(data_res.get("error", "Failed to load dataset"))
+                    X = data_res["data"]
+                if y_dataset:
+                    data_res = self.load_dataset(y_dataset)
+                    if not data_res["success"]:
+                        raise ValueError(data_res.get("error", "Failed to load dataset"))
+                    y = data_res["data"]
+
+            fh = list(range(1, horizon + 1))
+
+            # Step 2: Generate predictions
+            self._job_manager.update_job(
+                job_id, completed_steps=1, current_step="Generating predictions..."
+            )
+            await asyncio.sleep(0.01)
+
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(
+                None,
+                lambda: self.predict(
+                    handle_id, fh=fh, X=X, y=y, mode=mode, coverage=coverage, alpha=alpha
+                ),
+            )
+
+            if not result.get("success"):
+                self._job_manager.update_job(
+                    job_id,
+                    status=JobStatus.FAILED,
+                    current_step="Prediction failed.",
+                    errors=[result.get("error", "Unknown error")],
+                )
+                return result
+
+            self._job_manager.update_job(
+                job_id,
+                status=JobStatus.COMPLETED,
+                completed_steps=2,
+                current_step="Prediction completed.",
+                result=result,
+            )
+            return result
+
+        except Exception as e:
+            import traceback
+
+            self._job_manager.update_job(
+                job_id,
+                status=JobStatus.FAILED,
+                current_step="Prediction failed.",
+                errors=[str(e), traceback.format_exc()],
+            )
+            return {"success": False, "error": str(e)}
+
     def call_method(
         self,
         handle_id: str,
