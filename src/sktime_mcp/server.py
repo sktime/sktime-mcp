@@ -159,8 +159,8 @@ def sanitize_for_json(obj, _seen=None):
     if _seen is None:
         _seen = set()
 
-    if isinstance(obj, (dict, list, tuple)) or (
-        _PANDAS_AVAILABLE and isinstance(obj, (pd.Series, pd.DataFrame))
+    if isinstance(obj, dict | list | tuple) or (
+        _PANDAS_AVAILABLE and isinstance(obj, pd.Series | pd.DataFrame)
     ):
         obj_id = id(obj)
         if obj_id in _seen:
@@ -200,11 +200,11 @@ def sanitize_for_json(obj, _seen=None):
     # --- Standard Python containers ---
     if isinstance(obj, dict):
         return {str(k): sanitize_for_json(v, _seen) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
+    if isinstance(obj, list | tuple):
         return [sanitize_for_json(item, _seen) for item in obj]
 
     # --- Already JSON-safe scalars ---
-    if isinstance(obj, (str, int, float, bool, type(None))):
+    if isinstance(obj, str | int | float | bool | type(None)):
         return obj
 
     # --- Fallback: objects with __dict__ or anything else ---
@@ -325,7 +325,8 @@ async def list_tools() -> list[Tool]:
             name="fit",
             description=(
                 "Fit an estimator on data. "
-                "Provide explicit X_handle and/y_handle (or datasets) depending on the estimator's scitype."
+                "Provide X_handle/y_handle or datasets for the estimator scitype. "
+                "For multi-series X (aligners), pass X_handle or X_dataset as a list."
             ),
             inputSchema={
                 "type": "object",
@@ -335,16 +336,30 @@ async def list_tools() -> list[Tool]:
                         "description": "Handle from instantiate",
                     },
                     "X_handle": {
-                        "type": "string",
-                        "description": "Optional: Handle from load_data_source for X data (features, panel, etc.)",
+                        "description": "Data handle for X, or list of handles for multi-series X",
+                        "anyOf": [
+                            {"type": "string"},
+                            {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "minItems": 2,
+                            },
+                        ],
                     },
                     "y_handle": {
                         "type": "string",
                         "description": "Optional: Handle from load_data_source for y data (target, labels, etc.)",
                     },
                     "X_dataset": {
-                        "type": "string",
-                        "description": "Optional: Demo dataset name for X data",
+                        "description": "Demo dataset name for X, or list of names for multi-series X",
+                        "anyOf": [
+                            {"type": "string"},
+                            {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "minItems": 2,
+                            },
+                        ],
                     },
                     "y_dataset": {
                         "type": "string",
@@ -492,8 +507,11 @@ async def list_tools() -> list[Tool]:
                     },
                     "kwargs": {
                         "type": "object",
-                        "description": "Dictionary of keyword arguments to pass to the method. "
-                        "Pass '_dataset' or '_data_handle' as suffixes in keys to inject memory data (e.g., {'y_dataset': 'airline'}).",
+                        "description": (
+                            "Keyword args for the method. Use '_dataset' or '_data_handle' "
+                            "suffixes to inject data (e.g. {'y_dataset': 'airline'} or "
+                            "{'X_data_handle': ['h1', 'h2']})."
+                        ),
                     },
                 },
                 "required": ["handle_id", "method_name"],
