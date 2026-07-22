@@ -143,7 +143,7 @@ def _apply_response_token_limit(tool_name: str, text: str) -> str:
     return text[:budget] + notice
 
 
-def sanitize_for_json(obj):
+def sanitize_for_json(obj, _seen=None):
     """Recursively convert objects to JSON-serializable format.
 
     Handles:
@@ -151,7 +151,19 @@ def sanitize_for_json(obj):
     - NumPy integer/float scalars and ndarrays
     - Pandas Timestamp, NaT, NA, and Series/DataFrame
     - Arbitrary objects (fallback to str repr)
+    - Circular references (returns a placeholder instead of recursing forever)
     """
+    if _seen is None:
+        _seen = set()
+
+    if isinstance(obj, (dict, list, tuple)) or (
+        _PANDAS_AVAILABLE and isinstance(obj, (pd.Series, pd.DataFrame))
+    ):
+        obj_id = id(obj)
+        if obj_id in _seen:
+            return "<circular reference>"
+        _seen = _seen | {obj_id}
+
     # --- NumPy types ---
     if _NUMPY_AVAILABLE:
         if isinstance(obj, np.integer):
@@ -161,7 +173,7 @@ def sanitize_for_json(obj):
         if isinstance(obj, np.bool_):
             return bool(obj)
         if isinstance(obj, np.ndarray):
-            return [sanitize_for_json(item) for item in obj.tolist()]
+            return [sanitize_for_json(item, _seen) for item in obj.tolist()]
         if isinstance(obj, np.complexfloating):
             return str(obj)
 
@@ -178,15 +190,15 @@ def sanitize_for_json(obj):
         except AttributeError:
             pass
         if isinstance(obj, pd.Series):
-            return sanitize_for_json(obj.tolist())
+            return sanitize_for_json(obj.tolist(), _seen)
         if isinstance(obj, pd.DataFrame):
-            return sanitize_for_json(obj.to_dict(orient="records"))
+            return sanitize_for_json(obj.to_dict(orient="records"), _seen)
 
     # --- Standard Python containers ---
     if isinstance(obj, dict):
-        return {str(k): sanitize_for_json(v) for k, v in obj.items()}
+        return {str(k): sanitize_for_json(v, _seen) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
-        return [sanitize_for_json(item) for item in obj]
+        return [sanitize_for_json(item, _seen) for item in obj]
 
     # --- Already JSON-safe scalars ---
     if isinstance(obj, (str, int, float, bool, type(None))):
