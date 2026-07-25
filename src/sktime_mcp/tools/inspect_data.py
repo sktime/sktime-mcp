@@ -31,34 +31,24 @@ def inspect_data_tool(data_handle: str) -> dict[str, Any]:
     -------
     dict
         Dictionary containing detailed metadata and summary statistics:
-        - "success" : bool
-            True if the data handle was found and inspected successfully.
-        - "data_handle" : str
-            The inspected data handle ID.
-        - "mtype" : str
-            The format mtype (e.g. 'pd.Series', 'pd.DataFrame').
-        - "scitype" : str
-            The sktime scientific type (e.g. 'Series', 'Panel').
-        - "shape" : list of int
-            Shape list: [rows, columns] or [rows].
-        - "columns" : list of str
-            Names of all variables (including exogenous features if present).
-        - "dtypes" : dict
-            Mapping of column names to string names of their data types.
-        - "index_names" : list of str
-            List of names of the index levels.
-        - "freq" : str or None
-            Inferred or declared frequency of the time index.
-        - "cutoff" : str or None
-            Cutoff timestamp/integer index indicating the end of the history.
-        - "n_missing" : int
-            Total count of missing values across the entire dataset.
-        - "head" : dict
-            Preview of the first 5 rows of data.
-        - "summary_stats" : dict
-            Statistical summary metrics (mean, std, min, max, etc.) per column.
-        - "error" : str, optional
-            Error message if "success" is False.
+
+        - ``"success"`` (bool) -- True if the data handle was found and inspected successfully.
+        - ``"data_handle"`` (str) -- The inspected data handle ID.
+        - ``"mtype"`` (str) -- The format mtype (e.g. 'pd.Series', 'pd.DataFrame').
+        - ``"scitype"`` (str) -- The sktime scientific type (e.g. 'Series', 'Panel').
+        - ``"shape"`` (list of int) -- Shape list: [rows, columns] or [rows].
+        - ``"columns"`` (list of str) -- Names of all variables (including exogenous features if
+          present).
+        - ``"dtypes"`` (dict) -- Mapping of column names to string names of their data types.
+        - ``"index_names"`` (list of str) -- List of names of the index levels.
+        - ``"freq"`` (str or None) -- Inferred or declared frequency of the time index.
+        - ``"cutoff"`` (str or None) -- Cutoff timestamp/integer index indicating the end of the
+          history.
+        - ``"n_missing"`` (int) -- Total count of missing values across the entire dataset.
+        - ``"head"`` (dict) -- Preview of the first 5 rows of data.
+        - ``"summary_stats"`` (dict) -- Statistical summary metrics (mean, std, min, max, etc.) per
+          column.
+        - ``"error"`` (str, optional) -- Error message if "success" is False.
     """
     executor = get_executor()
 

@@ -1,15 +1,25 @@
 import os
 import sys
-from datetime import datetime
 
 # Path setup
 sys.path.insert(0, os.path.abspath("../../src"))
 
 # Project information
 project = "sktime-mcp"
-copyright = f"{datetime.now().year}, sktime-mcp contributors"
+# Fixed start year: using the current year would make builds non-reproducible.
+copyright = "2025, sktime-mcp contributors"
 author = "sktime-mcp contributors"
-release = "0.1.0"
+
+# Single-sourced from the installed package metadata so the docs can never
+# drift from pyproject.toml.
+try:
+    from importlib.metadata import version as _package_version
+
+    release = _package_version("sktime-mcp")
+except Exception:  # building from a source tree without an install
+    release = "0.0.0+unknown"
+
+version = ".".join(release.split(".")[:2])
 
 # General configuration
 extensions = [
@@ -20,6 +30,13 @@ extensions = [
     "myst_parser",
     "sphinx_autodoc_typehints",
 ]
+
+# Napoleon configuration
+# Render docstring "Attributes" sections as :ivar: fields inside the class body
+# rather than as standalone py:attribute objects. Without this, dataclass fields
+# picked up by autodoc's undoc-members collide with the same names described in
+# the docstring, producing "duplicate object description" warnings.
+napoleon_use_ivar = True
 
 # MyST parser configuration
 myst_enable_extensions = [

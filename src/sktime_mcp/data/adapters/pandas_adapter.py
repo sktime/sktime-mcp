@@ -17,15 +17,16 @@ class PandasAdapter(DataSourceAdapter):
     """
     Adapter for in-memory pandas DataFrames.
 
-    Config example:
-    {
-        "type": "pandas",
-        "data": <DataFrame object or dict>,
-        "time_column": "date",  # optional, will try to detect
-        "target_column": "value",  # optional, defaults to first column
-        "exog_columns": ["feature1", "feature2"],  # optional
-        "frequency": "D"  # optional, will try to infer
-    }
+    Config example::
+
+        {
+            "type": "pandas",
+            "data": <DataFrame object or dict>,
+            "time_column": "date",  # optional, will try to detect
+            "target_column": "value",  # optional, defaults to first column
+            "exog_columns": ["feature1", "feature2"],  # optional
+            "frequency": "D"  # optional, will try to infer
+        }
     """
 
     def load(self) -> pd.DataFrame:

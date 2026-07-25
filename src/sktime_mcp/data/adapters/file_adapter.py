@@ -17,34 +17,35 @@ class FileAdapter(DataSourceAdapter):
     """
     Adapter for file-based data sources.
 
-    Config example:
-    {
-        "type": "file",
-        "path": "/path/to/data.csv",
-        "format": "csv",  # csv, excel, parquet (auto-detected if not specified)
+    Config example::
 
-        # Column mapping
-        "time_column": "date",
-        "target_column": "value",
-        "exog_columns": ["feature1", "feature2"],
+        {
+            "type": "file",
+            "path": "/path/to/data.csv",
+            "format": "csv",  # csv, excel, parquet (auto-detected if not specified)
 
-        # CSV-specific options
-        "csv_options": {
-            "sep": ",",
-            "header": 0,
-            "encoding": "utf-8"
-        },
+            # Column mapping
+            "time_column": "date",
+            "target_column": "value",
+            "exog_columns": ["feature1", "feature2"],
 
-        # Excel-specific options
-        "excel_options": {
-            "sheet_name": 0,
-            "header": 0
-        },
+            # CSV-specific options
+            "csv_options": {
+                "sep": ",",
+                "header": 0,
+                "encoding": "utf-8"
+            },
 
-        # Common options
-        "parse_dates": True,
-        "frequency": "D"
-    }
+            # Excel-specific options
+            "excel_options": {
+                "sheet_name": 0,
+                "header": 0
+            },
+
+            # Common options
+            "parse_dates": True,
+            "frequency": "D"
+        }
     """
 
     def load(self) -> pd.DataFrame:

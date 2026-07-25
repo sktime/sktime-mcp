@@ -68,11 +68,9 @@ class DataSourceAdapter(ABC):
             data: DataFrame to validate
 
         Returns:
-            Tuple of (is_valid, validation_report)
-            validation_report contains:
-                - valid: bool
-                - errors: List[str]
-                - warnings: List[str]
+            Tuple of ``(is_valid, validation_report)``, where
+            ``validation_report`` contains the keys ``valid`` (bool),
+            ``errors`` (list of str), and ``warnings`` (list of str).
         """
         pass
 

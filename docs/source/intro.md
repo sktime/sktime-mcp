@@ -32,10 +32,10 @@ If you are new to MCP‑based workflows, start with the **Quick Start** below, t
 
 ## 🔥 Key Features
 
-- **Semantic Discovery:** Find the perfect estimator using semantic similarity and capability tags (e.g., "probabilistic forecaster that handles missing data").
-- **Safe Composition:** Build complex pipelines (Transformer → Forecaster) with built-in validation to ensure components are compatible before execution.
-- **Universal Data Loading:** Seamlessly ingest data from SQL, Pandas, Parquet, Excel, and CSV files.
-- **Execution Runtime:** Stateful engine that manages object lifecycles, fitting, and predicting, all via simple JSON-RPC tools.
+- **Registry-Driven Discovery:** Find estimators by capability tag and name search against the live `sktime` registry (e.g., "probabilistic forecaster that handles missing data") — reading installed metadata, never recalling it from memory.
+- **Composition via `craft()`:** Build pipelines (Transformer → Forecaster) from a single spec string, validated by sktime itself, so incompatible components fail before execution.
+- **Universal Data Loading:** Ingest data from Pandas, SQL, URLs, and files — CSV, Excel, and Parquet.
+- **Execution Runtime:** Stateful engine that manages object lifecycles, fitting, predicting, and background jobs, all via MCP tool calls.
 
 ---
 
@@ -96,10 +96,12 @@ Add this to your `claude_desktop_config.json`:
 
 | Section | Description |
 | :--- | :--- |
+| [**Installation**](installation.md) | Install methods, optional extras, and verification. |
 | [**Quickstart**](quickstart.md) | Fastest route to running the sktime-mcp server and connecting it to a client. |
-| [**User Guide**](user-guide.md) | Comprehensive manual on using tools, workflows, and best practices. |
 | [**Concepts**](concepts.md) | Core concepts, handles, and asynchronous operations. |
-| [**Architecture**](developer/architecture.md) | High-level system design, data flow, and limitations. |
+| [**User Guide**](user-guide.md) | Hands-on walkthrough with four worked end-to-end workflows. |
+| [**Tool Reference**](tool-reference.md) | Every MCP tool, its arguments, and what it returns. |
+| [**Architecture**](developer/architecture.md) | High-level system design, data flow, and the trust boundary. |
 | [**Contributing**](developer/contributing.md) | Contributing guidelines, testing, and extending the server. |
 
 ---
@@ -108,6 +110,5 @@ Add this to your `claude_desktop_config.json`:
 ## 🚀 Get Started
 
 - See [Quickstart](quickstart.md) to start the server.
-- See [User Guide](user-guide.md) for detailed instructions and advanced features.
-
-[Get Started Now](quickstart.md){ .md-button .md-button--primary }
+- See the [User Guide](user-guide.md) for worked end-to-end workflows.
+- See the [Tool Reference](tool-reference.md) for what the assistant can actually call.

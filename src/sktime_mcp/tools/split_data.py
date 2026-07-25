@@ -41,20 +41,14 @@ def split_data_tool(
     -------
     dict
         Dictionary containing the split train/test handles and metadata:
-        - "success" : bool
-            True if the split completed successfully, False otherwise.
-        - "train_handle" : str
-            The new unique data handle ID representing the training set.
-        - "test_handle" : str
-            The new unique data handle ID representing the test set.
-        - "cutoff" : str
-            The cutoff timestamp indicating the last training timestamp.
-        - "train_size" : int
-            Number of observations in the training set.
-        - "n_test" : int
-            Number of observations in the test set.
-        - "error" : str, optional
-            Error message if "success" is False.
+
+        - ``"success"`` (bool) -- True if the split completed successfully, False otherwise.
+        - ``"train_handle"`` (str) -- The new unique data handle ID representing the training set.
+        - ``"test_handle"`` (str) -- The new unique data handle ID representing the test set.
+        - ``"cutoff"`` (str) -- The cutoff timestamp indicating the last training timestamp.
+        - ``"train_size"`` (int) -- Number of observations in the training set.
+        - ``"n_test"`` (int) -- Number of observations in the test set.
+        - ``"error"`` (str, optional) -- Error message if "success" is False.
     """
     executor = get_executor()
 

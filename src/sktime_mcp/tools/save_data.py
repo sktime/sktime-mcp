@@ -47,16 +47,12 @@ def save_data_tool(
     -------
     dict
         Dictionary containing success status and path information:
-        - "success" : bool
-            True if the data was written successfully, False otherwise.
-        - "saved_path" : str
-            Absolute path to the written file.
-        - "format" : str
-            The format used to write the file.
-        - "rows" : int
-            Number of rows written to the file.
-        - "error" : str, optional
-            Error message if "success" is False.
+
+        - ``"success"`` (bool) -- True if the data was written successfully, False otherwise.
+        - ``"saved_path"`` (str) -- Absolute path to the written file.
+        - ``"format"`` (str) -- The format used to write the file.
+        - ``"rows"`` (int) -- Number of rows written to the file.
+        - ``"error"`` (str, optional) -- Error message if "success" is False.
     """
     executor = get_executor()
 

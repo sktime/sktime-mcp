@@ -67,4 +67,5 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Build docs
-        run: sphinx-build docs/source docs/_build/html
+        # -W turns warnings into errors so doc regressions fail the build.
+        run: sphinx-build -W --keep-going docs/source docs/_build/html

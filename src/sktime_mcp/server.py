@@ -5,6 +5,7 @@ Main entry point for the Model Context Protocol server
 that exposes sktime's registry and execution capabilities to LLMs.
 """
 
+import argparse
 import asyncio
 import json
 import logging
@@ -14,6 +15,8 @@ from io import TextIOWrapper
 from typing import Any
 
 import anyio
+
+from sktime_mcp import __version__
 
 try:
     import numpy as np
@@ -1220,8 +1223,38 @@ async def run_server():
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
 
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser for the ``sktime-mcp`` console script.
+
+    Returns
+    -------
+    argparse.ArgumentParser
+        Parser accepting ``--version``/``-V`` and ``--help``. With no
+        arguments the server starts on stdio.
+    """
+    parser = argparse.ArgumentParser(
+        prog="sktime-mcp",
+        description=(
+            "MCP (Model Context Protocol) server exposing the sktime ecosystem "
+            "to LLM clients. Runs on stdio when invoked without arguments."
+        ),
+    )
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=f"sktime-mcp {__version__}",
+        help="print the installed sktime-mcp version and exit",
+    )
+    return parser
+
+
 def main():
     """Main entry point."""
+    # Parsed before any stdio redirection so that --version/--help reach the
+    # real stdout rather than the MCP JSON-RPC stream.
+    build_arg_parser().parse_args()
+
     try:
         asyncio.run(run_server())
     except KeyboardInterrupt:

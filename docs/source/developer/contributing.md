@@ -52,11 +52,31 @@ Since the MCP server is heavily asynchronous, many tests use `pytest-asyncio`. E
 
 ## Project Structure
 
-- `src/sktime_mcp/server.py`: The main entry point and tool dispatcher.
+- `src/sktime_mcp/server.py`: The main entry point, tool schemas, and tool dispatcher.
 - `src/sktime_mcp/tools/`: Implementation of individual MCP tools, grouped by category.
 - `src/sktime_mcp/runtime/`: State management, handle registry, and job execution.
-- `src/sktime_mcp/data/`: Data loading and formatting logic.
-- `src/sktime_mcp/composition/`: Pipeline validation and building.
+- `src/sktime_mcp/registry/`: sktime registry introspection and tag resolution.
+- `src/sktime_mcp/data/`: Data source adapters, loading, and formatting logic.
+
+Pipeline composition has no module of its own — it is expressed in the
+`instantiate` spec string and validated by sktime's `craft()`.
+
+## Documentation
+
+Docs live in `docs/source/` and are built with Sphinx + MyST.
+
+```bash
+sphinx-build -W docs/source docs/_build/html
+```
+
+`-W` turns warnings into errors, which is what CI enforces — **the build must stay
+warning-free**. If you add or change a tool, update `docs/source/tool-reference.md`
+in the same PR.
+
+When writing NumPy-style docstrings, a bullet list needs a blank line before it,
+and each bullet's description must stay on the bullet's own line or be indented to
+align with the bullet text. Otherwise docutils reports "Unexpected indentation"
+and the section renders incorrectly in the API reference.
 
 ## Pull Request Process
 

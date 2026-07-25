@@ -2,6 +2,7 @@
 Data transformation tool for sktime MCP.
 
 Provides two actions:
+
   - "format": auto-fix frequency, duplicates, missing values (replaces format_time_series).
   - "convert": convert data between sktime mtypes using convert_to().
 """
@@ -35,9 +36,11 @@ def transform_data_tool(
         Handle ID of the loaded data to transform (from load_data_source).
     action : str, default="format"
         The transformation action to perform. Must be one of:
-        - "format" : Auto-fix common time series issues like inferring frequency,
-          removing duplicate timestamps, and filling missing values.
-        - "convert" : Convert the data to a different sktime machine type (mtype).
+
+        - ``"format"`` -- auto-fix common time series issues such as inferring
+          frequency, removing duplicate timestamps, and filling missing values.
+        - ``"convert"`` -- convert the data to a different sktime machine type
+          (mtype).
     auto_infer_freq : bool, default=True
         (Format mode only) Infer and set frequency.
     fill_missing : bool, default=True
@@ -52,16 +55,14 @@ def transform_data_tool(
     -------
     dict
         Dictionary containing the new data handle and a list of applied changes:
-        - "success" : bool
-            True if the transformation succeeded, False otherwise.
-        - "data_handle" : str
-            The new unique data handle ID representing the transformed data.
-        - "changes_applied" : list of str
-            A list of human-readable changes that were applied to the data.
-        - "metadata" : dict, optional
-            Updated metadata for the new handle.
-        - "error" : str, optional
-            Error message if "success" is False.
+
+        - ``"success"`` (bool) -- True if the transformation succeeded, False otherwise.
+        - ``"data_handle"`` (str) -- The new unique data handle ID representing the transformed
+          data.
+        - ``"changes_applied"`` (list of str) -- A list of human-readable changes that were applied
+          to the data.
+        - ``"metadata"`` (dict, optional) -- updated metadata for the new handle.
+        - ``"error"`` (str, optional) -- Error message if "success" is False.
     """
     if action not in ("format", "convert"):
         return {

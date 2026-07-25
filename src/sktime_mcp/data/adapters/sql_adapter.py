@@ -16,33 +16,34 @@ class SQLAdapter(DataSourceAdapter):
     """
     Adapter for SQL databases.
 
-    Config example:
-    {
-        "type": "sql",
-        "connection_string": "postgresql://user:pass@host:5432/db",
-        # OR individual components:
-        "dialect": "postgresql",  # postgresql, mysql, sqlite, mssql
-        "host": "localhost",
-        "port": 5432,
-        "database": "mydb",
-        "username": "user",
-        "password": "pass",
+    Config example::
 
-        # Query
-        "query": "SELECT date, value FROM sales WHERE date >= '2020-01-01'",
-        # OR
-        "table": "sales",
-        "filters": {"date": ">=2020-01-01"},
+        {
+            "type": "sql",
+            "connection_string": "postgresql://user:pass@host:5432/db",
+            # OR individual components:
+            "dialect": "postgresql",  # postgresql, mysql, sqlite, mssql
+            "host": "localhost",
+            "port": 5432,
+            "database": "mydb",
+            "username": "user",
+            "password": "pass",
 
-        # Column mapping
-        "time_column": "date",
-        "target_column": "value",
-        "exog_columns": ["feature1", "feature2"],
+            # Query
+            "query": "SELECT date, value FROM sales WHERE date >= '2020-01-01'",
+            # OR
+            "table": "sales",
+            "filters": {"date": ">=2020-01-01"},
 
-        # Optional
-        "parse_dates": ["date"],
-        "frequency": "D"
-    }
+            # Column mapping
+            "time_column": "date",
+            "target_column": "value",
+            "exog_columns": ["feature1", "feature2"],
+
+            # Optional
+            "parse_dates": ["date"],
+            "frequency": "D"
+        }
     """
 
     def load(self) -> pd.DataFrame:

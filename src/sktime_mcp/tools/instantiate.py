@@ -49,12 +49,10 @@ def release_handle_tool(handle: str) -> dict[str, Any]:
     -------
     dict
         Dictionary containing success status:
-        - "success" : bool
-            True if the handle was successfully released, False otherwise.
-        - "handle" : str
-            The handle ID that was requested for release.
-        - "message" : str
-            Status message indicating outcome.
+
+        - ``"success"`` (bool) -- True if the handle was successfully released, False otherwise.
+        - ``"handle"`` (str) -- The handle ID that was requested for release.
+        - ``"message"`` (str) -- Status message indicating outcome.
     """
     handle_manager = get_handle_manager()
     released = handle_manager.release_handle(handle)
@@ -72,12 +70,11 @@ def list_handles_tool() -> dict[str, Any]:
     -------
     dict
         Dictionary containing details of active handles:
-        - "success" : bool
-            True if the handles were retrieved successfully.
-        - "handles" : list of dict
-            Details of active handles including handle ID, estimator name, and state.
-        - "count" : int
-            The number of active handles.
+
+        - ``"success"`` (bool) -- True if the handles were retrieved successfully.
+        - ``"handles"`` (list of dict) -- Details of active handles including handle ID, estimator
+          name, and state.
+        - ``"count"`` (int) -- The number of active handles.
     """
     handle_manager = get_handle_manager()
     handles = handle_manager.list_handles()
@@ -96,6 +93,7 @@ def load_model_tool(path: str) -> dict[str, Any]:
     path : str
         Local directory path or MLflow URI to the saved model.
         Examples:
+
         - "/tmp/my_arima_model" (Linux/macOS) or "C:\\Temp\\my_arima_model" (Windows)
         - "runs:/<run_id>/model"
         - "mlflow-artifacts:/<run_id>/artifacts/model"
@@ -105,18 +103,13 @@ def load_model_tool(path: str) -> dict[str, Any]:
     -------
     dict
         Dictionary containing success status and the new handle:
-        - "success" : bool
-            True if the model was loaded successfully.
-        - "handle" : str, optional
-            The registered handle ID for the loaded model.
-        - "estimator" : str, optional
-            Class name of the loaded estimator.
-        - "path" : str
-            The path/URI from which the model was loaded.
-        - "message" : str
-            Status message describing outcome.
-        - "error" : str, optional
-            Error message if "success" is False.
+
+        - ``"success"`` (bool) -- True if the model was loaded successfully.
+        - ``"handle"`` (str, optional) -- The registered handle ID for the loaded model.
+        - ``"estimator"`` (str, optional) -- Class name of the loaded estimator.
+        - ``"path"`` (str) -- The path/URI from which the model was loaded.
+        - ``"message"`` (str) -- Status message describing outcome.
+        - ``"error"`` (str, optional) -- Error message if "success" is False.
     """
     try:
         from sktime.utils.mlflow_sktime import load_model
