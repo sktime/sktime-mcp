@@ -160,6 +160,12 @@ def plot_series_tool(
             "error": "matplotlib and sktime plotting utils are required.",
         }
 
+    if not data_handles:
+        return {
+            "success": False,
+            "error": "data_handles must contain at least one data handle ID.",
+        }
+
     executor = get_executor()
 
     # --- resolve data handles -----------------------------------------------
