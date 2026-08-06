@@ -166,6 +166,19 @@ class Executor:
             self._cleanup_oldest_data(count=max(1, self._max_data_handles // 5))
         self._data_handles[handle_id] = data
 
+    def summarize_available_handles(self, limit: int = 5) -> dict[str, Any]:
+        """Capped view of data-handle ids for not-found error responses.
+
+        Returns the *limit* most recent handles plus the total count, so
+        error responses stay small and don't enumerate every handle in the
+        process.
+        """
+        handle_ids = list(self._data_handles.keys())
+        return {
+            "available_handles": handle_ids[-limit:],
+            "n_available_handles": len(handle_ids),
+        }
+
     def _resolve_source(self, source: str) -> dict[str, Any]:
         """Resolve a source id to a series, trying data_handle then demo dataset."""
         if source in self._data_handles:
