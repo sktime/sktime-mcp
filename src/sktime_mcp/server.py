@@ -340,6 +340,8 @@ async def list_tools() -> list[Tool]:
                     },
                     "fh": {
                         "description": "Optional: Forecast horizon (e.g. 12 or [1,2,3]) to pass to fit",
+                        "type": ["integer", "array"],
+                        "items": {"type": "integer"},
                     },
                     "run_async": {
                         "type": "boolean",
@@ -381,10 +383,14 @@ async def list_tools() -> list[Tool]:
                     },
                     "coverage": {
                         "description": "Coverage level for intervals (float or list of floats)",
+                        "type": ["number", "array"],
+                        "items": {"type": "number"},
                         "default": 0.9,
                     },
                     "alpha": {
                         "description": "Alpha values for quantiles (float or list of floats)",
+                        "type": ["number", "array"],
+                        "items": {"type": "number"},
                     },
                     "X_handle": {
                         "type": "string",
@@ -655,6 +661,8 @@ async def list_tools() -> list[Tool]:
                             "steps (e.g. fh=[1,5,10] reserves 10 steps). "
                             "Mutually exclusive with test_size."
                         ),
+                        "type": ["integer", "array"],
+                        "items": {"type": "integer"},
                     },
                 },
                 "required": ["data_handle"],
@@ -787,6 +795,8 @@ async def list_tools() -> list[Tool]:
                     },
                     "markers": {
                         "description": "Marker style(s) for data points (e.g., 'o', ['.', 'x']).",
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
                     },
                     "x_label": {
                         "type": "string",
