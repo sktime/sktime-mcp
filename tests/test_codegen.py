@@ -73,6 +73,22 @@ class TestFormatValue:
         result = _format_value([[1, 2], [3, 4]])
         assert result == "[[1, 2], [3, 4]]"
 
+    def test_string_with_embedded_double_quotes(self):
+        """Embedded double quotes must be escaped to stay valid Python."""
+        result = _format_value('NaiveForecaster(strategy="mean", sp=12)')
+        assert result == '"NaiveForecaster(strategy=\\"mean\\", sp=12)"'
+        assert eval(result) == 'NaiveForecaster(strategy="mean", sp=12)'
+
+    def test_string_with_backslash(self):
+        """Backslashes must be escaped to stay valid Python."""
+        result = _format_value("a\\b")
+        assert eval(result) == "a\\b"
+
+    def test_dict_key_with_embedded_quotes(self):
+        """Dict keys must be escaped like any other string."""
+        result = _format_value({'say "hi"': 1})
+        assert eval(result) == {'say "hi"': 1}
+
 
 class TestVarNameValidation:
     """Tests for Python variable name validation in code export."""
@@ -151,6 +167,20 @@ class TestExportCodeTool:
             result = export_code_tool(handle, include_fit_example=False)
             assert result["success"]
             assert "load_airline" not in result["code"]
+        finally:
+            self._cleanup_handle(handle)
+
+    def test_spec_with_double_quoted_arg_is_valid_python(self):
+        """Specs with double-quoted string args must export syntactically valid code."""
+        handle = self._create_handle('NaiveForecaster(strategy="mean", sp=12)')
+        try:
+            result = export_code_tool(handle)
+            assert result["success"]
+            compile(result["code"], "<export_code>", "exec")
+            namespace: dict = {}
+            exec(result["code"], namespace)
+            assert namespace["model"].get_params()["strategy"] == "mean"
+            assert namespace["model"].get_params()["sp"] == 12
         finally:
             self._cleanup_handle(handle)
 

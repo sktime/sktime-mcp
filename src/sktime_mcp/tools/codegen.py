@@ -4,6 +4,7 @@ Code generation tool for sktime MCP.
 Generates Python code to recreate estimators and pipelines.
 """
 
+import json
 import keyword
 from typing import Any
 
@@ -14,7 +15,9 @@ from sktime_mcp.runtime.handles import get_handle_manager
 def _format_value(value: Any) -> str:
     """Format a parameter value for Python code generation."""
     if isinstance(value, str):
-        return f'"{value}"'
+        # json.dumps escapes embedded quotes/backslashes; its output is also
+        # a valid Python string literal
+        return json.dumps(value)
     elif isinstance(value, (list, tuple)):
         if isinstance(value, tuple):
             items = ", ".join(_format_value(v) for v in value)
@@ -23,7 +26,7 @@ def _format_value(value: Any) -> str:
             items = ", ".join(_format_value(v) for v in value)
             return f"[{items}]"
     elif isinstance(value, dict):
-        items = ", ".join(f'"{k}": {_format_value(v)}' for k, v in value.items())
+        items = ", ".join(f"{_format_value(k)}: {_format_value(v)}" for k, v in value.items())
         return f"{{{items}}}"
     elif isinstance(value, bool):
         return str(value)
