@@ -801,6 +801,7 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Resolution in dots per inch (default: 150).",
                         "default": 150,
+                        "minimum": 1,
                     },
                     "markers": {
                         "description": "Marker style(s) for data points (e.g., 'o', ['.', 'x']).",
