@@ -166,6 +166,14 @@ def plot_series_tool(
             "error": "data_handles must contain at least one data handle ID.",
         }
 
+    # dpi=0 previously slipped through (falsy -> default 150) while dpi=-100
+    # errored — reject all non-positive dpi consistently (N-20).
+    if dpi is not None and dpi <= 0:
+        return {
+            "success": False,
+            "error": f"dpi must be a positive integer, got {dpi}.",
+        }
+
     executor = get_executor()
 
     # --- resolve data handles -----------------------------------------------

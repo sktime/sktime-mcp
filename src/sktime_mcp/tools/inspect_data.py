@@ -87,13 +87,16 @@ def inspect_data_tool(data_handle: str) -> dict[str, Any]:
         if X is not None and isinstance(X, pd.DataFrame):
             columns = columns + [f"X:{c}" for c in X.columns]
 
-        # --- dtypes ---
+        # --- dtypes (include exogenous columns, which `columns` already lists — N-14) ---
         if isinstance(y, pd.DataFrame):
             dtypes = {str(col): str(dtype) for col, dtype in y.dtypes.items()}
         elif isinstance(y, pd.Series):
             dtypes = {y.name if y.name else "target": str(y.dtype)}
         else:
             dtypes = {}
+        if X is not None and isinstance(X, pd.DataFrame):
+            for col, dtype in X.dtypes.items():
+                dtypes[f"X:{col}"] = str(dtype)
 
         # --- index names ---
         if hasattr(y, "index") and hasattr(y.index, "names"):
