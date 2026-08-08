@@ -68,8 +68,16 @@ class JobInfo:
 
     @property
     def estimated_time_remaining(self) -> float | None:
-        """Estimate remaining time in seconds."""
+        """Estimate remaining time in seconds.
+
+        Only meaningful when progress is fine-grained. Jobs here have a handful
+        of coarse steps (load / run / summarize), so extrapolating from them
+        gave wildly wrong estimates (e.g. 15s remaining when the job finished in
+        under a second). Return None unless the job reports many steps.
+        """
         if self.status != JobStatus.RUNNING or self.completed_steps == 0:
+            return None
+        if self.total_steps < 10:
             return None
 
         elapsed = self.elapsed_time
@@ -346,6 +354,9 @@ class JobManager:
 
             job.status = JobStatus.CANCELLED
             job.end_time = datetime.now()
+            # Terminal step label, so status doesn't stay frozen on the last
+            # in-flight message (e.g. "Running cross-validation...").
+            job.current_step = "Cancelled"
             task = self._tasks.get(job_id)
 
         # Cancel outside the lock: the task's done callback also takes the lock.
