@@ -159,6 +159,11 @@ def _action_format(
 # ---------------------------------------------------------------------------
 
 
+# Index-less mtypes: converting a handle to these strips the time index, which
+# breaks every downstream tool (inspect/split/format) and fabricates a cutoff.
+_INDEXLESS_MTYPES = {"np.ndarray", "numpy3D", "numpyflat", "numpy2D"}
+
+
 def _action_convert(
     executor: Any,
     data_handle: str,
@@ -170,8 +175,33 @@ def _action_convert(
 
     from sktime.datatypes import convert_to
 
+    if to_mtype in _INDEXLESS_MTYPES:
+        return {
+            "success": False,
+            "error": (
+                f"'{to_mtype}' has no time index; converting a handle to it breaks "
+                "inspect_data/split_data and other tools. Convert to a pandas mtype "
+                "(pd.Series, pd.DataFrame) instead."
+            ),
+        }
+
     original_mtype = type(y).__name__
-    converted = convert_to(y, to_type=to_mtype)
+    try:
+        converted = convert_to(y, to_type=to_mtype)
+    except (TypeError, ValueError, KeyError) as e:
+        msg = str(e)
+        # sktime raises a multi-paragraph mtype-inference dump for a
+        # scitype-incompatible target (e.g. Series handle -> pd-multiindex).
+        if "No valid mtype" in msg or "must be of python type" in msg:
+            return {
+                "success": False,
+                "error": (
+                    f"Cannot convert a {original_mtype} (Series-scitype) handle to "
+                    f"'{to_mtype}'. That target expects a different scitype (e.g. Panel). "
+                    "Use a compatible mtype such as pd.Series or pd.DataFrame."
+                ),
+            }
+        return {"success": False, "error": f"Conversion to '{to_mtype}' failed: {msg}"}
 
     # Register as new handle
     new_handle = f"data_{uuid.uuid4().hex[:8]}"
