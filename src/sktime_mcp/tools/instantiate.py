@@ -59,7 +59,7 @@ def release_handle_tool(handle: str) -> dict[str, Any]:
     return {
         "success": released,
         "handle": handle,
-        "message": "Handle released" if released else "Handle not found",
+        "message": "Handle released" if released else handle_manager.describe_missing(handle),
     }
 
 
