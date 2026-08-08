@@ -13,6 +13,19 @@ import pandas as pd
 from ..base import DataSourceAdapter
 
 
+def _safe_infer_freq(index: pd.Index) -> str | None:
+    """pd.infer_freq requires >= 3 points and raises otherwise; return None instead.
+
+    A 1–2 row series is a valid (if tiny) time series — it should load with no
+    frequency rather than crash with pandas' "Need at least 3 dates" ValueError.
+    """
+    if len(index) < 3:
+        return None
+    with contextlib.suppress(ValueError, TypeError):
+        return pd.infer_freq(index)
+    return None
+
+
 class PandasAdapter(DataSourceAdapter):
     """
     Adapter for in-memory pandas DataFrames.
@@ -80,8 +93,8 @@ class PandasAdapter(DataSourceAdapter):
             with contextlib.suppress(Exception):
                 df = df.asfreq(freq)
         elif isinstance(df.index, pd.DatetimeIndex) and df.index.freq is None:
-            # Try to infer frequency
-            inferred_freq = pd.infer_freq(df.index)
+            # Try to infer frequency (needs >= 3 points; short series just skip it)
+            inferred_freq = _safe_infer_freq(df.index)
             if inferred_freq:
                 df = df.asfreq(inferred_freq)
 
@@ -89,7 +102,7 @@ class PandasAdapter(DataSourceAdapter):
 
         # Determine frequency for metadata
         if isinstance(df.index, pd.DatetimeIndex):
-            freq_str = str(df.index.freq) if df.index.freq else pd.infer_freq(df.index)
+            freq_str = str(df.index.freq) if df.index.freq else _safe_infer_freq(df.index)
         else:
             freq_str = "Integer"
 
@@ -175,14 +188,28 @@ class PandasAdapter(DataSourceAdapter):
                 f"Very small dataset ({len(data)} rows). Consider using more data for reliable forecasting."
             )
 
+        # Check that the target column is numeric — forecasting cannot use an
+        # object/string target, and this otherwise passes silently and fails
+        # deep inside fit (#533 / NB-07).
+        target_col = self.config.get("target_column")
+        if target_col is None and len(data.columns) > 0:
+            target_col = data.columns[0]
+        if target_col is not None and target_col in data.columns:
+            if not pd.api.types.is_numeric_dtype(data[target_col]):
+                warnings.append(
+                    f"Target column '{target_col}' has non-numeric dtype "
+                    f"'{data[target_col].dtype}'. Forecasting requires numeric values; "
+                    "convert the column before fitting."
+                )
+
         # Check for constant values
         for col in data.columns:
             if data[col].nunique() == 1:
                 warnings.append(f"Column '{col}' has constant values")
 
-        # Check frequency
-        if isinstance(data.index, pd.DatetimeIndex):
-            freq = pd.infer_freq(data.index)
+        # Check frequency (infer_freq needs >= 3 points; short series skip it)
+        if isinstance(data.index, pd.DatetimeIndex) and len(data.index) >= 3:
+            freq = _safe_infer_freq(data.index)
             if freq is None:
                 warnings.append(
                     "Could not infer frequency. Time series may have irregular intervals."
