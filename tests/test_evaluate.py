@@ -142,3 +142,53 @@ def test_evaluate_per_fold_error_surfaces_as_failure():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestCvFoldsValidation:
+    """cv_folds/initial_window are validated, never silently clamped."""
+
+    def _handle(self):
+        executor = get_executor()
+        return executor, executor._handle_manager.create_handle(
+            "NaiveForecaster", NaiveForecaster(), {}
+        )
+
+    def test_cv_folds_zero_rejected(self):
+        executor, handle = self._handle()
+        try:
+            result = evaluate_tool(estimator_handle=handle, y="airline", cv_folds=0)
+            assert not result["success"]
+            assert "cv_folds" in result["error"]
+        finally:
+            executor._handle_manager.release_handle(handle)
+
+    def test_cv_folds_negative_rejected(self):
+        executor, handle = self._handle()
+        try:
+            result = evaluate_tool(estimator_handle=handle, y="airline", cv_folds=-5)
+            assert not result["success"]
+            assert "cv_folds" in result["error"]
+        finally:
+            executor._handle_manager.release_handle(handle)
+
+    def test_cv_folds_exceeding_series_rejected(self):
+        executor, handle = self._handle()
+        try:
+            # airline has 144 observations; 500 folds is impossible
+            result = evaluate_tool(estimator_handle=handle, y="airline", cv_folds=500)
+            assert not result["success"]
+            assert "cv_folds" in result["error"]
+            assert "143" in result["error"]
+        finally:
+            executor._handle_manager.release_handle(handle)
+
+    def test_initial_window_exceeding_series_rejected(self):
+        executor, handle = self._handle()
+        try:
+            result = evaluate_tool(
+                estimator_handle=handle, y="airline", initial_window=144
+            )
+            assert not result["success"]
+            assert "initial_window" in result["error"]
+        finally:
+            executor._handle_manager.release_handle(handle)
