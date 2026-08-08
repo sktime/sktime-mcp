@@ -621,11 +621,18 @@ class Executor:
             for k, v in list(kwargs.items()):
                 if k.endswith("_dataset") and isinstance(v, str):
                     data_res = self.load_dataset(v)
-                    if data_res.get("success"):
-                        # Replace the kwarg with the actual data (e.g. y_dataset -> y)
-                        actual_key = k.replace("_dataset", "")
-                        kwargs[actual_key] = data_res["data"]
-                        del kwargs[k]
+                    if not data_res.get("success"):
+                        error_res = {
+                            "success": False,
+                            "error": data_res.get("error", f"Unknown dataset: {v}"),
+                        }
+                        if "available" in data_res:
+                            error_res["available"] = data_res["available"]
+                        return error_res
+                    # Replace the kwarg with the actual data (e.g. y_dataset -> y)
+                    actual_key = k.replace("_dataset", "")
+                    kwargs[actual_key] = data_res["data"]
+                    del kwargs[k]
                 elif k.endswith("_data_handle") and isinstance(v, str):
                     if v in self._data_handles:
                         actual_key = k.replace("_data_handle", "")
