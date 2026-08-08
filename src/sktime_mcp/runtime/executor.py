@@ -974,12 +974,13 @@ class Executor:
             if getattr(self, "_auto_format_enabled", True):
                 try:
                     format_result = self.format_data_handle(
-                        data_handle, auto_infer_freq=True, fill_missing=True, remove_duplicates=True
+                        data_handle,
+                        auto_infer_freq=True,
+                        fill_missing=True,
+                        remove_duplicates=True,
+                        release_original=True,
                     )
                     if format_result["success"]:
-                        # Free the raw handle — the formatted copy supersedes it
-                        if data_handle in self._data_handles:
-                            del self._data_handles[data_handle]
                         return {
                             "success": True,
                             "data_handle": format_result["data_handle"],
@@ -1099,7 +1100,11 @@ class Executor:
             if getattr(self, "_auto_format_enabled", True):
                 try:
                     format_result = self.format_data_handle(
-                        data_handle, auto_infer_freq=True, fill_missing=True, remove_duplicates=True
+                        data_handle,
+                        auto_infer_freq=True,
+                        fill_missing=True,
+                        remove_duplicates=True,
+                        release_original=True,
                     )
                     if format_result["success"]:
                         data_handle = format_result["data_handle"]
@@ -1140,9 +1145,14 @@ class Executor:
         auto_infer_freq: bool = True,
         fill_missing: bool = True,
         remove_duplicates: bool = True,
+        release_original: bool = False,
     ) -> dict[str, Any]:
         """
         Format data associated with a handle.
+
+        The input handle is preserved unless ``release_original`` is True —
+        that flag is for internal auto-format-on-load, where the raw handle
+        was never exposed to the caller.
         """
         if data_handle not in self._data_handles:
             return {"success": False, "error": f"Data handle '{data_handle}' not found"}
@@ -1252,8 +1262,7 @@ class Executor:
         }
         self._register_data_handle(new_handle, new_data)
 
-        # Release the original to prevent intermediate handles from accumulating
-        if data_handle in self._data_handles:
+        if release_original and data_handle in self._data_handles:
             del self._data_handles[data_handle]
 
         return {
