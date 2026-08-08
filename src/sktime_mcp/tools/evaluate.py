@@ -29,6 +29,17 @@ def evaluate_tool(
     y and X accept data_handle ids or built-in demo dataset names.
     Set run_async=True to run as a background job.
     """
+    if initial_window is None and cv_folds < 1:
+        return {
+            "success": False,
+            "error": f"cv_folds must be a positive integer, got {cv_folds}",
+        }
+    if initial_window is not None and initial_window < 1:
+        return {
+            "success": False,
+            "error": f"initial_window must be a positive integer, got {initial_window}",
+        }
+
     executor = get_executor()
 
     if run_async:

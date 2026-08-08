@@ -111,10 +111,20 @@ def _run_evaluate(
 
     n = len(y)
     if initial_window is not None:
+        if not 1 <= initial_window < n:
+            raise ValueError(
+                f"initial_window must be between 1 and n-1={n - 1} "
+                f"(series has {n} observations), got {initial_window}"
+            )
         win = initial_window
     else:
-        folds = max(1, min(int(cv_folds), max(1, n - 1)))
-        win = max(1, n - folds)
+        folds = int(cv_folds)
+        if not 1 <= folds <= n - 1:
+            raise ValueError(
+                f"cv_folds must be between 1 and n-1={n - 1} "
+                f"(series has {n} observations), got {folds}"
+            )
+        win = n - folds
     cv = ExpandingWindowSplitter(initial_window=win, step_length=1, fh=[1])
 
     results = evaluate(forecaster=instance, y=y, X=X, cv=cv, scoring=scoring)
