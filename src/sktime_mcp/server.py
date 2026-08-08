@@ -768,6 +768,7 @@ async def list_tools() -> list[Tool]:
                     "data_handles": {
                         "type": "array",
                         "items": {"type": "string"},
+                        "minItems": 1,
                         "description": "List of data handle IDs to plot (e.g., train, test, forecasts).",
                     },
                     "labels": {
