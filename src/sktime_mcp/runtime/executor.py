@@ -636,6 +636,11 @@ class Executor:
 
             result = method(**kwargs)
 
+            # Materialize generators (e.g. splitter.split) so the caller gets
+            # the actual values instead of a useless repr string
+            if inspect.isgenerator(result):
+                result = list(result)
+
             from sktime_mcp.server import sanitize_for_json
 
             if hasattr(result, "to_dict"):
