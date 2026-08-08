@@ -182,7 +182,7 @@ def plot_series_tool(
         return {
             "success": False,
             "error": f"Data handle(s) not found: {missing}",
-            "available_handles": list(executor._data_handles.keys()),
+            **executor.summarize_available_handles(),
         }
 
     # --- prepare plotting args ---------------------------------------------

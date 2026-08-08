@@ -56,7 +56,7 @@ def inspect_data_tool(data_handle: str) -> dict[str, Any]:
         return {
             "success": False,
             "error": f"Data handle '{data_handle}' not found",
-            "available_handles": list(executor._data_handles.keys()),
+            **executor.summarize_available_handles(),
         }
 
     data_info = executor._data_handles[data_handle]

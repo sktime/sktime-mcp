@@ -61,7 +61,7 @@ def save_data_tool(
         return {
             "success": False,
             "error": f"Data handle '{data_handle}' not found",
-            "available_handles": list(executor._data_handles.keys()),
+            **executor.summarize_available_handles(),
         }
 
     fmt = format.lower()
