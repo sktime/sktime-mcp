@@ -68,7 +68,7 @@ def test_evaluate_with_data_handle():
     executor = get_executor()
     data_res = executor.load_dataset("airline")
     assert data_res["success"]
-    executor._data_handles["test_dh"] = {"y": data_res["data"]}
+    executor._data_handles["test_dh"] = {"y": data_res["y"]}
     handle = executor._handle_manager.create_handle("NaiveForecaster", NaiveForecaster(), {})
 
     try:

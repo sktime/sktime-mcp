@@ -71,7 +71,7 @@ def evaluate_tool(
 
     _X = None
     if X:
-        x_res = executor._resolve_source(X)
+        x_res = executor._resolve_source(X, prefer="X")
         if not x_res["success"]:
             return x_res
         _X = x_res["data"]

@@ -166,13 +166,20 @@ class Executor:
             self._cleanup_oldest_data(count=max(1, self._max_data_handles // 5))
         self._data_handles[handle_id] = data
 
-    def _resolve_source(self, source: str) -> dict[str, Any]:
-        """Resolve a source id to a series, trying data_handle then demo dataset."""
+    def _resolve_source(self, source: str, prefer: str = "y") -> dict[str, Any]:
+        """Resolve a source id to a series, trying data_handle then demo dataset.
+
+        ``prefer`` selects which component of a demo dataset to return
+        ("y" or "X"); the other is the fallback when the preferred one is
+        absent. Data handles always resolve to their primary series.
+        """
         if source in self._data_handles:
             return {"success": True, "data": self._data_handles[source]["y"]}
         res = self.load_dataset(source)
         if res["success"]:
-            return {"success": True, "data": res["data"]}
+            first, second = ("X", "y") if prefer == "X" else ("y", "X")
+            data = res[first] if res[first] is not None else res[second]
+            return {"success": True, "data": data}
         return res
 
     def instantiate(
@@ -250,7 +257,12 @@ class Executor:
 
     # L-7: We can also add custom load_dataset functions here
     def load_dataset(self, name: str) -> dict[str, Any]:
-        """Load a demo dataset."""
+        """Load a demo dataset.
+
+        Returns canonical keys with one consistent meaning for every
+        dataset family: ``y`` is always the target/labels, ``X`` is always
+        the features/panel (or None).
+        """
         demo_datasets = _get_demo_datasets()
         if name not in demo_datasets:
             return {
@@ -267,9 +279,8 @@ class Executor:
             data = loader()
 
             if isinstance(data, tuple):
-                # sktime classifier/clusterer datasets typically return (X, y)
-                # whereas forecaster datasets typically return (y) or (y, X)
-                # Let's check the shape/type to be safe, or just hardcode known ones
+                # sktime classifier/clusterer datasets return (X-panel, y-labels)
+                # whereas forecaster datasets return (y-target, X-exog)
                 if name in (
                     "arrow_head",
                     "italy_power_demand",
@@ -279,26 +290,21 @@ class Executor:
                     "plaid",
                 ):
                     X, y = data[0], data[1] if len(data) > 1 else None
-                    # swap them back for our internal representation where 'data' is the primary object requested
-                    return {
-                        "success": True,
-                        "name": name,
-                        "data": X,
-                        "exog": y,
-                        "type": str(type(X).__name__),
-                    }
+                    primary = X
                 else:
                     y, X = data[0], data[1] if len(data) > 1 else None
+                    primary = y
             else:
                 y, X = data, None
+                primary = y
 
             return {
                 "success": True,
                 "name": name,
-                "shape": y.shape if hasattr(y, "shape") else len(y),
-                "type": str(type(y).__name__),
-                "data": y,
-                "exog": X,
+                "shape": primary.shape if hasattr(primary, "shape") else len(primary),
+                "type": str(type(primary).__name__),
+                "y": y,
+                "X": X,
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -533,19 +539,19 @@ class Executor:
                 data_res = self.load_dataset(X_dataset)
                 if not data_res["success"]:
                     raise ValueError(data_res.get("error", "Failed to load dataset"))
-                X = data_res["data"]
-                y = data_res.get("exog")
+                y = data_res["y"]
+                X = data_res["X"]
             else:
                 if X_dataset:
                     data_res = self.load_dataset(X_dataset)
                     if not data_res["success"]:
                         raise ValueError(data_res.get("error", "Failed to load dataset"))
-                    X = data_res["data"]
+                    X = data_res["X"] if data_res["X"] is not None else data_res["y"]
                 if y_dataset:
                     data_res = self.load_dataset(y_dataset)
                     if not data_res["success"]:
                         raise ValueError(data_res.get("error", "Failed to load dataset"))
-                    y = data_res["data"]
+                    y = data_res["y"]
 
             fh = list(range(1, horizon + 1))
 
@@ -629,9 +635,14 @@ class Executor:
                         if "available" in data_res:
                             error_res["available"] = data_res["available"]
                         return error_res
-                    # Replace the kwarg with the actual data (e.g. y_dataset -> y)
+                    # Replace the kwarg with the actual data (e.g. y_dataset -> y);
+                    # the prefix selects the dataset component
                     actual_key = k.replace("_dataset", "")
-                    kwargs[actual_key] = data_res["data"]
+                    if actual_key == "X":
+                        value = data_res["X"] if data_res["X"] is not None else data_res["y"]
+                    else:
+                        value = data_res["y"]
+                    kwargs[actual_key] = value
                     del kwargs[k]
                 elif k.endswith("_data_handle") and isinstance(v, str):
                     if v in self._data_handles:
@@ -754,23 +765,20 @@ class Executor:
                 data_res = self.load_dataset(X_dataset)
                 if not data_res["success"]:
                     raise ValueError(data_res["error"])
-                if data_res.get("exog") is not None:
-                    X = data_res["data"]
-                    y = data_res["exog"]
-                else:
-                    y = data_res["data"]
+                y = data_res["y"]
+                X = data_res["X"]
             else:
                 if X_dataset:
                     data_res = self.load_dataset(X_dataset)
                     if not data_res["success"]:
                         raise ValueError(data_res["error"])
-                    X = data_res["data"]
+                    X = data_res["X"] if data_res["X"] is not None else data_res["y"]
 
                 if y_dataset:
                     data_res = self.load_dataset(y_dataset)
                     if not data_res["success"]:
                         raise ValueError(data_res["error"])
-                    y = data_res["data"]
+                    y = data_res["y"]
 
             # Step 2: Fit model
             self._job_manager.update_job(
@@ -853,7 +861,7 @@ class Executor:
 
             _X = None
             if X:
-                x_res = self._resolve_source(X)
+                x_res = self._resolve_source(X, prefer="X")
                 if not x_res["success"]:
                     raise ValueError(x_res["error"])
                 _X = x_res["data"]
