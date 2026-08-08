@@ -82,6 +82,29 @@ def _to_period_index_if_possible(obj: Any) -> Any:
         return obj
 
 
+# Max forecast rows returned inline before truncation (NB-22). Normal horizons
+# (<= a few dozen) are never affected; a 1000-step forecast would otherwise
+# flood the client with ~30KB+ of inline JSON.
+_MAX_PREDICTION_ROWS = 500
+
+
+def _cap_prediction_rows(result: dict) -> tuple[dict, dict | None]:
+    """Cap an index-keyed prediction dict, returning (capped, truncation_note)."""
+    if not isinstance(result, dict) or len(result) <= _MAX_PREDICTION_ROWS:
+        return result, None
+    total = len(result)
+    kept = dict(list(result.items())[:_MAX_PREDICTION_ROWS])
+    note = {
+        "shown": _MAX_PREDICTION_ROWS,
+        "total": total,
+        "note": (
+            "forecast truncated; request a smaller horizon or use save_data to write "
+            "the full series to a file"
+        ),
+    }
+    return kept, note
+
+
 def _get_index_frequency_metadata(
     index: pd.Index,
     fallback: str | None = None,
@@ -492,6 +515,7 @@ class Executor:
             elif obj_type in ("transformer", "clusterer"):
                 is_transformer = True
 
+        dropped_y_warning = None
         try:
             if fh is None and not (is_classifier_or_regressor or is_transformer):
                 fh = list(range(1, 13))
@@ -500,7 +524,21 @@ class Executor:
             if X is not None:
                 kwargs["X"] = X
             if y is not None:
-                kwargs["y"] = y
+                # y at predict is only for annotators; forwarding it to a
+                # forecaster raised a raw "unexpected keyword argument 'y'"
+                # TypeError (NB-18). Only pass it when predict accepts it.
+                accepts_y = False
+                try:
+                    accepts_y = "y" in inspect.signature(instance.predict).parameters
+                except (ValueError, TypeError):
+                    accepts_y = False
+                if accepts_y:
+                    kwargs["y"] = y
+                else:
+                    dropped_y_warning = (
+                        f"y was ignored: {obj_type or 'this estimator'}.predict() does not "
+                        "accept y (it is only used by annotators/detectors)."
+                    )
 
             if is_classifier_or_regressor:
                 # Classifiers take X in predict (X is the feature matrix)
@@ -542,20 +580,25 @@ class Executor:
 
             from sktime_mcp.server import sanitize_for_json
 
+            truncated_note = None
             if isinstance(predictions, pd.Series):
                 predictions_copy = predictions.copy()
                 predictions_copy.index = predictions_copy.index.astype(str)
-                result = predictions_copy.to_dict()
+                result, truncated_note = _cap_prediction_rows(predictions_copy.to_dict())
             elif isinstance(predictions, pd.DataFrame):
                 predictions_copy = predictions.copy()
                 predictions_copy.index = predictions_copy.index.astype(str)
-                # Need to handle multiindex columns if they exist (like in predict_interval)
+                # Flatten multiindex columns (predict_interval/quantiles) for JSON.
                 if isinstance(predictions_copy.columns, pd.MultiIndex):
-                    # Flatten multiindex for JSON serialization
                     predictions_copy.columns = [
                         "_".join(map(str, col)) for col in predictions_copy.columns.values
                     ]
-                result = predictions_copy.to_dict(orient="list")
+                # orient="index" keeps the time index as the key so interval /
+                # variance values map to time points, consistent with predict
+                # (NB-21). orient="list" dropped the index entirely.
+                result, truncated_note = _cap_prediction_rows(
+                    predictions_copy.to_dict(orient="index")
+                )
             else:
                 result = sanitize_for_json(predictions)
 
@@ -574,6 +617,10 @@ class Executor:
                 out["alpha"] = alpha
             else:
                 out["predictions"] = result
+            if truncated_note:
+                out["predictions_truncated"] = truncated_note
+            if dropped_y_warning:
+                out["warnings"] = [dropped_y_warning]
             return out
         except Exception as e:
             return {"success": False, "error": str(e)}
