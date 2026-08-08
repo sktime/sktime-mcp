@@ -49,6 +49,38 @@ def _get_demo_datasets() -> dict:
     return _DEMO_DATASETS
 
 
+def _to_period_index_if_possible(obj: Any) -> Any:
+    """Return *obj* with a ``PeriodIndex`` when its index is a regular datetime index.
+
+    Seasonal sktime forecasters coerce the series index to a ``PeriodIndex``
+    internally (``index.to_period(freq)``) and raise on offset frequencies such
+    as ``MonthBegin`` ("MS"), which is what ``load_data_source`` produces for
+    monthly data. Demo datasets carry a ``PeriodIndex`` and work, so we
+    normalise handle-loaded data to match. ``to_period()`` is called with no
+    argument so pandas maps the offset to its period alias (MS -> "M"); passing
+    the offset string back in would re-raise the same error.
+
+    No-op for non-datetime indexes, ``PeriodIndex`` already, or an index with no
+    determinable frequency.
+    """
+    if obj is None or not hasattr(obj, "index"):
+        return obj
+    idx = obj.index
+    if isinstance(idx, pd.PeriodIndex) or not isinstance(idx, pd.DatetimeIndex):
+        return obj
+    try:
+        if idx.freq is None:
+            inferred = pd.infer_freq(idx)
+            if inferred is None:
+                return obj
+            idx = pd.DatetimeIndex(idx, freq=inferred)
+        converted = obj.copy()
+        converted.index = idx.to_period()
+        return converted
+    except (ValueError, TypeError):
+        return obj
+
+
 def _get_index_frequency_metadata(
     index: pd.Index,
     fallback: str | None = None,
@@ -1055,6 +1087,15 @@ class Executor:
                 except Exception as e:
                     logger.warning(f"Auto-formatting failed: {e}")
                     # Continue with unformatted data if formatting fails
+
+            # Auto-format disabled or failed: still normalise the stored handle to
+            # a PeriodIndex where possible so seasonal forecasters work (#531).
+            stored = self._data_handles.get(data_handle)
+            if stored is not None:
+                stored["y"] = _to_period_index_if_possible(stored["y"])
+                if stored.get("X") is not None:
+                    stored["X"] = _to_period_index_if_possible(stored["X"])
+
             _final_meta = adapter.get_metadata().copy()
             _final_meta["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
             return {
@@ -1301,6 +1342,12 @@ class Executor:
             y.index.freq = changes_made["frequency"]
             if X is not None:
                 X.index.freq = changes_made["frequency"]
+
+        # 6. Normalise a regular DatetimeIndex to PeriodIndex so seasonal
+        # forecasters can predict on handle-loaded data (#531).
+        y = _to_period_index_if_possible(y)
+        if X is not None:
+            X = _to_period_index_if_possible(X)
 
         # Generate new handle
         new_handle = f"data_{uuid.uuid4().hex[:8]}"
