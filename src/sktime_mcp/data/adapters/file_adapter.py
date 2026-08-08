@@ -78,6 +78,11 @@ class FileAdapter(DataSourceAdapter):
 
         # Set time index
         time_col = self.config.get("time_column")
+        if time_col is not None and time_col not in df.columns:
+            available = ", ".join(repr(c) for c in df.columns)
+            raise ValueError(
+                f"Time column {time_col!r} not found in data. Available columns: [{available}]"
+            )
         if time_col and time_col in df.columns:
             if self.config.get("parse_dates", True):
                 with contextlib.suppress(Exception):
@@ -108,7 +113,9 @@ class FileAdapter(DataSourceAdapter):
 
         # Determine frequency for metadata
         if isinstance(df.index, pd.DatetimeIndex):
-            freq_str = str(df.index.freq) if df.index.freq else pd.infer_freq(df.index)
+            from .pandas_adapter import _safe_infer_freq
+
+            freq_str = str(df.index.freq) if df.index.freq else _safe_infer_freq(df.index)
         else:
             freq_str = "Integer"
 
@@ -161,11 +168,10 @@ class FileAdapter(DataSourceAdapter):
         if path.suffix.lower() == ".tsv":
             csv_options["sep"] = "\t"
 
-        # Parse dates if specified
-        parse_dates = self.config.get("parse_dates", True)
-        if parse_dates and self.config.get("time_column"):
-            csv_options["parse_dates"] = [self.config["time_column"]]
-
+        # Note: the time column is parsed to datetime in load() after we've
+        # confirmed it exists — passing parse_dates=[col] here for a missing
+        # column leaks a raw pandas "Missing column provided to 'parse_dates'"
+        # error (#533 / NB-11).
         try:
             df = pd.read_csv(path, **csv_options)
         except Exception as e:
@@ -215,6 +221,13 @@ class FileAdapter(DataSourceAdapter):
         """Validate file data using pandas adapter validation."""
         from .pandas_adapter import PandasAdapter
 
-        # Reuse pandas validation logic
-        pandas_adapter = PandasAdapter({"data": data})
+        # Reuse pandas validation logic, forwarding the column config so the
+        # target-dtype check applies to file sources too.
+        pandas_adapter = PandasAdapter(
+            {
+                "data": data,
+                "target_column": self.config.get("target_column"),
+                "exog_columns": self.config.get("exog_columns", []),
+            }
+        )
         return pandas_adapter.validate(data)
