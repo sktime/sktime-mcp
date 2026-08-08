@@ -26,7 +26,7 @@ def _fitted_handle():
     executor = get_executor()
     handle = executor._handle_manager.create_handle("NaiveForecaster", NaiveForecaster(), {})
     data = executor.load_dataset("airline")
-    fit_res = executor.fit(handle, y=data["data"], fh=list(range(1, 4)))
+    fit_res = executor.fit(handle, y=data["y"], fh=list(range(1, 4)))
     assert fit_res["success"]
     return handle
 

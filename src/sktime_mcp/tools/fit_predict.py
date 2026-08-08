@@ -69,24 +69,20 @@ def fit_tool(
         data_res = executor.load_dataset(X_dataset)
         if not data_res["success"]:
             return data_res
-        if data_res.get("exog") is not None:
-            X = data_res["data"]
-            y = data_res["exog"]
-        else:
-            y = data_res["data"]
-            X = None
+        y = data_res["y"]
+        X = data_res["X"]
     else:
         if X_dataset:
             data_res = executor.load_dataset(X_dataset)
             if not data_res["success"]:
                 return data_res
-            X = data_res["data"]
+            X = data_res["X"] if data_res["X"] is not None else data_res["y"]
 
         if y_dataset:
             data_res = executor.load_dataset(y_dataset)
             if not data_res["success"]:
                 return data_res
-            y = data_res["data"]
+            y = data_res["y"]
 
     if run_async:
         import asyncio
@@ -213,20 +209,20 @@ def predict_tool(
         data_res = executor.load_dataset(X_dataset)
         if not data_res["success"]:
             return data_res
-        X = data_res["data"]
-        y = data_res.get("exog")
+        y = data_res["y"]
+        X = data_res["X"]
     else:
         if X_dataset:
             data_res = executor.load_dataset(X_dataset)
             if not data_res["success"]:
                 return data_res
-            X = data_res["data"]
+            X = data_res["X"] if data_res["X"] is not None else data_res["y"]
 
         if y_dataset:
             data_res = executor.load_dataset(y_dataset)
             if not data_res["success"]:
                 return data_res
-            y = data_res["data"]
+            y = data_res["y"]
 
     fh = list(range(1, horizon + 1))
 
@@ -279,20 +275,20 @@ def update_tool(
         data_res = executor.load_dataset(X_dataset)
         if not data_res["success"]:
             return data_res
-        X = data_res["data"]
-        y = data_res.get("exog")
+        y = data_res["y"]
+        X = data_res["X"]
     else:
         if X_dataset:
             data_res = executor.load_dataset(X_dataset)
             if not data_res["success"]:
                 return data_res
-            X = data_res["data"]
+            X = data_res["X"] if data_res["X"] is not None else data_res["y"]
 
         if y_dataset:
             data_res = executor.load_dataset(y_dataset)
             if not data_res["success"]:
                 return data_res
-            y = data_res["data"]
+            y = data_res["y"]
 
     return executor.update(estimator_handle, y=y, X=X)
 

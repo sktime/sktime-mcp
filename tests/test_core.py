@@ -303,7 +303,11 @@ class TestDataHandleLimits:
         assert f"data_{5:08x}" in ex._data_handles
 
     def test_format_releases_original_handle(self):
-        """format_data_handle releases the source handle after creating the formatted copy."""
+        """format_data_handle releases the source only with release_original=True.
+
+        The explicit transform_data path preserves the caller's input handle;
+        only internal auto-format-on-load passes release_original=True.
+        """
         import pandas as pd
 
         ex = self._make_executor(max_handles=50)
@@ -325,12 +329,13 @@ class TestDataHandleLimits:
             auto_infer_freq=True,
             fill_missing=False,
             remove_duplicates=False,
+            release_original=True,
         )
 
         assert result["success"]
         new_id = result["data_handle"]
         assert new_id != original_id
-        # Original must be gone
+        # Original must be gone (release_original=True is the load-path behavior)
         assert original_id not in ex._data_handles
         # Formatted handle must exist
         assert new_id in ex._data_handles
