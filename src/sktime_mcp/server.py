@@ -751,6 +751,14 @@ async def list_tools() -> list[Tool]:
                         "enum": ["csv", "parquet", "json"],
                         "default": "csv",
                     },
+                    "overwrite": {
+                        "type": "boolean",
+                        "description": (
+                            "Replace the file if it already exists. Default false — an "
+                            "existing file is not clobbered unless this is true."
+                        ),
+                        "default": False,
+                    },
                 },
                 "required": ["data_handle", "path"],
             },
@@ -1116,6 +1124,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 data_handle=arguments["data_handle"],
                 path=arguments["path"],
                 format=arguments.get("format", "csv"),
+                overwrite=arguments.get("overwrite", False),
             )
 
         elif name == "auto_format_on_load":
