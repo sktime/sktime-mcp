@@ -340,7 +340,6 @@ class Executor:
             }
         except Exception as e:
             import sys
-            import traceback
 
             error_msg = str(e)
             if (
@@ -350,10 +349,10 @@ class Executor:
             ):
                 error_msg += f"\n\n(Hint for AI: To install missing dependencies, use the server's exact python environment by running: `{sys.executable} -m pip install <package_name>`)"
 
+            logger.error("fit failed: %s", e, exc_info=True)
             return {
                 "success": False,
                 "error": error_msg,
-                "traceback": traceback.format_exc(),
             }
 
     # L-7: We can also add custom load_dataset functions here
@@ -472,9 +471,8 @@ class Executor:
             self._handle_manager.mark_fitted(handle_id)
             return {"success": True, "handle": handle_id, "fitted": True}
         except Exception as e:
-            import traceback
-
-            return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+            logger.error("%s failed: %s", type(e).__name__, e, exc_info=True)
+            return {"success": False, "error": str(e)}
 
     def predict(
         self,
@@ -713,13 +711,12 @@ class Executor:
             return result
 
         except Exception as e:
-            import traceback
 
             self._job_manager.update_job(
                 job_id,
                 status=JobStatus.FAILED,
                 current_step="Prediction failed.",
-                errors=[str(e), traceback.format_exc()],
+                errors=[str(e)],  # traceback logged server-side, not leaked to the client
             )
             return {"success": False, "error": str(e)}
 
@@ -799,9 +796,8 @@ class Executor:
 
             return {"success": True, "result": sanitized}
         except Exception as e:
-            import traceback
-
-            return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+            logger.error("%s failed: %s", type(e).__name__, e, exc_info=True)
+            return {"success": False, "error": str(e)}
 
     def update(
         self,
@@ -964,7 +960,6 @@ class Executor:
             return {"success": True, "handle": handle_id}
 
         except Exception as e:
-            import traceback
 
             from sktime_mcp.runtime.jobs import JobStatus
 
@@ -972,7 +967,7 @@ class Executor:
                 job_id,
                 status=JobStatus.FAILED,
                 current_step="Training failed.",
-                errors=[str(e), traceback.format_exc()],
+                errors=[str(e)],  # traceback logged server-side, not leaked to the client
             )
             return {"success": False, "error": str(e)}
 
@@ -1016,7 +1011,10 @@ class Executor:
             if metric:
                 scoring = _resolve_metric_scoring(metric)
                 if scoring is None:
-                    raise ValueError(f"Unknown metric: {metric}")
+                    raise ValueError(
+                        f"Unknown metric: {metric}. "
+                        "Check available metrics with query_registry(task='metric')."
+                    )
 
             # Step 2: Run cross-validation
             self._job_manager.update_job(
@@ -1054,13 +1052,12 @@ class Executor:
             return result
 
         except Exception as e:
-            import traceback
 
             self._job_manager.update_job(
                 job_id,
                 status=JobStatus.FAILED,
                 current_step="Evaluation failed.",
-                errors=[str(e), traceback.format_exc()],
+                errors=[str(e)],  # traceback logged server-side, not leaked to the client
             )
             return {"success": False, "error": str(e)}
 
