@@ -4,8 +4,8 @@ save_model tool for sktime MCP.
 Saves estimator instances via sktime's MLflow integration.
 """
 
-import os
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from sktime_mcp.runtime.handles import get_handle_manager
@@ -24,7 +24,7 @@ def resolve_model_path(path: str) -> str:
     """
     if path.startswith(_MLFLOW_URI_PREFIXES) or "://" in path:
         return path
-    return os.path.abspath(os.path.expanduser(path))
+    return str(Path(path).expanduser().resolve())
 
 
 def _get_mlflow_save_model() -> Callable[..., Any]:

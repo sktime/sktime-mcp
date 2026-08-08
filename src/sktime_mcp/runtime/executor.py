@@ -638,9 +638,13 @@ class Executor:
 
             out = {
                 "success": True,
-                "horizon": len(fh) if hasattr(fh, "__len__") else fh,
                 "mode": mode,
             }
+            # horizon is only meaningful for forecasters; echoing it for
+            # classifiers/regressors/transformers implied a truncation that
+            # didn't happen (N-01).
+            if not (is_classifier_or_regressor or is_transformer):
+                out["horizon"] = len(fh) if hasattr(fh, "__len__") else fh
             if mode == "predict":
                 out["predictions"] = result
             elif mode == "predict_interval":
@@ -1392,7 +1396,9 @@ class Executor:
                 X = X[~X.index.duplicated(keep="first")]
             changes_made["duplicates_removed"] = n_duplicates
 
-        # 2. Sort by index
+        # 2. Sort by index (report it, like the other repairs — NB-08)
+        if not y.index.is_monotonic_increasing:
+            changes_made["sorted"] = True
         y = y.sort_index()
         if X is not None:
             X = X.sort_index()

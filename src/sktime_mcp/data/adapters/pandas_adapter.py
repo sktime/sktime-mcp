@@ -199,13 +199,16 @@ class PandasAdapter(DataSourceAdapter):
         target_col = self.config.get("target_column")
         if target_col is None and len(data.columns) > 0:
             target_col = data.columns[0]
-        if target_col is not None and target_col in data.columns:
-            if not pd.api.types.is_numeric_dtype(data[target_col]):
-                warnings.append(
-                    f"Target column '{target_col}' has non-numeric dtype "
-                    f"'{data[target_col].dtype}'. Forecasting requires numeric values; "
-                    "convert the column before fitting."
-                )
+        if (
+            target_col is not None
+            and target_col in data.columns
+            and not pd.api.types.is_numeric_dtype(data[target_col])
+        ):
+            warnings.append(
+                f"Target column '{target_col}' has non-numeric dtype "
+                f"'{data[target_col].dtype}'. Forecasting requires numeric values; "
+                "convert the column before fitting."
+            )
 
         # Check for constant values
         for col in data.columns:

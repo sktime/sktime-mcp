@@ -56,10 +56,13 @@ def release_handle_tool(handle: str) -> dict[str, Any]:
     """
     handle_manager = get_handle_manager()
     released = handle_manager.release_handle(handle)
+    if released:
+        return {"success": True, "handle": handle, "message": "Handle released"}
+    # Failure carries an "error" key like every other tool (NB-02).
     return {
-        "success": released,
+        "success": False,
         "handle": handle,
-        "message": "Handle released" if released else handle_manager.describe_missing(handle),
+        "error": handle_manager.describe_missing(handle),
     }
 
 

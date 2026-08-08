@@ -132,6 +132,8 @@ def _action_format(
     changes_applied: list[str] = []
     changes = result.get("changes_made", {})
 
+    if changes.get("sorted"):
+        changes_applied.append("Sorted rows by time index")
     if changes.get("duplicates_removed", 0) > 0:
         changes_applied.append(f"Removed {changes['duplicates_removed']} duplicate timestamps")
     if changes.get("frequency_set"):
