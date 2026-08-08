@@ -32,12 +32,12 @@ def test_rejects_transformer():
 
 
 def test_rejects_non_estimator():
-    res = instantiate_tool(spec="42")
-    handle = res["handle"]
+    # instantiate now blocks non-estimators (BUG-10), so inject an int handle
+    # directly to exercise evaluate's own object_type guard.
+    handle = get_handle_manager().create_handle("int", 42, {})
     try:
         out = evaluate_tool(estimator_handle=handle, y="airline", cv_folds=3)
         assert not out["success"]
-        # int handle has no forecaster object_type -> rejected (here or by scitype)
         assert "forecaster" in out["error"].lower() or "series" in out["error"].lower()
     finally:
         _release(handle)
