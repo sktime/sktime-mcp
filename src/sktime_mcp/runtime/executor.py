@@ -710,6 +710,21 @@ class Executor:
         if not self._handle_manager.is_fitted(handle_id):
             return {"success": False, "error": "Estimator not fitted"}
 
+        if y is None:
+            return {
+                "success": False,
+                "error": (
+                    "update requires new data — provide y_handle or y_dataset "
+                    "(and optionally X_handle/X_dataset)."
+                ),
+            }
+
+        # update mutates the live instance in place; snapshot fitted state so
+        # a rejected update does not leave the handle un-fitted
+        import copy
+
+        snapshot = copy.deepcopy(instance)
+
         try:
             kwargs = update_params or {}
             if X is not None:
@@ -722,6 +737,7 @@ class Executor:
                 "message": "Estimator updated successfully",
             }
         except Exception as e:
+            self._handle_manager.replace_instance(handle_id, snapshot)
             return {"success": False, "error": str(e)}
 
     def get_fitted_params(self, handle_id: str) -> dict[str, Any]:
