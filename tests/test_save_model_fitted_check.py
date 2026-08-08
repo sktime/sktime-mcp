@@ -59,3 +59,33 @@ class TestSaveModelFittedCheck:
         assert result["success"], result
         assert result["saved_path"] == str(tmp_path / "model_dir")
         assert "path" in calls
+
+
+class TestResolveModelPath:
+    """Path resolution: local paths expand and absolutize; MLflow URIs pass through."""
+
+    def test_tilde_expanded(self):
+        from sktime_mcp.tools.save_model import resolve_model_path
+
+        resolved = resolve_model_path("~/some_model_dir")
+        assert "~" not in resolved
+        assert resolved.startswith("/")
+
+    def test_relative_path_absolutized(self):
+        import os
+
+        from sktime_mcp.tools.save_model import resolve_model_path
+
+        resolved = resolve_model_path("relative_model_dir")
+        assert resolved == os.path.join(os.getcwd(), "relative_model_dir")
+
+    def test_mlflow_uris_untouched(self):
+        from sktime_mcp.tools.save_model import resolve_model_path
+
+        for uri in (
+            "runs:/abc123/model",
+            "models:/my_model/3",
+            "mlflow-artifacts:/abc/artifacts/model",
+            "s3://bucket/model",
+        ):
+            assert resolve_model_path(uri) == uri

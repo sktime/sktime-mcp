@@ -121,6 +121,10 @@ def load_model_tool(path: str) -> dict[str, Any]:
                 "Please install it with: pip install sktime-mcp[mlflow]"
             ),
         }
+    from sktime_mcp.tools.save_model import resolve_model_path
+
+    path = resolve_model_path(path)
+
     try:
         instance = load_model(path)
         estimator_name = type(instance).__name__
