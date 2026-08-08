@@ -117,7 +117,11 @@ def _run_evaluate(
         win = max(1, n - folds)
     cv = ExpandingWindowSplitter(initial_window=win, step_length=1, fh=[1])
 
-    results = evaluate(forecaster=instance, y=y, X=X, cv=cv, scoring=scoring)
+    # error_score="raise" — sktime's default (np.nan) swallows per-fold
+    # exceptions and reports success with all-NaN metrics
+    results = evaluate(
+        forecaster=instance, y=y, X=X, cv=cv, scoring=scoring, error_score="raise"
+    )
     if "estimator" in results.columns:
         results = results.drop(columns=["estimator"])
 
