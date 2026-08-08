@@ -86,7 +86,7 @@ def export_code_tool(
     try:
         handle_info = handle_manager.get_info(handle)
     except KeyError:
-        return {"success": False, "error": f"Handle not found: {handle}"}
+        return {"success": False, "error": handle_manager.describe_missing(handle)}
 
     if not _is_valid_var_name(var_name):
         return {

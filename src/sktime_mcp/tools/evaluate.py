@@ -73,7 +73,10 @@ def evaluate_tool(
     try:
         instance = executor._handle_manager.get_instance(estimator_handle)
     except KeyError:
-        return {"success": False, "error": f"Handle not found: {estimator_handle}"}
+        return {
+            "success": False,
+            "error": executor._handle_manager.describe_missing(estimator_handle),
+        }
 
     y_res = executor._resolve_source(y)
     if not y_res["success"]:

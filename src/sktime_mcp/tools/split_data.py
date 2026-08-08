@@ -56,8 +56,7 @@ def split_data_tool(
     if data_handle not in executor._data_handles:
         return {
             "success": False,
-            "error": f"Data handle '{data_handle}' not found",
-            **executor.summarize_available_handles(),
+            **executor.data_handle_missing(data_handle),
         }
 
     if test_size is not None and fh is not None:

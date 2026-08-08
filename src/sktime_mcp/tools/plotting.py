@@ -179,9 +179,13 @@ def plot_series_tool(
             missing.append(handle)
 
     if missing:
+        evicted = [h for h in missing if h in executor._evicted_data]
+        detail = f"Data handle(s) not found: {missing}"
+        if evicted:
+            detail += f" (evicted under the handle limit: {evicted}; reload the source)"
         return {
             "success": False,
-            "error": f"Data handle(s) not found: {missing}",
+            "error": detail,
             **executor.summarize_available_handles(),
         }
 
