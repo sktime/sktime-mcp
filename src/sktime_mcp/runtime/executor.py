@@ -87,6 +87,29 @@ def _to_period_index_if_possible(obj: Any) -> Any:
 # flood the client with ~30KB+ of inline JSON.
 _MAX_PREDICTION_ROWS = 500
 
+# Dunder methods that are safe and useful to call via call_method (e.g. __call__
+# for callable metrics/aligners). Everything else starting with "_" is blocked
+# (BUG-11) — notably __reduce__/__class__/__getattribute__ and private methods.
+_ALLOWED_DUNDERS = frozenset({"__call__", "__len__", "__repr__", "__str__"})
+
+
+def _is_sktime_object(obj: Any) -> bool:
+    """True if *obj* is a genuine sktime estimator/object, not a bare value.
+
+    craft evaluates arbitrary specs, so a spec like "42" returns an int. Such
+    non-objects should not receive an estimator handle (BUG-10). We accept
+    anything deriving from skbase's BaseObject, falling back to a duck-typed
+    check for get_params + a scitype tag.
+    """
+    try:
+        from skbase.base import BaseObject
+
+        if isinstance(obj, BaseObject):
+            return True
+    except Exception:  # pragma: no cover - skbase always present with sktime
+        pass
+    return hasattr(obj, "get_params") and hasattr(obj, "get_class_tag")
+
 
 def _cap_prediction_rows(result: dict) -> tuple[dict, dict | None]:
     """Cap an index-keyed prediction dict, returning (capped, truncation_note)."""
@@ -325,6 +348,19 @@ class Executor:
                 instance = craft(spec)
             finally:
                 _craft_module.all_estimators = original_all
+
+            # Reject specs that don't produce an sktime object — e.g. "42",
+            # "[1,2,3]", "None" otherwise got est_ handles that failed
+            # confusingly downstream (BUG-10).
+            if not _is_sktime_object(instance):
+                return {
+                    "success": False,
+                    "error": (
+                        f"Spec did not produce an sktime estimator, got "
+                        f"{type(instance).__name__}. Provide a craft spec such as "
+                        "'NaiveForecaster(sp=12)' or 'Detrender() * ARIMA()'."
+                    ),
+                }
 
             estimator_name = type(instance).__name__
             handle_id = self._handle_manager.create_handle(
@@ -731,6 +767,18 @@ class Executor:
             instance = self._handle_manager.get_instance(handle_id)
         except KeyError:
             return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
+
+        # Block private/dunder methods: they are not part of the estimator API
+        # and expose internals — e.g. __reduce__ dumps __dict__ including the
+        # fitted _y/_X training data to any caller (BUG-11).
+        if method_name.startswith("_") and method_name not in _ALLOWED_DUNDERS:
+            return {
+                "success": False,
+                "error": (
+                    f"Method '{method_name}' is private and not callable via call_method. "
+                    "Only public estimator methods are exposed."
+                ),
+            }
 
         if not hasattr(instance, method_name):
             obj_type = getattr(instance, "get_class_tag", lambda x, y: "")("object_type", "")

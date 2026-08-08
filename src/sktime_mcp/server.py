@@ -958,16 +958,18 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="run_command",
             description=(
-                "Run an arbitrary CLI/bash command inside the sktime container. "
-                "Use this to install missing python packages (e.g., 'pip install mlflow') "
-                "or inspect the file system."
+                "Run an arbitrary CLI/bash command on the HOST machine, in the server's "
+                "working directory, as the user that launched the server (not a container "
+                "or sandbox). Use it to install packages into the server's environment "
+                "(e.g. the server's python -m pip install mlflow) or inspect the filesystem. "
+                "Output is capped; a 'truncated' flag indicates when it was shortened."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "The bash command to run",
+                        "description": "The shell command to run (executed via /bin/sh -c).",
                     },
                 },
                 "required": ["command"],
