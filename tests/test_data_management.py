@@ -235,31 +235,47 @@ class TestSaveData:
         executor, handle = _make_executor_with_data()
         self._patch(executor)
         try:
-            with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
-                path = f.name
-            result = save_data_tool(handle, path=path, format="csv")
+            with tempfile.TemporaryDirectory() as d:
+                path = str(Path(d) / "out.csv")
+                result = save_data_tool(handle, path=path, format="csv")
+                assert result["success"]
+                assert result["format"] == "csv"
+                assert result["rows"] == 60
+                assert result["overwritten"] is False
+                assert Path(result["saved_path"]).exists()
         finally:
             self._unpatch()
-
-        assert result["success"]
-        assert result["format"] == "csv"
-        assert result["rows"] == 60
-        assert Path(result["saved_path"]).exists()
-        Path(path).unlink()
 
     def test_save_json(self):
         executor, handle = _make_executor_with_data()
         self._patch(executor)
         try:
-            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-                path = f.name
-            result = save_data_tool(handle, path=path, format="json")
+            with tempfile.TemporaryDirectory() as d:
+                path = str(Path(d) / "out.json")
+                result = save_data_tool(handle, path=path, format="json")
+                assert result["success"]
+                assert result["format"] == "json"
         finally:
             self._unpatch()
 
-        assert result["success"]
-        assert result["format"] == "json"
-        Path(path).unlink()
+    def test_save_refuses_existing_file(self):
+        executor, handle = _make_executor_with_data()
+        self._patch(executor)
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                path = str(Path(d) / "out.csv")
+                first = save_data_tool(handle, path=path, format="csv")
+                assert first["success"]
+                # second write to the same path is refused without overwrite
+                second = save_data_tool(handle, path=path, format="csv")
+                assert not second["success"]
+                assert "already exists" in second["error"]
+                # ...and allowed with overwrite=True
+                third = save_data_tool(handle, path=path, format="csv", overwrite=True)
+                assert third["success"]
+                assert third["overwritten"] is True
+        finally:
+            self._unpatch()
 
     def test_save_unsupported_format(self):
         executor, handle = _make_executor_with_data()
