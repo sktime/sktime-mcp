@@ -11,6 +11,33 @@ from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 
 logger = logging.getLogger(__name__)
 
+# Per-fold rows kept inline in a job-status response. A completed evaluate
+# job can hold hundreds of folds (observed: 120 folds ≈ 15k tokens), and
+# embedding them all floods the MCP client's context.
+_MAX_FOLD_RESULTS_IN_STATUS = 10
+
+
+def _compact_result(result: Any, max_folds: int) -> Any:
+    """Truncate oversized fold_results inside a job result payload.
+
+    The aggregate metrics/summary are always kept intact; only the
+    per-fold rows are capped, with an explicit truncation marker.
+    """
+    if not isinstance(result, dict):
+        return result
+    folds = result.get("fold_results")
+    if not isinstance(folds, list) or len(folds) <= max_folds:
+        return result
+    return {
+        **result,
+        "fold_results": folds[:max_folds],
+        "fold_results_truncated": {
+            "shown": max_folds,
+            "total": len(folds),
+            "note": "metrics and summary cover all folds; rerun evaluate for full per-fold rows",
+        },
+    }
+
 
 def check_job_status_tool(job_id: str) -> dict[str, Any]:
     """
@@ -31,9 +58,11 @@ def check_job_status_tool(job_id: str) -> dict[str, Any]:
             "error": f"Job '{job_id}' not found",
         }
 
+    job_dict = job.to_dict()
+    job_dict["result"] = _compact_result(job_dict.get("result"), _MAX_FOLD_RESULTS_IN_STATUS)
     return {
         "success": True,
-        **job.to_dict(),
+        **job_dict,
     }
 
 
@@ -90,6 +119,13 @@ def list_jobs_tool(
     total = job_manager.count_jobs(status=status_filter)
     jobs = job_manager.list_jobs(status=status_filter, limit=limit, offset=offset)
 
+    job_dicts = []
+    for job in jobs:
+        job_dict = job.to_dict()
+        # the list view is an overview — drop per-fold rows entirely
+        job_dict["result"] = _compact_result(job_dict.get("result"), 0)
+        job_dicts.append(job_dict)
+
     return {
         "success": True,
         "count": len(jobs),
@@ -97,7 +133,7 @@ def list_jobs_tool(
         "offset": offset,
         "limit": limit,
         "has_more": offset + len(jobs) < total,
-        "jobs": [job.to_dict() for job in jobs],
+        "jobs": job_dicts,
     }
 
 
