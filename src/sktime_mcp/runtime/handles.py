@@ -78,6 +78,11 @@ class HandleManager:
     def exists(self, handle_id: str) -> bool:
         return handle_id in self._handles
 
+    def replace_instance(self, handle_id: str, instance: Any) -> None:
+        """Swap the live instance behind a handle (e.g. rollback after a failed update)."""
+        if handle_id in self._handles:
+            self._handles[handle_id].instance = instance
+
     def mark_fitted(self, handle_id: str) -> None:
         if handle_id in self._handles:
             self._handles[handle_id].fitted = True
