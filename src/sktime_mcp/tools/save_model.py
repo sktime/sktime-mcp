@@ -60,7 +60,7 @@ def save_model_tool(
     try:
         estimator = handle_manager.get_instance(estimator_handle)
     except KeyError:
-        return {"success": False, "error": f"Handle not found: {estimator_handle}"}
+        return {"success": False, "error": handle_manager.describe_missing(estimator_handle)}
 
     if not handle_manager.is_fitted(estimator_handle):
         handle_info = handle_manager.get_info(estimator_handle)

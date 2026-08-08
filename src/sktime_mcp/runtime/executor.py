@@ -9,6 +9,7 @@ import asyncio
 import inspect
 import logging
 import uuid
+from collections import deque
 from typing import Any
 
 import pandas as pd
@@ -196,6 +197,8 @@ class Executor:
         self._handle_manager = get_handle_manager()
         self._job_manager = get_job_manager()
         self._data_handles: dict[str, Any] = {}
+        # Tombstones for data handles evicted under the cap (see _cleanup_oldest_data).
+        self._evicted_data: deque[str] = deque(maxlen=1024)
         from sktime_mcp.config import settings
 
         self._max_data_handles = settings.max_data_handles
@@ -205,7 +208,23 @@ class Executor:
         to_remove = list(self._data_handles.keys())[:count]
         for handle_id in to_remove:
             del self._data_handles[handle_id]
-            logger.debug("Evicted data handle %s (limit=%d)", handle_id, self._max_data_handles)
+            self._evicted_data.append(handle_id)
+            logger.info("Evicted data handle %s (limit %d reached)", handle_id, self._max_data_handles)
+
+    def data_handle_missing(self, handle_id: str) -> dict[str, Any]:
+        """Error body for a missing data handle — distinguishes evicted from unknown.
+
+        Returns the ``error`` string plus the capped available-handles summary,
+        so callers can splat it into a not-found response.
+        """
+        if handle_id in self._evicted_data:
+            error = (
+                f"Data handle '{handle_id}' was evicted (handle limit "
+                f"{self._max_data_handles} reached); reload the source."
+            )
+        else:
+            error = f"Data handle '{handle_id}' not found"
+        return {"error": error, **self.summarize_available_handles()}
 
     def _register_data_handle(self, handle_id: str, data: dict[str, Any]) -> None:
         if len(self._data_handles) >= self._max_data_handles:
@@ -380,7 +399,7 @@ class Executor:
             handle_info = self._handle_manager.get_info(handle_id)
             instance = handle_info.instance
         except KeyError:
-            return {"success": False, "error": f"Handle not found: {handle_id}"}
+            return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
 
         obj_type = getattr(instance, "get_class_tag", lambda x, y: "")("object_type", "")
         if not hasattr(instance, "fit"):
@@ -448,7 +467,7 @@ class Executor:
         try:
             instance = self._handle_manager.get_instance(handle_id)
         except KeyError:
-            return {"success": False, "error": f"Handle not found: {handle_id}"}
+            return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
 
         obj_type = getattr(instance, "get_class_tag", lambda x, y: "")("object_type", "")
         if (
@@ -667,7 +686,7 @@ class Executor:
         try:
             instance = self._handle_manager.get_instance(handle_id)
         except KeyError:
-            return {"success": False, "error": f"Handle not found: {handle_id}"}
+            return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
 
         if not hasattr(instance, method_name):
             obj_type = getattr(instance, "get_class_tag", lambda x, y: "")("object_type", "")
@@ -748,7 +767,7 @@ class Executor:
         try:
             instance = self._handle_manager.get_instance(handle_id)
         except KeyError:
-            return {"success": False, "error": f"Handle not found: {handle_id}"}
+            return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
 
         if not self._handle_manager.is_fitted(handle_id):
             return {"success": False, "error": "Estimator not fitted"}
@@ -788,7 +807,7 @@ class Executor:
         try:
             instance = self._handle_manager.get_instance(handle_id)
         except KeyError:
-            return {"success": False, "error": f"Handle not found: {handle_id}"}
+            return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
 
         if not self._handle_manager.is_fitted(handle_id):
             return {"success": False, "error": "Estimator not fitted"}
@@ -932,7 +951,7 @@ class Executor:
             try:
                 instance = self._handle_manager.get_instance(handle_id)
             except KeyError as err:
-                raise ValueError(f"Handle not found: {handle_id}") from err
+                raise ValueError(self._handle_manager.describe_missing(handle_id)) from err
 
             y_res = self._resolve_source(y)
             if not y_res["success"]:
@@ -1259,7 +1278,7 @@ class Executor:
         was never exposed to the caller.
         """
         if data_handle not in self._data_handles:
-            return {"success": False, "error": f"Data handle '{data_handle}' not found"}
+            return {"success": False, **self.data_handle_missing(data_handle)}
 
         data_info = self._data_handles[data_handle]
         y = data_info["y"].copy()
@@ -1424,7 +1443,7 @@ class Executor:
         else:
             return {
                 "success": False,
-                "error": f"Data handle '{data_handle}' not found",
+                "error": self.data_handle_missing(data_handle)["error"],
             }
 
 
