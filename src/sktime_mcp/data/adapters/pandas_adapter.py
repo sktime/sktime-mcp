@@ -173,10 +173,15 @@ class PandasAdapter(DataSourceAdapter):
             missing_pct = (missing_counts / len(data) * 100).round(2)
             warnings.append(f"Missing values detected: {missing_pct[missing_pct > 0].to_dict()}")
 
-        # Check for duplicate indices
+        # Check for duplicate indices — a warning, not a hard error, so the
+        # auto-format step (remove_duplicates) can actually run on the handle.
+        # Rejecting here made that documented remedy unreachable (BUG-19).
         if not isinstance(data.index, pd.MultiIndex) and data.index.duplicated().any():
-            dup_count = data.index.duplicated().sum()
-            errors.append(f"Duplicate time indices found: {dup_count} duplicates")
+            dup_count = int(data.index.duplicated().sum())
+            warnings.append(
+                f"Duplicate time indices found: {dup_count}. They will be de-duplicated "
+                "by auto-format (keeping the first of each)."
+            )
 
         # Check for monotonic index
         if not data.index.is_monotonic_increasing:

@@ -110,14 +110,18 @@ def save_data_tool(
         abs_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Write
-        writer = getattr(df, _FORMAT_WRITERS[fmt])
         if fmt == "json":
-            writer(str(abs_path), orient="records", date_format="iso", indent=2)
+            # records orient drops the index; write it as a "time" column so the
+            # file round-trips through load_data_source(time_column="time").
+            out_df = df.copy()
+            out_df.index = out_df.index.astype(str)
+            out_df = out_df.reset_index(names="time")
+            out_df.to_json(str(abs_path), orient="records", indent=2)
         elif fmt == "parquet":
-            writer(str(abs_path))
+            df.to_parquet(str(abs_path))
         else:
             # CSV — include the index as a time column
-            writer(str(abs_path))
+            df.to_csv(str(abs_path))
 
         return {
             "success": True,

@@ -71,9 +71,11 @@ class FileAdapter(DataSourceAdapter):
             df = self._load_excel(path)
         elif file_format == "parquet":
             df = self._load_parquet(path)
+        elif file_format == "json":
+            df = self._load_json(path)
         else:
             raise ValueError(
-                f"Unsupported format: {file_format}. Supported formats: csv, excel, parquet"
+                f"Unsupported format: {file_format}. Supported formats: csv, excel, parquet, json"
             )
 
         # Set time index
@@ -145,6 +147,7 @@ class FileAdapter(DataSourceAdapter):
             ".xls": "excel",
             ".parquet": "parquet",
             ".pq": "parquet",
+            ".json": "json",
         }
 
         file_format = format_map.get(suffix)
@@ -215,6 +218,16 @@ class FileAdapter(DataSourceAdapter):
         except Exception as e:
             raise ValueError(f"Error reading Parquet file: {e}") from e
 
+        return df
+
+    def _load_json(self, path: Path) -> pd.DataFrame:
+        """Load a JSON file written by save_data (records orient)."""
+        json_options = self.config.get("json_options", {})
+        json_options.setdefault("orient", "records")
+        try:
+            df = pd.read_json(path, **json_options)
+        except Exception as e:
+            raise ValueError(f"Error reading JSON file: {e}") from e
         return df
 
     def validate(self, data: pd.DataFrame) -> tuple[bool, dict[str, Any]]:
