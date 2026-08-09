@@ -137,3 +137,27 @@ class TestEdgeCases:
     def test_nan(self):
         result = sanitize_for_json(np.float64("nan"))
         json.dumps(result, default=str)
+
+
+class TestIterators:
+    """Generators/iterators are materialized (needed for splitter folds)."""
+
+    def test_generator(self):
+        assert sanitize_for_json(x for x in range(3)) == [0, 1, 2]
+        assert sanitize_for_json(x for x in []) == []
+
+    def test_generator_of_ndarrays(self):
+        gen = ((np.array([0, 1]), np.array([2])) for _ in range(1))
+        assert sanitize_for_json(gen) == [[[0, 1], [2]]]
+
+    def test_nested_and_dict(self):
+        assert sanitize_for_json([(x for x in range(2))]) == [[0, 1]]
+        assert sanitize_for_json({"result": (i for i in range(2))}) == {"result": [0, 1]}
+
+    def test_str_not_expanded(self):
+        assert sanitize_for_json("airline") == "airline"
+
+    def test_index(self):
+        result = sanitize_for_json(pd.period_range("1949-01", periods=3, freq="M"))
+        assert isinstance(result, list) and len(result) == 3
+        json.dumps(result)

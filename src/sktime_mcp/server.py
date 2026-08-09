@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import sys
+from collections.abc import Iterator
 from io import TextIOWrapper
 from typing import Any
 
@@ -146,13 +147,14 @@ def _apply_response_token_limit(tool_name: str, text: str) -> str:
     return text[:budget] + notice
 
 
-def sanitize_for_json(obj):
+def sanitize_for_json(obj: Any) -> Any:
     """Recursively convert objects to JSON-serializable format.
 
     Handles:
     - Standard Python scalars and containers (dict, list, tuple)
+    - Generators and other iterators (materialized to lists)
     - NumPy integer/float scalars and ndarrays
-    - Pandas Timestamp, NaT, NA, and Series/DataFrame
+    - Pandas Timestamp, NaT, NA, Series/DataFrame, Index
     - Arbitrary objects (fallback to str repr)
     """
     # --- NumPy types ---
@@ -184,15 +186,22 @@ def sanitize_for_json(obj):
             return sanitize_for_json(obj.tolist())
         if isinstance(obj, pd.DataFrame):
             return sanitize_for_json(obj.to_dict(orient="records"))
+        if isinstance(obj, pd.Index):
+            return [sanitize_for_json(item) for item in obj.tolist()]
 
     # --- Standard Python containers ---
     if isinstance(obj, dict):
         return {str(k): sanitize_for_json(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
+    if isinstance(obj, list | tuple):
+        return [sanitize_for_json(item) for item in obj]
+
+    # Generators / iterators (sktime splitter.split, etc.). str is not an
+    # Iterator, so strings are not expanded to character lists.
+    if isinstance(obj, Iterator):
         return [sanitize_for_json(item) for item in obj]
 
     # --- Already JSON-safe scalars ---
-    if isinstance(obj, (str, int, float, bool, type(None))):
+    if isinstance(obj, str | int | float | bool | type(None)):
         return obj
 
     # --- Fallback: objects with __dict__ or anything else ---
