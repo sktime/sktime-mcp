@@ -145,6 +145,8 @@ def _action_format(
         changes_applied.append(
             f"Filled {changes['missing_filled']} missing values (forward/backward fill)"
         )
+    if changes.get("frequency_warning"):
+        changes_applied.append(changes["frequency_warning"])
     if not changes_applied:
         changes_applied.append("No changes needed — data was already clean")
 

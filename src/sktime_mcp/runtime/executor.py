@@ -1430,7 +1430,10 @@ class Executor:
                         elif most_common_diff.days >= 28 and most_common_diff.days <= 31:
                             freq = "MS"
                         else:
-                            freq = "D"
+                            changes_made["frequency_warning"] = (
+                                f"Could not determine frequency from most common interval "
+                                f"({most_common_diff}). Reindexing skipped."
+                            )
 
                 # Create complete date range
                 if freq:
