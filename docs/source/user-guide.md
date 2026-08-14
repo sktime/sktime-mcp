@@ -1,27 +1,27 @@
-# sktime-mcp Workshop: Conversational Time-Series Workflows with sktime
+# User Guide: Conversational Time-Series Workflows
 
 `sktime-mcp` connects an AI assistant to `sktime` through the Model Context Protocol (MCP). It lets the assistant discover sktime components, load data, fit models, forecast, evaluate, save artifacts, and export reproducible code through typed tools.
 
-Credit: Shashank for the `sktime-mcp` implementation and demo material.
+This guide is task-oriented: it walks through installation, connection, and four
+complete workflows you can paste into a client. For the exact arguments each tool
+accepts, see the {doc}`tool-reference`.
 
 Useful links:
 
 - Repository: https://github.com/sktime/sktime-mcp
-- Documentation: https://sktime.github.io/sktime-mcp/
 - MCP specification and docs: https://modelcontextprotocol.io/
-- Docker image: https://hub.docker.com/r/sktime/sktime-mcp
 
 
-## Agenda
+## What This Guide Covers
 
 1. What MCP is, and where `sktime-mcp` fits.
 2. How to install `sktime-mcp` and connect it to an MCP client.
 3. What tools are available.
-4. Three core workflows, plus one optional classification example:
+4. Four worked workflows:
    - discover sktime capabilities,
    - run and save a retail-style forecast,
    - clean messy business data,
-   - classify time-series sensor traces if time allows.
+   - classify time-series sensor traces.
 5. Current limitations and how to use the project well.
 
 
@@ -197,9 +197,34 @@ MCP command shape:
 </details>
 
 <details>
-<summary>Option D: Docker Hub image</summary>
+<summary>Option D: Docker</summary>
 
-Use the published image when Docker is available and a local Python environment is not desired.
+Use Docker when a local Python environment is not desired, or when you want the
+server confined to a container.
+
+> **Note:** automated publishing of `sktime/sktime-mcp` to Docker Hub is currently
+> disabled, so the `:latest` tag is not guaranteed to track `main`. Building the
+> image from source is the reliable route.
+
+Build from a checkout:
+
+```bash
+git clone https://github.com/sktime/sktime-mcp
+cd sktime-mcp
+docker build -t sktime-mcp:local .
+docker run -i --rm sktime-mcp:local
+```
+
+MCP command shape for a locally built image:
+
+```json
+{
+  "command": "docker",
+  "args": ["run", "-i", "--rm", "sktime-mcp:local"]
+}
+```
+
+If you prefer the published image and can accept that it may lag behind `main`:
 
 ```bash
 docker pull sktime/sktime-mcp:latest
@@ -248,7 +273,7 @@ Open Claude Desktop settings, go to the Developer section, and edit the MCP conf
 Common config paths:
 
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Linux: `~/.config/claude/claude_desktop_config.json`
+- Linux: `~/.config/Claude/claude_desktop_config.json`
 - Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`
 
 Add:
@@ -408,7 +433,7 @@ Expected tool behavior:
 - Return names, tasks, and short metadata.
 
 <details>
-<summary>Output placeholder</summary>
+<summary>Example output</summary>
 
 ```text
 • Available demo datasets through sktime-mcp:
@@ -427,7 +452,8 @@ Expected tool behavior:
 
 ## 3. Tool Options
 
-The full tool reference is in the project documentation: https://sktime.github.io/sktime-mcp/
+The server registers **26 tools**. The table below groups them by intent; the
+{doc}`tool-reference` documents every argument and return value.
 
 | Need | Tool options | Rough explanation |
 | --- | --- | --- |
@@ -435,14 +461,45 @@ The full tool reference is in the project documentation: https://sktime.github.i
 | Bring data into the session | `load_data_source`, `inspect_data`, `transform_data`, `split_data`, `save_data` | Load files, inline data, SQL, or URLs into handles; inspect, clean, split, and persist them. |
 | Build and run models | `instantiate`, `fit`, `predict`, `update`, `get_fitted_params`, `call_method` | Create sktime estimators or pipelines, fit them, forecast, update, or call native methods. |
 | Evaluate and reproduce | `evaluate`, `export_code`, `save_model`, `load_model` | Cross-validate, generate Python code, and persist fitted models. |
+| Visualize | `plot_series` | Plot one or more series to a PNG/SVG/WebP file, or inline as base64. |
 | Manage runtime state | `list_handles`, `release_handle`, `release_data_handle`, `list_jobs`, `check_job_status`, `cancel_job` | See what is in memory, clean it up, and track async work. |
+| Repair the environment | `run_command` | Runs an arbitrary shell command — see the warning below. |
 
 The practical mental model is simple: prompts create tool calls, tool calls create handles, and handles let later prompts continue the workflow.
 
+### Running work in the background
 
-## 4. Workshop Examples
+`fit`, `predict`, `evaluate`, and `load_data_source` each accept a **`run_async`**
+flag. Set it and the call returns a `job_id` immediately instead of a result, which
+you then track with `check_job_status`, `list_jobs`, and `cancel_job`. There are no
+separate `*_async` tools. Ask for it in plain language — *"train that in the
+background"* — and the assistant sets the flag.
 
-These examples are written as prompts that can be pasted into an MCP client. Each starts with a real-world motivation, then shows the likely tool path and a placeholder for live output.
+Nothing notifies you when a job completes; the assistant has to check. Ask if you
+want to know.
+
+### A note on `run_command`
+
+```{warning}
+`run_command` executes an arbitrary shell command with the privileges of the
+account running the server, and it is not sandboxed. It exists so the assistant
+can install an optional dependency an estimator turned out to need.
+
+Most MCP clients let you allow or deny tools individually. Keep this one on
+ask-every-time — or disable it — unless you want the assistant installing packages
+and inspecting your filesystem. Running the server in Docker (Option D above)
+limits it to the container.
+```
+
+
+## 4. Worked Examples
+
+These examples are written as prompts you can paste into an MCP client. Each starts
+with a real-world motivation, shows the likely tool path, and includes output
+captured from a real session so you can see what to expect.
+
+Output is illustrative, not a guarantee — estimator versions, data, and the
+assistant's model choices all vary between runs.
 
 
 ### Example 1: Discover sktime Coverage
@@ -470,7 +527,7 @@ A data scientist is starting a time-series project and needs to know what `sktim
 A map of available sktime tasks, useful estimators, and capability tags. The important point is that the assistant reads installed registry metadata instead of relying on memory.
 
 <details>
-<summary>Output placeholder</summary>
+<summary>Example output</summary>
 
 ```text
 • Demo Data
@@ -554,10 +611,7 @@ For persistence, use the most appropriate route:
 - Use `export_code` so the saving step can be reproduced outside the MCP session.
 
 <details>
-<summary>Output placeholder</summary>
-
-Paste the forecast table, evaluation summary, saved file path, and exported code summary here.
-
+<summary>Example output</summary>
 
 ```text
 • Done. I inspected available demo data and used the forecasting demo dataset airline.
@@ -682,8 +736,23 @@ A sales operations team has monthly revenue data exported from a business system
 
 A cleaned time-series handle, a saved CSV file, train/test handles, forecast values for the holdout window, and a clear explanation of state cleanup.
 
+```{note}
+The captured session below hit three real rough edges, and they are left in
+deliberately because you may hit them too:
+
+1. `load_data_source` **rejects** input containing duplicate timestamps rather than
+   cleaning them, so duplicates must be removed before loading — even though
+   `transform_data` can remove duplicates once the data is already in a handle.
+2. A month-start (`<MonthBegin>`) frequency is not usable as a pandas period
+   frequency, which breaks `predict` for seasonal forecasters on such an index.
+3. Releasing a handle that has been superseded by `transform_data` reports
+   "not found".
+
+Everything else in the workflow completed normally.
+```
+
 <details>
-<summary>Output placeholder</summary>
+<summary>Example output</summary>
 
 ```text
 • Completed, with one MCP limitation: the exact inline dataset containing a duplicate date was submitted first, but load_data_source rejected it before creating
@@ -765,7 +834,7 @@ A quality-monitoring team has sensor traces from a production process. Each trac
 A small classification workflow that demonstrates broader `sktime` coverage. Forecasting remains the smoothest path today, but discovery and generic execution are useful beyond forecasting.
 
 <details>
-<summary>Output placeholder</summary>
+<summary>Example output</summary>
 
 ```text
 • Used gunpoint with TimeSeriesForestClassifier(n_estimators=10, random_state=0).

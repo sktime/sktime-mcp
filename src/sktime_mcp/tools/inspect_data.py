@@ -31,42 +31,31 @@ def inspect_data_tool(data_handle: str) -> dict[str, Any]:
     -------
     dict
         Dictionary containing detailed metadata and summary statistics:
-        - "success" : bool
-            True if the data handle was found and inspected successfully.
-        - "data_handle" : str
-            The inspected data handle ID.
-        - "mtype" : str
-            The format mtype (e.g. 'pd.Series', 'pd.DataFrame').
-        - "scitype" : str
-            The sktime scientific type (e.g. 'Series', 'Panel').
-        - "shape" : list of int
-            Shape list: [rows, columns] or [rows].
-        - "columns" : list of str
-            Names of all variables (including exogenous features if present).
-        - "dtypes" : dict
-            Mapping of column names to string names of their data types.
-        - "index_names" : list of str
-            List of names of the index levels.
-        - "freq" : str or None
-            Inferred or declared frequency of the time index.
-        - "cutoff" : str or None
-            Cutoff timestamp/integer index indicating the end of the history.
-        - "n_missing" : int
-            Total count of missing values across the entire dataset.
-        - "head" : dict
-            Preview of the first 5 rows of data.
-        - "summary_stats" : dict
-            Statistical summary metrics (mean, std, min, max, etc.) per column.
-        - "error" : str, optional
-            Error message if "success" is False.
+
+        - ``"success"`` (bool) -- True if the data handle was found and inspected successfully.
+        - ``"data_handle"`` (str) -- The inspected data handle ID.
+        - ``"mtype"`` (str) -- The format mtype (e.g. 'pd.Series', 'pd.DataFrame').
+        - ``"scitype"`` (str) -- The sktime scientific type (e.g. 'Series', 'Panel').
+        - ``"shape"`` (list of int) -- Shape list: [rows, columns] or [rows].
+        - ``"columns"`` (list of str) -- Names of all variables (including exogenous features if
+          present).
+        - ``"dtypes"`` (dict) -- Mapping of column names to string names of their data types.
+        - ``"index_names"`` (list of str) -- List of names of the index levels.
+        - ``"freq"`` (str or None) -- Inferred or declared frequency of the time index.
+        - ``"cutoff"`` (str or None) -- Cutoff timestamp/integer index indicating the end of the
+          history.
+        - ``"n_missing"`` (int) -- Total count of missing values across the entire dataset.
+        - ``"head"`` (dict) -- Preview of the first 5 rows of data.
+        - ``"summary_stats"`` (dict) -- Statistical summary metrics (mean, std, min, max, etc.) per
+          column.
+        - ``"error"`` (str, optional) -- Error message if "success" is False.
     """
     executor = get_executor()
 
     if data_handle not in executor._data_handles:
         return {
             "success": False,
-            "error": f"Data handle '{data_handle}' not found",
-            "available_handles": list(executor._data_handles.keys()),
+            **executor.data_handle_missing(data_handle),
         }
 
     data_info = executor._data_handles[data_handle]
@@ -98,13 +87,16 @@ def inspect_data_tool(data_handle: str) -> dict[str, Any]:
         if X is not None and isinstance(X, pd.DataFrame):
             columns = columns + [f"X:{c}" for c in X.columns]
 
-        # --- dtypes ---
+        # --- dtypes (include exogenous columns, which `columns` already lists — N-14) ---
         if isinstance(y, pd.DataFrame):
             dtypes = {str(col): str(dtype) for col, dtype in y.dtypes.items()}
         elif isinstance(y, pd.Series):
             dtypes = {y.name if y.name else "target": str(y.dtype)}
         else:
             dtypes = {}
+        if X is not None and isinstance(X, pd.DataFrame):
+            for col, dtype in X.dtypes.items():
+                dtypes[f"X:{col}"] = str(dtype)
 
         # --- index names ---
         if hasattr(y, "index") and hasattr(y.index, "names"):

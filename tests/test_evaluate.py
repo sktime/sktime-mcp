@@ -68,7 +68,7 @@ def test_evaluate_with_data_handle():
     executor = get_executor()
     data_res = executor.load_dataset("airline")
     assert data_res["success"]
-    executor._data_handles["test_dh"] = {"y": data_res["data"]}
+    executor._data_handles["test_dh"] = {"y": data_res["y"]}
     handle = executor._handle_manager.create_handle("NaiveForecaster", NaiveForecaster(), {})
 
     try:
@@ -106,5 +106,89 @@ def test_evaluate_handle_not_found():
     assert "Handle not found" in result["error"]
 
 
+def test_evaluate_per_fold_error_surfaces_as_failure():
+    """Per-fold exceptions must fail the evaluation, not report success with NaN.
+
+    ThetaForecaster coerces to PeriodIndex internally and errors on a
+    DatetimeIndex with a MonthBegin freq — with sktime's default
+    error_score=np.nan every fold error was swallowed and evaluate
+    returned success: true with all-NaN metrics.
+    """
+    import math
+
+    import pandas as pd
+    from sktime.forecasting.theta import ThetaForecaster
+
+    executor = get_executor()
+    idx = pd.date_range("2000-01-01", periods=48, freq="MS")
+    y = pd.Series([100.0 + i + 10 * (i % 12) for i in range(48)], index=idx)
+    executor._data_handles["test_nan_dh"] = {"y": y}
+    handle = executor._handle_manager.create_handle("ThetaForecaster", ThetaForecaster(sp=12), {})
+
+    try:
+        result = evaluate_tool(estimator_handle=handle, y="test_nan_dh", cv_folds=3)
+        assert not result["success"], (
+            "Expected per-fold errors to fail the evaluation, got: "
+            f"{result.get('metrics')}"
+        )
+        assert result["error"]
+        # And in no case may a NaN metric masquerade as a result
+        for value in (result.get("metrics") or {}).values():
+            assert not (isinstance(value, float) and math.isnan(value))
+    finally:
+        executor._handle_manager.release_handle(handle)
+        executor._data_handles.pop("test_nan_dh", None)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestCvFoldsValidation:
+    """cv_folds/initial_window are validated, never silently clamped."""
+
+    def _handle(self):
+        executor = get_executor()
+        return executor, executor._handle_manager.create_handle(
+            "NaiveForecaster", NaiveForecaster(), {}
+        )
+
+    def test_cv_folds_zero_rejected(self):
+        executor, handle = self._handle()
+        try:
+            result = evaluate_tool(estimator_handle=handle, y="airline", cv_folds=0)
+            assert not result["success"]
+            assert "cv_folds" in result["error"]
+        finally:
+            executor._handle_manager.release_handle(handle)
+
+    def test_cv_folds_negative_rejected(self):
+        executor, handle = self._handle()
+        try:
+            result = evaluate_tool(estimator_handle=handle, y="airline", cv_folds=-5)
+            assert not result["success"]
+            assert "cv_folds" in result["error"]
+        finally:
+            executor._handle_manager.release_handle(handle)
+
+    def test_cv_folds_exceeding_series_rejected(self):
+        executor, handle = self._handle()
+        try:
+            # airline has 144 observations; 500 folds is impossible
+            result = evaluate_tool(estimator_handle=handle, y="airline", cv_folds=500)
+            assert not result["success"]
+            assert "cv_folds" in result["error"]
+            assert "143" in result["error"]
+        finally:
+            executor._handle_manager.release_handle(handle)
+
+    def test_initial_window_exceeding_series_rejected(self):
+        executor, handle = self._handle()
+        try:
+            result = evaluate_tool(
+                estimator_handle=handle, y="airline", initial_window=144
+            )
+            assert not result["success"]
+            assert "initial_window" in result["error"]
+        finally:
+            executor._handle_manager.release_handle(handle)

@@ -95,6 +95,11 @@ class TestPlotSeriesTool:
         assert "not found" in result["error"]
         assert "available_handles" in result
 
+    def test_empty_data_handles(self):
+        result = plot_series_tool(data_handles=[])
+        assert result["success"] is False
+        assert "at least one" in result["error"]
+
     def test_unsupported_format(self):
         _register_series("s1", _make_airline_like())
         result = plot_series_tool(data_handles=["s1"], image_format="bmp")

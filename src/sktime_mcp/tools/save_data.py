@@ -26,6 +26,7 @@ def save_data_tool(
     data_handle: str,
     path: str,
     format: str = "csv",
+    overwrite: bool = False,
 ) -> dict[str, Any]:
     """Persist the data behind a handle to a local file.
 
@@ -42,21 +43,21 @@ def save_data_tool(
         use the `format` argument instead.
     format : str, default="csv"
         Output format. Must be one of: "csv", "parquet", or "json".
+    overwrite : bool, default=False
+        If the target file already exists, the write is refused unless this
+        is True, in which case the response reports ``overwritten: true``.
 
     Returns
     -------
     dict
         Dictionary containing success status and path information:
-        - "success" : bool
-            True if the data was written successfully, False otherwise.
-        - "saved_path" : str
-            Absolute path to the written file.
-        - "format" : str
-            The format used to write the file.
-        - "rows" : int
-            Number of rows written to the file.
-        - "error" : str, optional
-            Error message if "success" is False.
+
+        - ``"success"`` (bool) -- True if the data was written successfully, False otherwise.
+        - ``"saved_path"`` (str) -- Absolute path to the written file.
+        - ``"format"`` (str) -- The format used to write the file.
+        - ``"rows"`` (int) -- Number of rows written to the file.
+        - ``"overwritten"`` (bool) -- True if an existing file was replaced.
+        - ``"error"`` (str, optional) -- Error message if "success" is False.
     """
     executor = get_executor()
 
@@ -64,8 +65,7 @@ def save_data_tool(
     if data_handle not in executor._data_handles:
         return {
             "success": False,
-            "error": f"Data handle '{data_handle}' not found",
-            "available_handles": list(executor._data_handles.keys()),
+            **executor.data_handle_missing(data_handle),
         }
 
     fmt = format.lower()
@@ -73,6 +73,20 @@ def save_data_tool(
         return {
             "success": False,
             "error": f"Unsupported format '{format}'. Choose from: {list(_FORMAT_WRITERS.keys())}",
+        }
+
+    # Resolve (expanduser so "~/x" doesn't create a literal "~" dir) and guard
+    # against silently clobbering an existing file (#539).
+    abs_path = Path(path).expanduser().resolve()
+    existed = abs_path.exists()
+    if existed and not overwrite:
+        return {
+            "success": False,
+            "error": (
+                f"File already exists: '{abs_path}'. Pass overwrite=true to replace it, "
+                "or choose a different path."
+            ),
+            "saved_path": str(abs_path),
         }
 
     data_info = executor._data_handles[data_handle]
@@ -93,24 +107,28 @@ def save_data_tool(
             df = pd.concat([df, X], axis=1)
 
         # Ensure target directory exists
-        abs_path = Path(path).resolve()
         abs_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Write
-        writer = getattr(df, _FORMAT_WRITERS[fmt])
         if fmt == "json":
-            writer(str(abs_path), orient="records", date_format="iso", indent=2)
+            # records orient drops the index; write it as a "time" column so the
+            # file round-trips through load_data_source(time_column="time").
+            out_df = df.copy()
+            out_df.index = out_df.index.astype(str)
+            out_df = out_df.reset_index(names="time")
+            out_df.to_json(str(abs_path), orient="records", indent=2)
         elif fmt == "parquet":
-            writer(str(abs_path))
+            df.to_parquet(str(abs_path))
         else:
             # CSV — include the index as a time column
-            writer(str(abs_path))
+            df.to_csv(str(abs_path))
 
         return {
             "success": True,
             "saved_path": str(abs_path),
             "format": fmt,
             "rows": len(df),
+            "overwritten": existed,
         }
 
     except Exception as e:

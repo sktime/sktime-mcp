@@ -20,22 +20,23 @@ class UrlAdapter(DataSourceAdapter):
     """
     Adapter for downloading data from Web URLs.
 
-    Config example:
-    {
-        "type": "url",
-        "url": "https://raw.githubusercontent.com/.../data.csv",
-        "format": "csv",  # csv, excel, parquet (auto-detected from URL if not specified)
+    Config example::
 
-        # Column mapping
-        "time_column": "date",
-        "target_column": "value",
-        "exog_columns": ["feature1", "feature2"],
+        {
+            "type": "url",
+            "url": "https://raw.githubusercontent.com/.../data.csv",
+            "format": "csv",  # csv, excel, parquet (auto-detected from URL)
 
-        # Options are passed identically as FileAdapter
-        "csv_options": { ... },
-        "parse_dates": True,
-        "frequency": "D"
-    }
+            # Column mapping
+            "time_column": "date",
+            "target_column": "value",
+            "exog_columns": ["feature1", "feature2"],
+
+            # Options are passed identically as FileAdapter
+            "csv_options": { ... },
+            "parse_dates": True,
+            "frequency": "D"
+        }
     """
 
     async def load_async(self, job_id: str | None = None) -> pd.DataFrame:

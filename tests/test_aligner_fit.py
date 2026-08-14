@@ -121,3 +121,69 @@ def test_forecaster_fit_string_y_dataset():
     assert r["success"], r
     out = fit_tool(estimator_handle=r["handle"], y_dataset="airline")
     assert out["success"], out
+
+
+def test_forecaster_same_dataset_uses_canonical_y_x():
+    """Merge must keep main's y/X convention (longley target is TOTEMP)."""
+    r = instantiate_tool("NaiveForecaster()")
+    assert r["success"], r
+    out = fit_tool(
+        estimator_handle=r["handle"],
+        y_dataset="longley",
+        X_dataset="longley",
+    )
+    assert out["success"], out
+    fitted_y = get_executor()._handle_manager.get_instance(r["handle"])._y
+    assert fitted_y.ndim == 1 or fitted_y.shape[1] == 1, fitted_y.shape
+
+
+def test_aligner_fit_unknown_dataset_in_list():
+    """Unknown name in X_dataset list surfaces the load error, not a type error."""
+    r = instantiate_tool("AlignerNaive()")
+    assert r["success"], r
+    out = fit_tool(
+        estimator_handle=r["handle"],
+        X_dataset=["airline", "no_such_dataset_zzz"],
+    )
+    assert not out["success"]
+    assert "Unknown dataset: no_such_dataset_zzz" in out["error"]
+    assert "available" in out
+
+
+def test_aligner_fit_non_string_list_item():
+    """Non-string X list items are rejected before sktime."""
+    r = instantiate_tool("AlignerNaive()")
+    assert r["success"], r
+    out = fit_tool(estimator_handle=r["handle"], X_handle=[1, 2])
+    assert not out["success"]
+    assert "must be strings" in out["error"]
+
+
+def test_aligner_call_method_list_datasets():
+    """call_method injects a list of demo datasets into fit."""
+    r = instantiate_tool("AlignerNaive()")
+    assert r["success"], r
+    executor = get_executor()
+    out = executor.call_method(
+        r["handle"],
+        "fit",
+        {"X_dataset": ["airline", "airline"]},
+    )
+    assert out["success"], out
+    al = executor.call_method(r["handle"], "get_alignment", {})
+    assert al["success"], al
+
+
+def test_aligner_call_method_unknown_dataset_in_list():
+    """Failed dataset load in a list returns available names, like a string kwarg."""
+    r = instantiate_tool("AlignerNaive()")
+    assert r["success"], r
+    out = get_executor().call_method(
+        r["handle"],
+        "fit",
+        {"X_dataset": ["airline", "no_such_dataset_zzz"]},
+    )
+    assert not out["success"]
+    assert "Unknown dataset: no_such_dataset_zzz" in out["error"]
+    assert "available" in out
+    assert "unexpected keyword argument" not in out["error"]

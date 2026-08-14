@@ -2,11 +2,14 @@
 Data source layer for sktime-mcp.
 
 Provides adapters for loading data from various sources:
+
 - Pandas DataFrames (in-memory)
 - SQL databases (PostgreSQL, MySQL, SQLite, etc.)
 - Files (CSV, Excel, Parquet)
+- Web URLs
 
-Usage:
+Usage::
+
     from sktime_mcp.data import DataSourceRegistry
 
     # Create adapter from config

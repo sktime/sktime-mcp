@@ -24,10 +24,11 @@ def load_data_source_tool(
     ----------
     config : dict
         Data source configuration dictionary. Must contain:
-        - "type" : str
-            Source type: "pandas", "sql", "file", or "url".
-        - Additional type-specific configuration keys (e.g. "data", "path",
-          "time_column", "target_column").
+
+        - ``"type"`` (str) -- source type: ``"pandas"``, ``"sql"``, ``"file"``,
+          or ``"url"``.
+        - Additional type-specific configuration keys (e.g. ``"data"``,
+          ``"path"``, ``"time_column"``, ``"target_column"``).
     run_async : bool, default=False
         If True, schedules the loading as a background job and
         returns a job_id immediately. If False, blocks until loaded
@@ -37,25 +38,24 @@ def load_data_source_tool(
     -------
     dict
         Dictionary containing load results and metadata.
-        If run_async is False, contains:
-        - "success" : bool
-            True if the data was loaded successfully.
-        - "data_handle" : str
-            The unique handle ID for the loaded data.
-        - "metadata" : dict
-            Rich metadata including row count, columns, and data type information.
-        - "validation" : dict
-            Results of indexing and format validation checks.
 
-        If run_async is True, contains:
-        - "success" : bool
-            True if the background job was scheduled successfully.
-        - "job_id" : str
-            Unique job ID to monitor progress via check_job_status.
-        - "message" : str
-            A user-friendly status message.
-        - "source_type" : str
-            The type of the source requested to load.
+        If ``run_async`` is False, contains:
+
+        - ``"success"`` (bool) -- True if the data was loaded successfully.
+        - ``"data_handle"`` (str) -- the unique handle ID for the loaded data.
+        - ``"metadata"`` (dict) -- rich metadata including row count, columns,
+          and data type information.
+        - ``"validation"`` (dict) -- results of indexing and format validation
+          checks.
+
+        If ``run_async`` is True, contains:
+
+        - ``"success"`` (bool) -- True if the background job was scheduled
+          successfully.
+        - ``"job_id"`` (str) -- unique job ID to monitor progress via
+          ``check_job_status``.
+        - ``"message"`` (str) -- a user-friendly status message.
+        - ``"source_type"`` (str) -- the type of the source requested to load.
 
     Examples
     --------
@@ -129,12 +129,11 @@ def list_data_sources_tool() -> dict[str, Any]:
     -------
     dict
         Dictionary containing available data sources:
-        - "success" : bool
-            True if the list was retrieved successfully.
-        - "sources" : list of str
-            List of supported source type names.
-        - "descriptions" : dict
-            A mapping of source type names to their class and descriptions.
+
+        - ``"success"`` (bool) -- True if the list was retrieved successfully.
+        - ``"sources"`` (list of str) -- List of supported source type names.
+        - ``"descriptions"`` (dict) -- A mapping of source type names to their class and
+          descriptions.
     """
     from sktime_mcp.data import DataSourceRegistry
 
@@ -168,10 +167,9 @@ def release_data_handle_tool(data_handle: str) -> dict[str, Any]:
     -------
     dict
         Dictionary containing success status:
-        - "success" : bool
-            True if the handle was successfully released, False otherwise.
-        - "message" : str, optional
-            Detailed status or error message.
+
+        - ``"success"`` (bool) -- True if the handle was successfully released, False otherwise.
+        - ``"message"`` (str, optional) -- Detailed status or error message.
     """
     executor = get_executor()
     return executor.release_data_handle(data_handle)

@@ -2,6 +2,7 @@
 Data transformation tool for sktime MCP.
 
 Provides two actions:
+
   - "format": auto-fix frequency, duplicates, missing values (replaces format_time_series).
   - "convert": convert data between sktime mtypes using convert_to().
 """
@@ -35,9 +36,11 @@ def transform_data_tool(
         Handle ID of the loaded data to transform (from load_data_source).
     action : str, default="format"
         The transformation action to perform. Must be one of:
-        - "format" : Auto-fix common time series issues like inferring frequency,
-          removing duplicate timestamps, and filling missing values.
-        - "convert" : Convert the data to a different sktime machine type (mtype).
+
+        - ``"format"`` -- auto-fix common time series issues such as inferring
+          frequency, removing duplicate timestamps, and filling missing values.
+        - ``"convert"`` -- convert the data to a different sktime machine type
+          (mtype).
     auto_infer_freq : bool, default=True
         (Format mode only) Infer and set frequency.
     fill_missing : bool, default=True
@@ -52,16 +55,14 @@ def transform_data_tool(
     -------
     dict
         Dictionary containing the new data handle and a list of applied changes:
-        - "success" : bool
-            True if the transformation succeeded, False otherwise.
-        - "data_handle" : str
-            The new unique data handle ID representing the transformed data.
-        - "changes_applied" : list of str
-            A list of human-readable changes that were applied to the data.
-        - "metadata" : dict, optional
-            Updated metadata for the new handle.
-        - "error" : str, optional
-            Error message if "success" is False.
+
+        - ``"success"`` (bool) -- True if the transformation succeeded, False otherwise.
+        - ``"data_handle"`` (str) -- The new unique data handle ID representing the transformed
+          data.
+        - ``"changes_applied"`` (list of str) -- A list of human-readable changes that were applied
+          to the data.
+        - ``"metadata"`` (dict, optional) -- updated metadata for the new handle.
+        - ``"error"`` (str, optional) -- Error message if "success" is False.
     """
     if action not in ("format", "convert"):
         return {
@@ -80,8 +81,7 @@ def transform_data_tool(
     if data_handle not in executor._data_handles:
         return {
             "success": False,
-            "error": f"Data handle '{data_handle}' not found",
-            "available_handles": list(executor._data_handles.keys()),
+            **executor.data_handle_missing(data_handle),
         }
 
     try:
@@ -132,6 +132,8 @@ def _action_format(
     changes_applied: list[str] = []
     changes = result.get("changes_made", {})
 
+    if changes.get("sorted"):
+        changes_applied.append("Sorted rows by time index")
     if changes.get("duplicates_removed", 0) > 0:
         changes_applied.append(f"Removed {changes['duplicates_removed']} duplicate timestamps")
     if changes.get("frequency_set"):
@@ -159,6 +161,11 @@ def _action_format(
 # ---------------------------------------------------------------------------
 
 
+# Index-less mtypes: converting a handle to these strips the time index, which
+# breaks every downstream tool (inspect/split/format) and fabricates a cutoff.
+_INDEXLESS_MTYPES = {"np.ndarray", "numpy3D", "numpyflat", "numpy2D"}
+
+
 def _action_convert(
     executor: Any,
     data_handle: str,
@@ -170,8 +177,33 @@ def _action_convert(
 
     from sktime.datatypes import convert_to
 
+    if to_mtype in _INDEXLESS_MTYPES:
+        return {
+            "success": False,
+            "error": (
+                f"'{to_mtype}' has no time index; converting a handle to it breaks "
+                "inspect_data/split_data and other tools. Convert to a pandas mtype "
+                "(pd.Series, pd.DataFrame) instead."
+            ),
+        }
+
     original_mtype = type(y).__name__
-    converted = convert_to(y, to_type=to_mtype)
+    try:
+        converted = convert_to(y, to_type=to_mtype)
+    except (TypeError, ValueError, KeyError) as e:
+        msg = str(e)
+        # sktime raises a multi-paragraph mtype-inference dump for a
+        # scitype-incompatible target (e.g. Series handle -> pd-multiindex).
+        if "No valid mtype" in msg or "must be of python type" in msg:
+            return {
+                "success": False,
+                "error": (
+                    f"Cannot convert a {original_mtype} (Series-scitype) handle to "
+                    f"'{to_mtype}'. That target expects a different scitype (e.g. Panel). "
+                    "Use a compatible mtype such as pd.Series or pd.DataFrame."
+                ),
+            }
+        return {"success": False, "error": f"Conversion to '{to_mtype}' failed: {msg}"}
 
     # Register as new handle
     new_handle = f"data_{uuid.uuid4().hex[:8]}"

@@ -5,6 +5,7 @@ Main entry point for the Model Context Protocol server
 that exposes sktime's registry and execution capabilities to LLMs.
 """
 
+import argparse
 import asyncio
 import json
 import logging
@@ -14,6 +15,8 @@ from io import TextIOWrapper
 from typing import Any
 
 import anyio
+
+from sktime_mcp import __version__
 
 try:
     import numpy as np
@@ -352,6 +355,8 @@ async def list_tools() -> list[Tool]:
                     },
                     "fh": {
                         "description": "Optional: Forecast horizon (e.g. 12 or [1,2,3]) to pass to fit",
+                        "type": ["integer", "array"],
+                        "items": {"type": "integer"},
                     },
                     "run_async": {
                         "type": "boolean",
@@ -393,10 +398,14 @@ async def list_tools() -> list[Tool]:
                     },
                     "coverage": {
                         "description": "Coverage level for intervals (float or list of floats)",
+                        "type": ["number", "array"],
+                        "items": {"type": "number"},
                         "default": 0.9,
                     },
                     "alpha": {
                         "description": "Alpha values for quantiles (float or list of floats)",
+                        "type": ["number", "array"],
+                        "items": {"type": "number"},
                     },
                     "X_handle": {
                         "type": "string",
@@ -670,6 +679,8 @@ async def list_tools() -> list[Tool]:
                             "steps (e.g. fh=[1,5,10] reserves 10 steps). "
                             "Mutually exclusive with test_size."
                         ),
+                        "type": ["integer", "array"],
+                        "items": {"type": "integer"},
                     },
                 },
                 "required": ["data_handle"],
@@ -758,6 +769,14 @@ async def list_tools() -> list[Tool]:
                         "enum": ["csv", "parquet", "json"],
                         "default": "csv",
                     },
+                    "overwrite": {
+                        "type": "boolean",
+                        "description": (
+                            "Replace the file if it already exists. Default false — an "
+                            "existing file is not clobbered unless this is true."
+                        ),
+                        "default": False,
+                    },
                 },
                 "required": ["data_handle", "path"],
             },
@@ -775,6 +794,7 @@ async def list_tools() -> list[Tool]:
                     "data_handles": {
                         "type": "array",
                         "items": {"type": "string"},
+                        "minItems": 1,
                         "description": "List of data handle IDs to plot (e.g., train, test, forecasts).",
                     },
                     "labels": {
@@ -799,9 +819,12 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Resolution in dots per inch (default: 150).",
                         "default": 150,
+                        "minimum": 1,
                     },
                     "markers": {
                         "description": "Marker style(s) for data points (e.g., 'o', ['.', 'x']).",
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
                     },
                     "x_label": {
                         "type": "string",
@@ -954,16 +977,18 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="run_command",
             description=(
-                "Run an arbitrary CLI/bash command inside the sktime container. "
-                "Use this to install missing python packages (e.g., 'pip install mlflow') "
-                "or inspect the file system."
+                "Run an arbitrary CLI/bash command on the HOST machine, in the server's "
+                "working directory, as the user that launched the server (not a container "
+                "or sandbox). Use it to install packages into the server's environment "
+                "(e.g. the server's python -m pip install mlflow) or inspect the filesystem. "
+                "Output is capped; a 'truncated' flag indicates when it was shortened."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "The bash command to run",
+                        "description": "The shell command to run (executed via /bin/sh -c).",
                     },
                 },
                 "required": ["command"],
@@ -1120,6 +1145,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 data_handle=arguments["data_handle"],
                 path=arguments["path"],
                 format=arguments.get("format", "csv"),
+                overwrite=arguments.get("overwrite", False),
             )
 
         elif name == "auto_format_on_load":
@@ -1238,8 +1264,38 @@ async def run_server():
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
 
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser for the ``sktime-mcp`` console script.
+
+    Returns
+    -------
+    argparse.ArgumentParser
+        Parser accepting ``--version``/``-V`` and ``--help``. With no
+        arguments the server starts on stdio.
+    """
+    parser = argparse.ArgumentParser(
+        prog="sktime-mcp",
+        description=(
+            "MCP (Model Context Protocol) server exposing the sktime ecosystem "
+            "to LLM clients. Runs on stdio when invoked without arguments."
+        ),
+    )
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=f"sktime-mcp {__version__}",
+        help="print the installed sktime-mcp version and exit",
+    )
+    return parser
+
+
 def main():
     """Main entry point."""
+    # Parsed before any stdio redirection so that --version/--help reach the
+    # real stdout rather than the MCP JSON-RPC stream.
+    build_arg_parser().parse_args()
+
     try:
         asyncio.run(run_server())
     except KeyboardInterrupt:

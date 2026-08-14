@@ -5,7 +5,14 @@ A semantic engine that exposes sktime's native registry and semantics to LLMs,
 enabling discovery, reasoning, composition, and execution of time series workflows.
 """
 
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _package_version
+
+try:
+    __version__ = _package_version("sktime-mcp")
+except PackageNotFoundError:  # running from a source tree without an install
+    __version__ = "0.0.0+unknown"
+
 __author__ = "sktime-mcp contributors"
 
 from sktime_mcp.registry.interface import (

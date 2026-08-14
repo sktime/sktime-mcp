@@ -160,6 +160,20 @@ def plot_series_tool(
             "error": "matplotlib and sktime plotting utils are required.",
         }
 
+    if not data_handles:
+        return {
+            "success": False,
+            "error": "data_handles must contain at least one data handle ID.",
+        }
+
+    # dpi=0 previously slipped through (falsy -> default 150) while dpi=-100
+    # errored — reject all non-positive dpi consistently (N-20).
+    if dpi is not None and dpi <= 0:
+        return {
+            "success": False,
+            "error": f"dpi must be a positive integer, got {dpi}.",
+        }
+
     executor = get_executor()
 
     # --- resolve data handles -----------------------------------------------
@@ -173,10 +187,14 @@ def plot_series_tool(
             missing.append(handle)
 
     if missing:
+        evicted = [h for h in missing if h in executor._evicted_data]
+        detail = f"Data handle(s) not found: {missing}"
+        if evicted:
+            detail += f" (evicted under the handle limit: {evicted}; reload the source)"
         return {
             "success": False,
-            "error": f"Data handle(s) not found: {missing}",
-            "available_handles": list(executor._data_handles.keys()),
+            "error": detail,
+            **executor.summarize_available_handles(),
         }
 
     # --- prepare plotting args ---------------------------------------------

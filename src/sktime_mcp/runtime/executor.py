@@ -9,6 +9,7 @@ import asyncio
 import inspect
 import logging
 import uuid
+from collections import deque
 from typing import Any
 
 import pandas as pd
@@ -63,11 +64,96 @@ def _is_single_series_table(obj: Any) -> bool:
     return isinstance(obj, pd.DataFrame) and not isinstance(obj.index, pd.MultiIndex)
 
 
+def _dataset_slot(data_res: dict[str, Any], slot: str) -> Any:
+    """Pick y or X from a load_dataset result. X falls back to y when absent."""
+    if slot == "X":
+        return data_res["X"] if data_res["X"] is not None else data_res["y"]
+    return data_res["y"]
+
+
 _ALIGNER_NEED_LIST_MSG = (
     "Aligners require multiple series as X, not a single series/table. "
     "Pass X_handle or X_dataset as a list of at least two ids."
 )
 _X_LIST_MIN_MSG = "X as a list needs at least two series."
+
+
+def _to_period_index_if_possible(obj: Any) -> Any:
+    """Return *obj* with a ``PeriodIndex`` when its index is a regular datetime index.
+
+    Seasonal sktime forecasters coerce the series index to a ``PeriodIndex``
+    internally (``index.to_period(freq)``) and raise on offset frequencies such
+    as ``MonthBegin`` ("MS"), which is what ``load_data_source`` produces for
+    monthly data. Demo datasets carry a ``PeriodIndex`` and work, so we
+    normalise handle-loaded data to match. ``to_period()`` is called with no
+    argument so pandas maps the offset to its period alias (MS -> "M"); passing
+    the offset string back in would re-raise the same error.
+
+    No-op for non-datetime indexes, ``PeriodIndex`` already, or an index with no
+    determinable frequency.
+    """
+    if obj is None or not hasattr(obj, "index"):
+        return obj
+    idx = obj.index
+    if isinstance(idx, pd.PeriodIndex) or not isinstance(idx, pd.DatetimeIndex):
+        return obj
+    try:
+        if idx.freq is None:
+            inferred = pd.infer_freq(idx)
+            if inferred is None:
+                return obj
+            idx = pd.DatetimeIndex(idx, freq=inferred)
+        converted = obj.copy()
+        converted.index = idx.to_period()
+        return converted
+    except (ValueError, TypeError):
+        return obj
+
+
+# Max forecast rows returned inline before truncation (NB-22). Normal horizons
+# (<= a few dozen) are never affected; a 1000-step forecast would otherwise
+# flood the client with ~30KB+ of inline JSON.
+_MAX_PREDICTION_ROWS = 500
+
+# Dunder methods that are safe and useful to call via call_method (e.g. __call__
+# for callable metrics/aligners). Everything else starting with "_" is blocked
+# (BUG-11) — notably __reduce__/__class__/__getattribute__ and private methods.
+_ALLOWED_DUNDERS = frozenset({"__call__", "__len__", "__repr__", "__str__"})
+
+
+def _is_sktime_object(obj: Any) -> bool:
+    """True if *obj* is a genuine sktime estimator/object, not a bare value.
+
+    craft evaluates arbitrary specs, so a spec like "42" returns an int. Such
+    non-objects should not receive an estimator handle (BUG-10). We accept
+    anything deriving from skbase's BaseObject, falling back to a duck-typed
+    check for get_params + a scitype tag.
+    """
+    try:
+        from skbase.base import BaseObject
+
+        if isinstance(obj, BaseObject):
+            return True
+    except Exception:  # pragma: no cover - skbase always present with sktime
+        pass
+    return hasattr(obj, "get_params") and hasattr(obj, "get_class_tag")
+
+
+def _cap_prediction_rows(result: dict) -> tuple[dict, dict | None]:
+    """Cap an index-keyed prediction dict, returning (capped, truncation_note)."""
+    if not isinstance(result, dict) or len(result) <= _MAX_PREDICTION_ROWS:
+        return result, None
+    total = len(result)
+    kept = dict(list(result.items())[:_MAX_PREDICTION_ROWS])
+    note = {
+        "shown": _MAX_PREDICTION_ROWS,
+        "total": total,
+        "note": (
+            "forecast truncated; request a smaller horizon or use save_data to write "
+            "the full series to a file"
+        ),
+    }
+    return kept, note
 
 
 def _get_index_frequency_metadata(
@@ -132,13 +218,25 @@ def _run_evaluate(
 
     n = len(y)
     if initial_window is not None:
+        if not 1 <= initial_window < n:
+            raise ValueError(
+                f"initial_window must be between 1 and n-1={n - 1} "
+                f"(series has {n} observations), got {initial_window}"
+            )
         win = initial_window
     else:
-        folds = max(1, min(int(cv_folds), max(1, n - 1)))
-        win = max(1, n - folds)
+        folds = int(cv_folds)
+        if not 1 <= folds <= n - 1:
+            raise ValueError(
+                f"cv_folds must be between 1 and n-1={n - 1} "
+                f"(series has {n} observations), got {folds}"
+            )
+        win = n - folds
     cv = ExpandingWindowSplitter(initial_window=win, step_length=1, fh=[1])
 
-    results = evaluate(forecaster=instance, y=y, X=X, cv=cv, scoring=scoring)
+    # error_score="raise" — sktime's default (np.nan) swallows per-fold
+    # exceptions and reports success with all-NaN metrics
+    results = evaluate(forecaster=instance, y=y, X=X, cv=cv, scoring=scoring, error_score="raise")
     if "estimator" in results.columns:
         results = results.drop(columns=["estimator"])
 
@@ -171,6 +269,8 @@ class Executor:
         self._handle_manager = get_handle_manager()
         self._job_manager = get_job_manager()
         self._data_handles: dict[str, Any] = {}
+        # Tombstones for data handles evicted under the cap (see _cleanup_oldest_data).
+        self._evicted_data: deque[str] = deque(maxlen=1024)
         from sktime_mcp.config import settings
 
         self._max_data_handles = settings.max_data_handles
@@ -180,20 +280,58 @@ class Executor:
         to_remove = list(self._data_handles.keys())[:count]
         for handle_id in to_remove:
             del self._data_handles[handle_id]
-            logger.debug("Evicted data handle %s (limit=%d)", handle_id, self._max_data_handles)
+            self._evicted_data.append(handle_id)
+            logger.info(
+                "Evicted data handle %s (limit %d reached)", handle_id, self._max_data_handles
+            )
+
+    def data_handle_missing(self, handle_id: str) -> dict[str, Any]:
+        """Error body for a missing data handle — distinguishes evicted from unknown.
+
+        Returns the ``error`` string plus the capped available-handles summary,
+        so callers can splat it into a not-found response.
+        """
+        if handle_id in self._evicted_data:
+            error = (
+                f"Data handle '{handle_id}' was evicted (handle limit "
+                f"{self._max_data_handles} reached); reload the source."
+            )
+        else:
+            error = f"Data handle '{handle_id}' not found"
+        return {"error": error, **self.summarize_available_handles()}
 
     def _register_data_handle(self, handle_id: str, data: dict[str, Any]) -> None:
         if len(self._data_handles) >= self._max_data_handles:
             self._cleanup_oldest_data(count=max(1, self._max_data_handles // 5))
         self._data_handles[handle_id] = data
 
-    def _resolve_source(self, source: str) -> dict[str, Any]:
-        """Resolve a source id to a series, trying data_handle then demo dataset."""
+    def summarize_available_handles(self, limit: int = 5) -> dict[str, Any]:
+        """Capped view of data-handle ids for not-found error responses.
+
+        Returns the *limit* most recent handles plus the total count, so
+        error responses stay small and don't enumerate every handle in the
+        process.
+        """
+        handle_ids = list(self._data_handles.keys())
+        return {
+            "available_handles": handle_ids[-limit:],
+            "n_available_handles": len(handle_ids),
+        }
+
+    def _resolve_source(self, source: str, prefer: str = "y") -> dict[str, Any]:
+        """Resolve a source id to a series, trying data_handle then demo dataset.
+
+        ``prefer`` selects which component of a demo dataset to return
+        ("y" or "X"); the other is the fallback when the preferred one is
+        absent. Data handles always resolve to their primary series.
+        """
         if source in self._data_handles:
             return {"success": True, "data": self._data_handles[source]["y"]}
         res = self.load_dataset(source)
         if res["success"]:
-            return {"success": True, "data": res["data"]}
+            first, second = ("X", "y") if prefer == "X" else ("y", "X")
+            data = res[first] if res[first] is not None else res[second]
+            return {"success": True, "data": data}
         return res
 
     def _resolve_x_slot(self, ref: str | list[str], *, kind: str) -> dict[str, Any]:
@@ -219,7 +357,7 @@ class Executor:
                     data_res = self.load_dataset(item)
                     if not data_res["success"]:
                         return data_res
-                    items.append(_as_frame(data_res["data"]))
+                    items.append(_as_frame(_dataset_slot(data_res, "X")))
             return {"success": True, "data": items}
 
         if kind == "handle":
@@ -230,7 +368,7 @@ class Executor:
         data_res = self.load_dataset(ref)
         if not data_res["success"]:
             return data_res
-        return {"success": True, "data": data_res["data"]}
+        return {"success": True, "data": _dataset_slot(data_res, "X")}
 
     def _resolve_fit_inputs(
         self,
@@ -263,17 +401,13 @@ class Executor:
                 data_res = self.load_dataset(y_dataset)
                 if not data_res["success"]:
                     return data_res
-                y = data_res["data"]
+                y = data_res["y"]
         elif X_dataset and X_dataset == y_dataset:
             data_res = self.load_dataset(X_dataset)
             if not data_res["success"]:
                 return data_res
-            if data_res.get("exog") is not None:
-                X = data_res["data"]
-                y = data_res["exog"]
-            else:
-                y = data_res["data"]
-                X = None
+            y = data_res["y"]
+            X = data_res["X"]
         else:
             if X_dataset:
                 res = self._resolve_x_slot(X_dataset, kind="dataset")
@@ -284,7 +418,7 @@ class Executor:
                 data_res = self.load_dataset(y_dataset)
                 if not data_res["success"]:
                     return data_res
-                y = data_res["data"]
+                y = data_res["y"]
 
         return {"success": True, "X": X, "y": y}
 
@@ -331,6 +465,19 @@ class Executor:
             finally:
                 _craft_module.all_estimators = original_all
 
+            # Reject specs that don't produce an sktime object — e.g. "42",
+            # "[1,2,3]", "None" otherwise got est_ handles that failed
+            # confusingly downstream (BUG-10).
+            if not _is_sktime_object(instance):
+                return {
+                    "success": False,
+                    "error": (
+                        f"Spec did not produce an sktime estimator, got "
+                        f"{type(instance).__name__}. Provide a craft spec such as "
+                        "'NaiveForecaster(sp=12)' or 'Detrender() * ARIMA()'."
+                    ),
+                }
+
             estimator_name = type(instance).__name__
             handle_id = self._handle_manager.create_handle(
                 estimator_name=estimator_name,
@@ -345,7 +492,6 @@ class Executor:
             }
         except Exception as e:
             import sys
-            import traceback
 
             error_msg = str(e)
             if (
@@ -355,15 +501,20 @@ class Executor:
             ):
                 error_msg += f"\n\n(Hint for AI: To install missing dependencies, use the server's exact python environment by running: `{sys.executable} -m pip install <package_name>`)"
 
+            logger.error("fit failed: %s", e, exc_info=True)
             return {
                 "success": False,
                 "error": error_msg,
-                "traceback": traceback.format_exc(),
             }
 
     # L-7: We can also add custom load_dataset functions here
     def load_dataset(self, name: str) -> dict[str, Any]:
-        """Load a demo dataset."""
+        """Load a demo dataset.
+
+        Returns canonical keys with one consistent meaning for every
+        dataset family: ``y`` is always the target/labels, ``X`` is always
+        the features/panel (or None).
+        """
         demo_datasets = _get_demo_datasets()
         if name not in demo_datasets:
             return {
@@ -380,9 +531,8 @@ class Executor:
             data = loader()
 
             if isinstance(data, tuple):
-                # sktime classifier/clusterer datasets typically return (X, y)
-                # whereas forecaster datasets typically return (y) or (y, X)
-                # Let's check the shape/type to be safe, or just hardcode known ones
+                # sktime classifier/clusterer datasets return (X-panel, y-labels)
+                # whereas forecaster datasets return (y-target, X-exog)
                 if name in (
                     "arrow_head",
                     "italy_power_demand",
@@ -392,26 +542,21 @@ class Executor:
                     "plaid",
                 ):
                     X, y = data[0], data[1] if len(data) > 1 else None
-                    # swap them back for our internal representation where 'data' is the primary object requested
-                    return {
-                        "success": True,
-                        "name": name,
-                        "data": X,
-                        "exog": y,
-                        "type": str(type(X).__name__),
-                    }
+                    primary = X
                 else:
                     y, X = data[0], data[1] if len(data) > 1 else None
+                    primary = y
             else:
                 y, X = data, None
+                primary = y
 
             return {
                 "success": True,
                 "name": name,
-                "shape": y.shape if hasattr(y, "shape") else len(y),
-                "type": str(type(y).__name__),
-                "data": y,
-                "exog": X,
+                "shape": primary.shape if hasattr(primary, "shape") else len(primary),
+                "type": str(type(primary).__name__),
+                "y": y,
+                "X": X,
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -428,7 +573,7 @@ class Executor:
             handle_info = self._handle_manager.get_info(handle_id)
             instance = handle_info.instance
         except KeyError:
-            return {"success": False, "error": f"Handle not found: {handle_id}"}
+            return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
 
         obj_type = getattr(instance, "get_class_tag", lambda x, y: "")("object_type", "")
         if not hasattr(instance, "fit"):
@@ -484,9 +629,8 @@ class Executor:
             self._handle_manager.mark_fitted(handle_id)
             return {"success": True, "handle": handle_id, "fitted": True}
         except Exception as e:
-            import traceback
-
-            return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+            logger.error("%s failed: %s", type(e).__name__, e, exc_info=True)
+            return {"success": False, "error": str(e)}
 
     def predict(
         self,
@@ -502,7 +646,7 @@ class Executor:
         try:
             instance = self._handle_manager.get_instance(handle_id)
         except KeyError:
-            return {"success": False, "error": f"Handle not found: {handle_id}"}
+            return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
 
         obj_type = getattr(instance, "get_class_tag", lambda x, y: "")("object_type", "")
         if (
@@ -527,6 +671,7 @@ class Executor:
             elif obj_type in ("transformer", "clusterer"):
                 is_transformer = True
 
+        dropped_y_warning = None
         try:
             if fh is None and not (is_classifier_or_regressor or is_transformer):
                 fh = list(range(1, 13))
@@ -535,7 +680,21 @@ class Executor:
             if X is not None:
                 kwargs["X"] = X
             if y is not None:
-                kwargs["y"] = y
+                # y at predict is only for annotators; forwarding it to a
+                # forecaster raised a raw "unexpected keyword argument 'y'"
+                # TypeError (NB-18). Only pass it when predict accepts it.
+                accepts_y = False
+                try:
+                    accepts_y = "y" in inspect.signature(instance.predict).parameters
+                except (ValueError, TypeError):
+                    accepts_y = False
+                if accepts_y:
+                    kwargs["y"] = y
+                else:
+                    dropped_y_warning = (
+                        f"y was ignored: {obj_type or 'this estimator'}.predict() does not "
+                        "accept y (it is only used by annotators/detectors)."
+                    )
 
             if is_classifier_or_regressor:
                 # Classifiers take X in predict (X is the feature matrix)
@@ -577,28 +736,37 @@ class Executor:
 
             from sktime_mcp.server import sanitize_for_json
 
+            truncated_note = None
             if isinstance(predictions, pd.Series):
                 predictions_copy = predictions.copy()
                 predictions_copy.index = predictions_copy.index.astype(str)
-                result = predictions_copy.to_dict()
+                result, truncated_note = _cap_prediction_rows(predictions_copy.to_dict())
             elif isinstance(predictions, pd.DataFrame):
                 predictions_copy = predictions.copy()
                 predictions_copy.index = predictions_copy.index.astype(str)
-                # Need to handle multiindex columns if they exist (like in predict_interval)
+                # Flatten multiindex columns (predict_interval/quantiles) for JSON.
                 if isinstance(predictions_copy.columns, pd.MultiIndex):
-                    # Flatten multiindex for JSON serialization
                     predictions_copy.columns = [
                         "_".join(map(str, col)) for col in predictions_copy.columns.values
                     ]
-                result = predictions_copy.to_dict(orient="list")
+                # orient="index" keeps the time index as the key so interval /
+                # variance values map to time points, consistent with predict
+                # (NB-21). orient="list" dropped the index entirely.
+                result, truncated_note = _cap_prediction_rows(
+                    predictions_copy.to_dict(orient="index")
+                )
             else:
                 result = sanitize_for_json(predictions)
 
             out = {
                 "success": True,
-                "horizon": len(fh) if hasattr(fh, "__len__") else fh,
                 "mode": mode,
             }
+            # horizon is only meaningful for forecasters; echoing it for
+            # classifiers/regressors/transformers implied a truncation that
+            # didn't happen (N-01).
+            if not (is_classifier_or_regressor or is_transformer):
+                out["horizon"] = len(fh) if hasattr(fh, "__len__") else fh
             if mode == "predict":
                 out["predictions"] = result
             elif mode == "predict_interval":
@@ -609,6 +777,10 @@ class Executor:
                 out["alpha"] = alpha
             else:
                 out["predictions"] = result
+            if truncated_note:
+                out["predictions_truncated"] = truncated_note
+            if dropped_y_warning:
+                out["warnings"] = [dropped_y_warning]
             return out
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -652,19 +824,19 @@ class Executor:
                 data_res = self.load_dataset(X_dataset)
                 if not data_res["success"]:
                     raise ValueError(data_res.get("error", "Failed to load dataset"))
-                X = data_res["data"]
-                y = data_res.get("exog")
+                y = data_res["y"]
+                X = data_res["X"]
             else:
                 if X_dataset:
                     data_res = self.load_dataset(X_dataset)
                     if not data_res["success"]:
                         raise ValueError(data_res.get("error", "Failed to load dataset"))
-                    X = data_res["data"]
+                    X = data_res["X"] if data_res["X"] is not None else data_res["y"]
                 if y_dataset:
                     data_res = self.load_dataset(y_dataset)
                     if not data_res["success"]:
                         raise ValueError(data_res.get("error", "Failed to load dataset"))
-                    y = data_res["data"]
+                    y = data_res["y"]
 
             fh = list(range(1, horizon + 1))
 
@@ -701,13 +873,11 @@ class Executor:
             return result
 
         except Exception as e:
-            import traceback
-
             self._job_manager.update_job(
                 job_id,
                 status=JobStatus.FAILED,
                 current_step="Prediction failed.",
-                errors=[str(e), traceback.format_exc()],
+                errors=[str(e)],  # traceback logged server-side, not leaked to the client
             )
             return {"success": False, "error": str(e)}
 
@@ -721,7 +891,19 @@ class Executor:
         try:
             instance = self._handle_manager.get_instance(handle_id)
         except KeyError:
-            return {"success": False, "error": f"Handle not found: {handle_id}"}
+            return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
+
+        # Block private/dunder methods: they are not part of the estimator API
+        # and expose internals — e.g. __reduce__ dumps __dict__ including the
+        # fitted _y/_X training data to any caller (BUG-11).
+        if method_name.startswith("_") and method_name not in _ALLOWED_DUNDERS:
+            return {
+                "success": False,
+                "error": (
+                    f"Method '{method_name}' is private and not callable via call_method. "
+                    "Only public estimator methods are exposed."
+                ),
+            }
 
         if not hasattr(instance, method_name):
             obj_type = getattr(instance, "get_class_tag", lambda x, y: "")("object_type", "")
@@ -744,22 +926,37 @@ class Executor:
                             return {"success": False, "error": _X_LIST_MIN_MSG}
                         items: list[Any] = []
                         for name in v:
-                            data_res = self.load_dataset(name)
-                            if not data_res.get("success"):
+                            if not isinstance(name, str):
                                 return {
                                     "success": False,
-                                    "error": data_res.get(
-                                        "error", f"Failed to load dataset: {name}"
+                                    "error": (
+                                        f"X list items must be strings, got {type(name).__name__}"
                                     ),
                                 }
-                            items.append(_as_frame(data_res["data"]))
+                            data_res = self.load_dataset(name)
+                            if not data_res.get("success"):
+                                error_res = {
+                                    "success": False,
+                                    "error": data_res.get("error", f"Unknown dataset: {name}"),
+                                }
+                                if "available" in data_res:
+                                    error_res["available"] = data_res["available"]
+                                return error_res
+                            items.append(_as_frame(_dataset_slot(data_res, actual_key)))
                         kwargs[actual_key] = items
                         del kwargs[k]
                     elif isinstance(v, str):
                         data_res = self.load_dataset(v)
-                        if data_res.get("success"):
-                            kwargs[actual_key] = data_res["data"]
-                            del kwargs[k]
+                        if not data_res.get("success"):
+                            error_res = {
+                                "success": False,
+                                "error": data_res.get("error", f"Unknown dataset: {v}"),
+                            }
+                            if "available" in data_res:
+                                error_res["available"] = data_res["available"]
+                            return error_res
+                        kwargs[actual_key] = _dataset_slot(data_res, actual_key)
+                        del kwargs[k]
                 elif k.endswith("_data_handle"):
                     actual_key = k.replace("_data_handle", "")
                     if isinstance(v, list):
@@ -787,6 +984,11 @@ class Executor:
 
             result = method(**kwargs)
 
+            # Materialize generators (e.g. splitter.split) so the caller gets
+            # the actual values instead of a useless repr string
+            if inspect.isgenerator(result):
+                result = list(result)
+
             from sktime_mcp.server import sanitize_for_json
 
             if hasattr(result, "to_dict"):
@@ -802,9 +1004,8 @@ class Executor:
 
             return {"success": True, "result": sanitized}
         except Exception as e:
-            import traceback
-
-            return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+            logger.error("%s failed: %s", type(e).__name__, e, exc_info=True)
+            return {"success": False, "error": str(e)}
 
     def update(
         self,
@@ -817,10 +1018,25 @@ class Executor:
         try:
             instance = self._handle_manager.get_instance(handle_id)
         except KeyError:
-            return {"success": False, "error": f"Handle not found: {handle_id}"}
+            return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
 
         if not self._handle_manager.is_fitted(handle_id):
             return {"success": False, "error": "Estimator not fitted"}
+
+        if y is None:
+            return {
+                "success": False,
+                "error": (
+                    "update requires new data — provide y_handle or y_dataset "
+                    "(and optionally X_handle/X_dataset)."
+                ),
+            }
+
+        # update mutates the live instance in place; snapshot fitted state so
+        # a rejected update does not leave the handle un-fitted
+        import copy
+
+        snapshot = copy.deepcopy(instance)
 
         try:
             kwargs = update_params or {}
@@ -834,6 +1050,7 @@ class Executor:
                 "message": "Estimator updated successfully",
             }
         except Exception as e:
+            self._handle_manager.replace_instance(handle_id, snapshot)
             return {"success": False, "error": str(e)}
 
     def get_fitted_params(self, handle_id: str) -> dict[str, Any]:
@@ -841,7 +1058,7 @@ class Executor:
         try:
             instance = self._handle_manager.get_instance(handle_id)
         except KeyError:
-            return {"success": False, "error": f"Handle not found: {handle_id}"}
+            return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
 
         if not self._handle_manager.is_fitted(handle_id):
             return {"success": False, "error": "Estimator not fitted"}
@@ -930,15 +1147,13 @@ class Executor:
             return {"success": True, "handle": handle_id}
 
         except Exception as e:
-            import traceback
-
             from sktime_mcp.runtime.jobs import JobStatus
 
             self._job_manager.update_job(
                 job_id,
                 status=JobStatus.FAILED,
                 current_step="Training failed.",
-                errors=[str(e), traceback.format_exc()],
+                errors=[str(e)],  # traceback logged server-side, not leaked to the client
             )
             return {"success": False, "error": str(e)}
 
@@ -964,7 +1179,7 @@ class Executor:
             try:
                 instance = self._handle_manager.get_instance(handle_id)
             except KeyError as err:
-                raise ValueError(f"Handle not found: {handle_id}") from err
+                raise ValueError(self._handle_manager.describe_missing(handle_id)) from err
 
             y_res = self._resolve_source(y)
             if not y_res["success"]:
@@ -973,7 +1188,7 @@ class Executor:
 
             _X = None
             if X:
-                x_res = self._resolve_source(X)
+                x_res = self._resolve_source(X, prefer="X")
                 if not x_res["success"]:
                     raise ValueError(x_res["error"])
                 _X = x_res["data"]
@@ -982,7 +1197,10 @@ class Executor:
             if metric:
                 scoring = _resolve_metric_scoring(metric)
                 if scoring is None:
-                    raise ValueError(f"Unknown metric: {metric}")
+                    raise ValueError(
+                        f"Unknown metric: {metric}. "
+                        "Check available metrics with query_registry(task='metric')."
+                    )
 
             # Step 2: Run cross-validation
             self._job_manager.update_job(
@@ -1020,13 +1238,11 @@ class Executor:
             return result
 
         except Exception as e:
-            import traceback
-
             self._job_manager.update_job(
                 job_id,
                 status=JobStatus.FAILED,
                 current_step="Evaluation failed.",
-                errors=[str(e), traceback.format_exc()],
+                errors=[str(e)],  # traceback logged server-side, not leaked to the client
             )
             return {"success": False, "error": str(e)}
 
@@ -1101,12 +1317,13 @@ class Executor:
             if getattr(self, "_auto_format_enabled", True):
                 try:
                     format_result = self.format_data_handle(
-                        data_handle, auto_infer_freq=True, fill_missing=True, remove_duplicates=True
+                        data_handle,
+                        auto_infer_freq=True,
+                        fill_missing=True,
+                        remove_duplicates=True,
+                        release_original=True,
                     )
                     if format_result["success"]:
-                        # Free the raw handle — the formatted copy supersedes it
-                        if data_handle in self._data_handles:
-                            del self._data_handles[data_handle]
                         return {
                             "success": True,
                             "data_handle": format_result["data_handle"],
@@ -1118,6 +1335,15 @@ class Executor:
                 except Exception as e:
                     logger.warning(f"Auto-formatting failed: {e}")
                     # Continue with unformatted data if formatting fails
+
+            # Auto-format disabled or failed: still normalise the stored handle to
+            # a PeriodIndex where possible so seasonal forecasters work (#531).
+            stored = self._data_handles.get(data_handle)
+            if stored is not None:
+                stored["y"] = _to_period_index_if_possible(stored["y"])
+                if stored.get("X") is not None:
+                    stored["X"] = _to_period_index_if_possible(stored["X"])
+
             _final_meta = adapter.get_metadata().copy()
             _final_meta["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
             return {
@@ -1226,7 +1452,11 @@ class Executor:
             if getattr(self, "_auto_format_enabled", True):
                 try:
                     format_result = self.format_data_handle(
-                        data_handle, auto_infer_freq=True, fill_missing=True, remove_duplicates=True
+                        data_handle,
+                        auto_infer_freq=True,
+                        fill_missing=True,
+                        remove_duplicates=True,
+                        release_original=True,
                     )
                     if format_result["success"]:
                         data_handle = format_result["data_handle"]
@@ -1267,12 +1497,17 @@ class Executor:
         auto_infer_freq: bool = True,
         fill_missing: bool = True,
         remove_duplicates: bool = True,
+        release_original: bool = False,
     ) -> dict[str, Any]:
         """
         Format data associated with a handle.
+
+        The input handle is preserved unless ``release_original`` is True —
+        that flag is for internal auto-format-on-load, where the raw handle
+        was never exposed to the caller.
         """
         if data_handle not in self._data_handles:
-            return {"success": False, "error": f"Data handle '{data_handle}' not found"}
+            return {"success": False, **self.data_handle_missing(data_handle)}
 
         data_info = self._data_handles[data_handle]
         y = data_info["y"].copy()
@@ -1294,7 +1529,9 @@ class Executor:
                 X = X[~X.index.duplicated(keep="first")]
             changes_made["duplicates_removed"] = n_duplicates
 
-        # 2. Sort by index
+        # 2. Sort by index (report it, like the other repairs — NB-08)
+        if not y.index.is_monotonic_increasing:
+            changes_made["sorted"] = True
         y = y.sort_index()
         if X is not None:
             X = X.sort_index()
@@ -1356,6 +1593,12 @@ class Executor:
             if X is not None:
                 X.index.freq = changes_made["frequency"]
 
+        # 6. Normalise a regular DatetimeIndex to PeriodIndex so seasonal
+        # forecasters can predict on handle-loaded data (#531).
+        y = _to_period_index_if_possible(y)
+        if X is not None:
+            X = _to_period_index_if_possible(X)
+
         # Generate new handle
         new_handle = f"data_{uuid.uuid4().hex[:8]}"
 
@@ -1379,8 +1622,7 @@ class Executor:
         }
         self._register_data_handle(new_handle, new_data)
 
-        # Release the original to prevent intermediate handles from accumulating
-        if data_handle in self._data_handles:
+        if release_original and data_handle in self._data_handles:
             del self._data_handles[data_handle]
 
         return {
@@ -1432,7 +1674,7 @@ class Executor:
         else:
             return {
                 "success": False,
-                "error": f"Data handle '{data_handle}' not found",
+                "error": self.data_handle_missing(data_handle)["error"],
             }
 
 

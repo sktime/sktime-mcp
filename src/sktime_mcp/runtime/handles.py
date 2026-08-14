@@ -6,6 +6,7 @@ Manages references to instantiated estimator objects.
 
 import logging
 import uuid
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -42,6 +43,21 @@ class HandleManager:
     def __init__(self, max_handles: int = 100):
         self._handles: dict[str, HandleInfo] = {}
         self._max_handles = max_handles
+        # Tombstones: ids evicted to stay under the cap, so a later lookup can
+        # say "evicted" instead of an indistinguishable "not found".
+        self._evicted: deque[str] = deque(maxlen=1024)
+
+    def describe_missing(self, handle_id: str) -> str:
+        """Message for a handle that isn't present — distinguishes evicted from unknown."""
+        if handle_id in self._evicted:
+            return (
+                f"Estimator handle '{handle_id}' was evicted (handle limit "
+                f"{self._max_handles} reached); re-create it with instantiate."
+            )
+        return f"Handle not found: {handle_id}"
+
+    def was_evicted(self, handle_id: str) -> bool:
+        return handle_id in self._evicted
 
     def create_handle(
         self,
@@ -67,16 +83,21 @@ class HandleManager:
 
     def get_instance(self, handle_id: str) -> Any:
         if handle_id not in self._handles:
-            raise KeyError(f"Handle not found: {handle_id}")
+            raise KeyError(self.describe_missing(handle_id))
         return self._handles[handle_id].instance
 
     def get_info(self, handle_id: str) -> HandleInfo:
         if handle_id not in self._handles:
-            raise KeyError(f"Handle not found: {handle_id}")
+            raise KeyError(self.describe_missing(handle_id))
         return self._handles[handle_id]
 
     def exists(self, handle_id: str) -> bool:
         return handle_id in self._handles
+
+    def replace_instance(self, handle_id: str, instance: Any) -> None:
+        """Swap the live instance behind a handle (e.g. rollback after a failed update)."""
+        if handle_id in self._handles:
+            self._handles[handle_id].instance = instance
 
     def mark_fitted(self, handle_id: str) -> None:
         if handle_id in self._handles:
@@ -108,6 +129,10 @@ class HandleManager:
         )
         for handle_id, _ in sorted_handles[:count]:
             del self._handles[handle_id]
+            self._evicted.append(handle_id)
+            logger.info(
+                "Evicted estimator handle %s (limit %d reached)", handle_id, self._max_handles
+            )
 
 
 _handle_manager_instance: HandleManager | None = None

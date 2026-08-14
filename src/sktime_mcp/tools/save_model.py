@@ -5,9 +5,26 @@ Saves estimator instances via sktime's MLflow integration.
 """
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from sktime_mcp.runtime.handles import get_handle_manager
+
+# MLflow URI schemes that must be passed through untouched
+_MLFLOW_URI_PREFIXES = ("runs:/", "models:/", "mlflow-artifacts:/")
+
+
+def resolve_model_path(path: str) -> str:
+    """Expand ~ and resolve local filesystem paths to absolute form.
+
+    MLflow URIs (runs:/, models:/, mlflow-artifacts:/, scheme://...) are
+    returned unchanged. Without this, "~/model" creates a literal "~"
+    directory in the server cwd, and relative paths land in the server's
+    working directory with no way for the caller to learn where.
+    """
+    if path.startswith(_MLFLOW_URI_PREFIXES) or "://" in path:
+        return path
+    return str(Path(path).expanduser().resolve())
 
 
 def _get_mlflow_save_model() -> Callable[..., Any]:
@@ -43,7 +60,7 @@ def save_model_tool(
     try:
         estimator = handle_manager.get_instance(estimator_handle)
     except KeyError:
-        return {"success": False, "error": f"Handle not found: {estimator_handle}"}
+        return {"success": False, "error": handle_manager.describe_missing(estimator_handle)}
 
     if not handle_manager.is_fitted(estimator_handle):
         handle_info = handle_manager.get_info(estimator_handle)
@@ -58,14 +75,16 @@ def save_model_tool(
     if mlflow_params is not None and not isinstance(mlflow_params, dict):
         return {"success": False, "error": "mlflow_params must be a dictionary"}
 
+    resolved_path = resolve_model_path(path)
+
     try:
         save_model = _get_mlflow_save_model()
-        save_model(sktime_model=estimator, path=path, **(mlflow_params or {}))
+        save_model(sktime_model=estimator, path=resolved_path, **(mlflow_params or {}))
         return {
             "success": True,
             "estimator_handle": estimator_handle,
-            "saved_path": path,
-            "message": f"Model saved successfully to '{path}'",
+            "saved_path": resolved_path,
+            "message": f"Model saved successfully to '{resolved_path}'",
         }
     except Exception as exc:
         return {"success": False, "error": str(exc)}
