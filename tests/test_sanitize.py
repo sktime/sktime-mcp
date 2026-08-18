@@ -137,3 +137,30 @@ class TestEdgeCases:
     def test_nan(self):
         result = sanitize_for_json(np.float64("nan"))
         json.dumps(result, default=str)
+
+    def test_circular_dict(self):
+        d = {"a": 1}
+        d["self"] = d
+        result = sanitize_for_json(d)
+        assert result["self"] == "<circular reference>"
+        json.dumps(result)
+
+    def test_circular_list(self):
+        lst = [1, 2]
+        lst.append(lst)
+        result = sanitize_for_json(lst)
+        assert result[2] == "<circular reference>"
+        json.dumps(result)
+
+    def test_indirect_cycle(self):
+        a = {}
+        b = {"a": a}
+        a["b"] = b
+        result = sanitize_for_json(a)
+        assert result["b"]["a"] == "<circular reference>"
+        json.dumps(result)
+
+    def test_sibling_containers_not_falsely_flagged(self):
+        shared = {"x": 1}
+        result = sanitize_for_json({"left": shared, "right": shared})
+        assert result == {"left": {"x": 1}, "right": {"x": 1}}
