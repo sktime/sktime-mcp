@@ -108,8 +108,10 @@ class FileAdapter(DataSourceAdapter):
         # Set frequency if specified
         freq = self.config.get("frequency")
         if freq:
-            with contextlib.suppress(Exception):
+            try:
                 df = df.asfreq(freq)
+            except Exception as e:
+                raise ValueError(f"Invalid frequency '{freq}': {e}") from e
 
         self._data = df
 

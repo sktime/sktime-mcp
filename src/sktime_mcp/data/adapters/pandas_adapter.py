@@ -5,7 +5,6 @@ Supports loading data from pandas DataFrames with automatic
 time index detection and validation.
 """
 
-import contextlib
 from typing import Any
 
 import pandas as pd
@@ -90,8 +89,10 @@ class PandasAdapter(DataSourceAdapter):
         # Infer or set frequency
         freq = self.config.get("frequency")
         if freq:
-            with contextlib.suppress(Exception):
+            try:
                 df = df.asfreq(freq)
+            except Exception as e:
+                raise ValueError(f"Invalid frequency '{freq}': {e}") from e
         elif isinstance(df.index, pd.DatetimeIndex) and df.index.freq is None:
             # Try to infer frequency (needs >= 3 points; short series just skip it)
             inferred_freq = _safe_infer_freq(df.index)
