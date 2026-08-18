@@ -135,5 +135,19 @@ class TestEdgeCases:
         assert sanitize_for_json({}) == {}
 
     def test_nan(self):
-        result = sanitize_for_json(np.float64("nan"))
-        json.dumps(result, default=str)
+        # NaN/Inf have no JSON representation; map to null so json.dumps
+        # works without the default=str escape hatch.
+        assert sanitize_for_json(np.float64("nan")) is None
+        json.dumps(sanitize_for_json(np.float64("nan")))
+
+    def test_inf(self):
+        assert sanitize_for_json(np.float64("inf")) is None
+        assert sanitize_for_json(np.float64("-inf")) is None
+        json.dumps(sanitize_for_json(np.float64("inf")))
+
+    def test_nan_in_dict(self):
+        # Realistic case: a metric dict containing a NaN value must be
+        # JSON-serializable without raising.
+        result = sanitize_for_json({"score": np.float64("nan"), "n": 10})
+        json.dumps(result)
+        assert result == {"score": None, "n": 10}
