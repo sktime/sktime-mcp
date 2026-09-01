@@ -5,6 +5,7 @@ Manages references to instantiated estimator objects.
 """
 
 import logging
+import threading
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
@@ -46,18 +47,24 @@ class HandleManager:
         # Tombstones: ids evicted to stay under the cap, so a later lookup can
         # say "evicted" instead of an indistinguishable "not found".
         self._evicted: deque[str] = deque(maxlen=1024)
+        # Handles are read and written from worker threads (fit_async runs fit
+        # in a thread pool) while the asyncio thread serves other tool calls.
+        # Reentrant because create_handle evicts while already holding it.
+        self._lock = threading.RLock()
 
     def describe_missing(self, handle_id: str) -> str:
         """Message for a handle that isn't present — distinguishes evicted from unknown."""
-        if handle_id in self._evicted:
-            return (
-                f"Estimator handle '{handle_id}' was evicted (handle limit "
-                f"{self._max_handles} reached); re-create it with instantiate."
-            )
-        return f"Handle not found: {handle_id}"
+        with self._lock:
+            if handle_id in self._evicted:
+                return (
+                    f"Estimator handle '{handle_id}' was evicted (handle limit "
+                    f"{self._max_handles} reached); re-create it with instantiate."
+                )
+            return f"Handle not found: {handle_id}"
 
     def was_evicted(self, handle_id: str) -> bool:
-        return handle_id in self._evicted
+        with self._lock:
+            return handle_id in self._evicted
 
     def create_handle(
         self,
@@ -66,73 +73,85 @@ class HandleManager:
         params: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> str:
-        if len(self._handles) >= self._max_handles:
-            self._cleanup_oldest()
+        with self._lock:
+            if len(self._handles) >= self._max_handles:
+                self._cleanup_oldest()
 
-        handle_id = f"est_{uuid.uuid4().hex[:12]}"
-        handle_info = HandleInfo(
-            handle_id=handle_id,
-            estimator_name=estimator_name,
-            instance=instance,
-            params=params or {},
-            created_at=datetime.now(),
-            metadata=metadata or {},
-        )
-        self._handles[handle_id] = handle_info
-        return handle_id
+            handle_id = f"est_{uuid.uuid4().hex[:12]}"
+            handle_info = HandleInfo(
+                handle_id=handle_id,
+                estimator_name=estimator_name,
+                instance=instance,
+                params=params or {},
+                created_at=datetime.now(),
+                metadata=metadata or {},
+            )
+            self._handles[handle_id] = handle_info
+            return handle_id
 
     def get_instance(self, handle_id: str) -> Any:
-        if handle_id not in self._handles:
-            raise KeyError(self.describe_missing(handle_id))
-        return self._handles[handle_id].instance
+        with self._lock:
+            if handle_id not in self._handles:
+                raise KeyError(self.describe_missing(handle_id))
+            return self._handles[handle_id].instance
 
     def get_info(self, handle_id: str) -> HandleInfo:
-        if handle_id not in self._handles:
-            raise KeyError(self.describe_missing(handle_id))
-        return self._handles[handle_id]
+        with self._lock:
+            if handle_id not in self._handles:
+                raise KeyError(self.describe_missing(handle_id))
+            return self._handles[handle_id]
 
     def exists(self, handle_id: str) -> bool:
-        return handle_id in self._handles
+        with self._lock:
+            return handle_id in self._handles
 
     def replace_instance(self, handle_id: str, instance: Any) -> None:
         """Swap the live instance behind a handle (e.g. rollback after a failed update)."""
-        if handle_id in self._handles:
-            self._handles[handle_id].instance = instance
+        with self._lock:
+            if handle_id in self._handles:
+                self._handles[handle_id].instance = instance
 
     def mark_fitted(self, handle_id: str) -> None:
-        if handle_id in self._handles:
-            self._handles[handle_id].fitted = True
+        with self._lock:
+            if handle_id in self._handles:
+                self._handles[handle_id].fitted = True
 
     def is_fitted(self, handle_id: str) -> bool:
-        if handle_id not in self._handles:
-            return False
-        return self._handles[handle_id].fitted
+        with self._lock:
+            if handle_id not in self._handles:
+                return False
+            return self._handles[handle_id].fitted
 
     def release_handle(self, handle_id: str) -> bool:
-        if handle_id in self._handles:
-            del self._handles[handle_id]
-            return True
-        return False
+        with self._lock:
+            if handle_id in self._handles:
+                del self._handles[handle_id]
+                return True
+            return False
 
     def list_handles(self) -> list[dict[str, Any]]:
-        return [info.to_dict() for info in self._handles.values()]
+        with self._lock:
+            return [info.to_dict() for info in self._handles.values()]
 
     def clear_all(self) -> int:
-        count = len(self._handles)
-        self._handles.clear()
-        return count
+        with self._lock:
+            count = len(self._handles)
+            self._handles.clear()
+            return count
 
     def _cleanup_oldest(self, count: int = 10) -> None:
-        sorted_handles = sorted(
-            self._handles.items(),
-            key=lambda x: x[1].created_at,
-        )
-        for handle_id, _ in sorted_handles[:count]:
-            del self._handles[handle_id]
-            self._evicted.append(handle_id)
-            logger.info(
-                "Evicted estimator handle %s (limit %d reached)", handle_id, self._max_handles
+        """Evict the oldest handles. Caller must hold ``self._lock``."""
+        with self._lock:
+            sorted_handles = sorted(
+                self._handles.items(),
+                key=lambda x: x[1].created_at,
             )
+            for handle_id, _ in sorted_handles[:count]:
+                del self._handles[handle_id]
+                self._evicted.append(handle_id)
+                logger.info(
+                    "Evicted estimator handle %s (limit %d reached)", handle_id, self._max_handles
+                )
 
 
 _handle_manager_instance: HandleManager | None = None
