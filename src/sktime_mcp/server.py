@@ -152,7 +152,7 @@ def sanitize_for_json(obj, _seen=None):
     Handles:
     - Standard Python scalars and containers (dict, list, tuple)
     - NumPy integer/float scalars and ndarrays
-    - Pandas Timestamp, NaT, NA, and Series/DataFrame
+    - Pandas Timestamp, NaT, NA, Series/DataFrame, Index
     - Arbitrary objects (fallback to str repr)
     - Circular references (returns a placeholder instead of recursing forever)
     """
@@ -196,6 +196,8 @@ def sanitize_for_json(obj, _seen=None):
             return sanitize_for_json(obj.tolist(), _seen)
         if isinstance(obj, pd.DataFrame):
             return sanitize_for_json(obj.to_dict(orient="records"), _seen)
+        if isinstance(obj, pd.Index):
+            return [sanitize_for_json(item, _seen) for item in obj.tolist()]
 
     # --- Standard Python containers ---
     if isinstance(obj, dict):
