@@ -48,8 +48,16 @@ def test_data_handle_eviction_message(monkeypatch):
     def _mk(i):
         idx = pd.period_range("2020-01", periods=6, freq="M")
         hid = f"data_test_{i:02d}"
-        ex._register_data_handle(hid, {"y": pd.Series(range(6), index=idx), "X": None,
-                                       "metadata": {}, "validation": {}, "config": {}})
+        ex._register_data_handle(
+            hid,
+            {
+                "y": pd.Series(range(6), index=idx),
+                "X": None,
+                "metadata": {},
+                "validation": {},
+                "config": {},
+            },
+        )
         return hid
 
     ids = [_mk(i) for i in range(12)]  # far past the cap -> oldest evicted
@@ -74,8 +82,16 @@ def test_inspect_data_surfaces_eviction():
     ids = []
     for i in range(12):
         hid = f"data_evict_{i:02d}"
-        ex._register_data_handle(hid, {"y": pd.Series(range(6), index=idx), "X": None,
-                                       "metadata": {}, "validation": {}, "config": {}})
+        ex._register_data_handle(
+            hid,
+            {
+                "y": pd.Series(range(6), index=idx),
+                "X": None,
+                "metadata": {},
+                "validation": {},
+                "config": {},
+            },
+        )
         ids.append(hid)
     evicted = next(h for h in ids if h in ex._evicted_data)
     res = inspect_data_tool(data_handle=evicted)

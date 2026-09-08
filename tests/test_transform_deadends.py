@@ -1,8 +1,8 @@
 """transform/convert dead ends and JSON round-trip (#537)."""
 
 import contextlib
-import os
 import tempfile
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -82,8 +82,8 @@ class TestJsonRoundTrip:
     def test_json_save_then_load(self, series_handle):
         ex, dh = series_handle
         with tempfile.TemporaryDirectory() as d:
-            path = os.path.join(d, "data.json")
-            saved = save_data_tool(dh, path=path, format="json")
+            path = Path(d) / "data.json"
+            saved = save_data_tool(dh, path=str(path), format="json")
             assert saved["success"], saved
             loaded = ex.load_data_source(
                 {"type": "file", "path": path, "time_column": "time", "target_column": "value"}

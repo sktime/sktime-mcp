@@ -72,12 +72,12 @@ class TestResolveModelPath:
         assert resolved.startswith("/")
 
     def test_relative_path_absolutized(self):
-        import os
+        from pathlib import Path
 
         from sktime_mcp.tools.save_model import resolve_model_path
 
         resolved = resolve_model_path("relative_model_dir")
-        assert resolved == os.path.join(os.getcwd(), "relative_model_dir")
+        assert resolved == str(Path.cwd() / "relative_model_dir")
 
     def test_mlflow_uris_untouched(self):
         from sktime_mcp.tools.save_model import resolve_model_path

@@ -35,9 +35,7 @@ def test_format_keeps_input_handle_alive(data_handle):
     new_handle = result["data_handle"]
     try:
         assert new_handle != data_handle
-        assert data_handle in executor._data_handles, (
-            "format released the caller's input handle"
-        )
+        assert data_handle in executor._data_handles, "format released the caller's input handle"
         assert new_handle in executor._data_handles
     finally:
         executor._data_handles.pop(new_handle, None)

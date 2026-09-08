@@ -213,9 +213,7 @@ def _run_evaluate(
 
     # error_score="raise" — sktime's default (np.nan) swallows per-fold
     # exceptions and reports success with all-NaN metrics
-    results = evaluate(
-        forecaster=instance, y=y, X=X, cv=cv, scoring=scoring, error_score="raise"
-    )
+    results = evaluate(forecaster=instance, y=y, X=X, cv=cv, scoring=scoring, error_score="raise")
     if "estimator" in results.columns:
         results = results.drop(columns=["estimator"])
 
@@ -282,7 +280,9 @@ class Executor:
         for handle_id in to_remove:
             del self._data_handles[handle_id]
             self._evicted_data.append(handle_id)
-            logger.info("Evicted data handle %s (limit %d reached)", handle_id, self._max_data_handles)
+            logger.info(
+                "Evicted data handle %s (limit %d reached)", handle_id, self._max_data_handles
+            )
 
     def data_handle_missing(self, handle_id: str) -> dict[str, Any]:
         """Error body for a missing data handle — distinguishes evicted from unknown.
@@ -778,7 +778,6 @@ class Executor:
             return result
 
         except Exception as e:
-
             self._job_manager.update_job(
                 job_id,
                 status=JobStatus.FAILED,
@@ -1039,7 +1038,6 @@ class Executor:
             return {"success": True, "handle": handle_id}
 
         except Exception as e:
-
             from sktime_mcp.runtime.jobs import JobStatus
 
             self._job_manager.update_job(
@@ -1131,7 +1129,6 @@ class Executor:
             return result
 
         except Exception as e:
-
             self._job_manager.update_job(
                 job_id,
                 status=JobStatus.FAILED,

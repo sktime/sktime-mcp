@@ -26,7 +26,10 @@ def _validate_evaluate_inputs(executor, estimator_handle: str, y: str) -> dict[s
     try:
         instance = executor._handle_manager.get_instance(estimator_handle)
     except KeyError:
-        return {"success": False, "error": executor._handle_manager.describe_missing(estimator_handle)}
+        return {
+            "success": False,
+            "error": executor._handle_manager.describe_missing(estimator_handle),
+        }
 
     get_tag = getattr(instance, "get_class_tag", None)
     obj_type = get_tag("object_type", "") if callable(get_tag) else ""

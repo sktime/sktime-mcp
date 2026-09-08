@@ -128,8 +128,7 @@ def test_evaluate_per_fold_error_surfaces_as_failure():
     try:
         result = evaluate_tool(estimator_handle=handle, y="test_nan_dh", cv_folds=3)
         assert not result["success"], (
-            "Expected per-fold errors to fail the evaluation, got: "
-            f"{result.get('metrics')}"
+            f"Expected per-fold errors to fail the evaluation, got: {result.get('metrics')}"
         )
         assert result["error"]
         # And in no case may a NaN metric masquerade as a result
@@ -185,9 +184,7 @@ class TestCvFoldsValidation:
     def test_initial_window_exceeding_series_rejected(self):
         executor, handle = self._handle()
         try:
-            result = evaluate_tool(
-                estimator_handle=handle, y="airline", initial_window=144
-            )
+            result = evaluate_tool(estimator_handle=handle, y="airline", initial_window=144)
             assert not result["success"]
             assert "initial_window" in result["error"]
         finally:

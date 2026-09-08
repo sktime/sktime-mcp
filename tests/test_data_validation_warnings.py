@@ -35,4 +35,3 @@ def test_load_data_source_async_propagates_default_target_warning():
     assert result["success"] is True
     warnings = result["validation"]["warnings"]
     assert any("Target column not specified" in warning for warning in warnings)
-
