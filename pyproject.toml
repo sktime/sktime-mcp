@@ -45,6 +45,7 @@ dependencies = [
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
+    "numba>=0.59",
     "ruff>=0.1.0",
     "sphinx>=7.0.0",
     "sphinx-rtd-theme>=2.0.0",
