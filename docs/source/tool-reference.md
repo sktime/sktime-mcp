@@ -84,7 +84,7 @@ Discover sktime estimators, metrics, or capability tags.
 | `offset` | integer | — | `0` | Skip this many results (pagination). |
 
 Commonly useful tags: `capability:pred_int` (prediction intervals),
-`capability:multivariate`, `handles-missing-data`, `scitype:y`.
+`capability:multivariate`, `capability:missing_values`, `requires-fh-in-fit`.
 
 ### `describe_component`
 

@@ -227,8 +227,7 @@ async def list_tools() -> list[Tool]:
                 "Common tags you can filter estimators by: "
                 "'capability:pred_int' (bool) - prediction intervals, "
                 "'capability:multivariate' (bool) - multivariate support, "
-                "'handles-missing-data' (bool) - NaN handling, "
-                "'scitype:y' (str) - target type ('univariate'/'multivariate'/'both'), "
+                "'capability:missing_values' (bool) - NaN handling, "
                 "'requires-fh-in-fit' (bool) - needs forecast horizon at fit time. "
                 "Set task='tag' (or 'tags') to query the full list of capability tags."
             ),
