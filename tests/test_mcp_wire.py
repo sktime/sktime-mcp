@@ -7,13 +7,19 @@ validation, the ``isError`` flag, stdio hygiene). These tests do.
 
 import json
 import os
+import socket
+import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import anyio
 import pytest
 from mcp.client.session import ClientSession
+from mcp.client.sse import sse_client
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.shared.memory import create_client_server_memory_streams
 
@@ -146,3 +152,70 @@ async def test_stray_stdout_output_does_not_corrupt_stdio_protocol(tmp_path: Pat
     stderr = stderr_path.read_text()
     assert "STRAY PYTHON PRINT" in stderr
     assert "STRAY FD-LEVEL WRITE" in stderr
+
+
+def _free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def _wait_for_http(url: str, proc: subprocess.Popen, timeout: float = 90.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            raise RuntimeError(f"uvicorn exited early with code {proc.returncode}")
+        try:
+            with urllib.request.urlopen(url, timeout=1):
+                return
+        except (urllib.error.URLError, OSError):
+            time.sleep(0.25)
+    raise TimeoutError(f"{url} did not come up within {timeout}s")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="uses POSIX process handling")
+async def test_sse_app_completes_initialize_and_serves_tools(tmp_path: Path):
+    """The HTTP/SSE app must complete the MCP handshake (regression for audit F-02).
+
+    Before the ``/messages/`` endpoint was mounted as a raw ASGI app, FastAPI
+    sent a second response after the transport's 202, so initialize never
+    completed.
+    """
+    src_dir = str(Path(sktime_mcp.__file__).resolve().parents[1])
+    port = _free_port()
+    log_path = tmp_path / "uvicorn.log"
+    with log_path.open("w") as log:
+        proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "uvicorn",
+                "sktime_mcp.app:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(port),
+            ],
+            env={**os.environ, "PYTHONPATH": src_dir},
+            stdout=log,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            _wait_for_http(f"http://127.0.0.1:{port}/", proc)
+            with anyio.fail_after(60):
+                async with sse_client(f"http://127.0.0.1:{port}/sse") as (read, write):
+                    async with ClientSession(read, write) as session:
+                        init = await session.initialize()
+                        listed = await session.list_tools()
+                        result = await session.call_tool(
+                            "query_registry", {"task": "forecaster", "limit": 1}
+                        )
+        finally:
+            proc.terminate()
+            proc.wait(timeout=15)
+
+    assert init.server_info.name == "sktime-mcp"
+    assert len(listed.tools) == EXPECTED_TOOL_COUNT
+    assert result.is_error is False
+    assert _body(result)["success"] is True
+    assert "Unexpected ASGI message" not in log_path.read_text()
