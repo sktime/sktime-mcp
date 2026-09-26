@@ -27,7 +27,8 @@ classifiers = [
 ]
 
 dependencies = [
-    "mcp>=1.0.0,<2",
+    "mcp>=2.0,<3",
+    "jsonschema>=4.0",
     "sktime>=1.1.0,<2",
     "pandas>=2.0.0,<3.1",
     "numpy>=1.26.0,<3",

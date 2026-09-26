@@ -7,14 +7,13 @@ that exposes sktime's registry and execution capabilities to LLMs.
 
 import argparse
 import asyncio
+import functools
 import json
 import logging
 import os
 import sys
-from io import TextIOWrapper
-from typing import Any
 
-import anyio
+import jsonschema
 
 from sktime_mcp import __version__
 
@@ -32,9 +31,16 @@ try:
 except ImportError:
     _PANDAS_AVAILABLE = False
 
-from mcp.server import Server
+from mcp.server import Server, ServerRequestContext
 from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.types import (
+    CallToolRequestParams,
+    CallToolResult,
+    ListToolsResult,
+    PaginatedRequestParams,
+    TextContent,
+    Tool,
+)
 
 from sktime_mcp.config import settings
 from sktime_mcp.tools.codegen import export_code_tool
@@ -111,8 +117,6 @@ logging.basicConfig(
     handlers=_handlers,
 )
 logger = logging.getLogger(__name__)
-# Create MCP server instance
-server = Server("sktime-mcp")
 
 _CHARS_PER_TOKEN = 4
 
@@ -215,9 +219,8 @@ def sanitize_for_json(obj, _seen=None):
     return str(obj)
 
 
-@server.list_tools()
-async def list_tools() -> list[Tool]:
-    """List all available MCP tools."""
+def get_tools() -> list[Tool]:
+    """Return the definitions of all MCP tools exposed by this server."""
     return [
         # -- Discovery -------------------------------------------------------
         Tool(
@@ -991,14 +994,34 @@ async def list_tools() -> list[Tool]:
     ]
 
 
+@functools.cache
+def _tools_by_name() -> dict[str, Tool]:
+    return {tool.name: tool for tool in get_tools()}
+
+
+async def list_tools(
+    ctx: ServerRequestContext, params: PaginatedRequestParams | None
+) -> ListToolsResult:
+    """MCP ``tools/list`` handler."""
+    return ListToolsResult(tools=get_tools())
+
+
 # ===================================================================
 # Tool dispatcher
 # ===================================================================
 
 
-@server.call_tool()
-async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
-    """Handle tool calls."""
+def _error_result(message: str) -> CallToolResult:
+    """Build the structured ``{"success": false, "error": ...}`` error response."""
+    body = json.dumps({"success": False, "error": message})
+    return CallToolResult(content=[TextContent(type="text", text=body)], is_error=True)
+
+
+async def call_tool(ctx: ServerRequestContext, params: CallToolRequestParams) -> CallToolResult:
+    """MCP ``tools/call`` handler: validate the arguments, then dispatch."""
+    name = params.name
+    arguments = params.arguments or {}
+
     import importlib
     import site
     import sys
@@ -1013,6 +1036,17 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
     logger.info(f"=== Tool Call: {name} ===")
     logger.info(f"Arguments: {json.dumps(arguments, indent=2)}")
+
+    # mcp 2.x no longer validates arguments against inputSchema before dispatch,
+    # so wrongly typed values (e.g. the string "false" for a boolean) are rejected
+    # here, before any tool code runs.
+    tool = _tools_by_name().get(name)
+    if tool is not None:
+        try:
+            jsonschema.validate(instance=arguments, schema=tool.input_schema)
+        except jsonschema.ValidationError as e:
+            logger.warning(f"Input validation error for {name}: {e.message}")
+            return _error_result(f"Input validation error: {e.message}")
 
     try:
         # -- Discovery -------------------------------------------------------
@@ -1216,10 +1250,19 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         response_text = json.dumps(sanitized_result, indent=2, default=str)
         truncated_text = _apply_response_token_limit(name, response_text)
 
-        return [TextContent(type="text", text=truncated_text)]
+        return CallToolResult(content=[TextContent(type="text", text=truncated_text)])
     except Exception as e:
         logger.exception(f"Error in tool {name}")
-        return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
+        return _error_result(str(e))
+
+
+# Constructed after the handlers it binds; ``sktime_mcp.app`` imports this instance.
+server = Server(
+    "sktime-mcp",
+    version=__version__,
+    on_list_tools=list_tools,
+    on_call_tool=call_tool,
+)
 
 
 # ===================================================================
@@ -1243,18 +1286,16 @@ async def _periodic_job_cleanup():
 
 
 async def run_server():
-    """Run the MCP server."""
-    # Stdio safety: redirect stdout to stderr to protect MCP JSON-RPC
-    # streams from being corrupted by stray prints in third-party libraries.
-    original_stdout = sys.stdout
-    sys.stdout = sys.stderr
-
-    # Explicitly wrap the original stdout buffer for the MCP server output
-    mcp_stdout = anyio.wrap_file(TextIOWrapper(original_stdout.buffer, encoding="utf-8"))
-
+    """Run the MCP server on stdio."""
     asyncio.create_task(_periodic_job_cleanup())
 
-    async with stdio_server(stdout=mcp_stdout) as (read_stream, write_stream):
+    # Stdio safety: ``stdio_server()`` serves the JSON-RPC wire from a private
+    # duplicate of fd 1 and points fd 1 at stderr for the duration, so stray
+    # output from tools, third-party libraries and child processes misses the
+    # wire. That claim is best-effort (it is skipped when stdout is not fd 1),
+    # so the Python-level stream is redirected as well once the wire is claimed.
+    async with stdio_server() as (read_stream, write_stream):
+        sys.stdout = sys.stderr
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
 
