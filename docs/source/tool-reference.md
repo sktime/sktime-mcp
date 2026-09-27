@@ -159,7 +159,7 @@ Generate predictions from a fitted estimator.
 | `coverage` | float or list | — | `0.9` | Coverage level(s) — used by `predict_interval`. |
 | `alpha` | float or list | — | — | Quantile level(s) — used by `predict_quantiles`. |
 | `X_handle` | string | — | — | Data handle for `X`. |
-| `y_handle` | string | — | — | Data handle for `y` (needed by detectors/annotators). |
+| `y_handle` | string | — | — | Data handle for `y`: the series a detector annotates or a transformer transforms (as in `fit`); forecasters ignore it. |
 | `X_dataset` | string | — | — | Demo dataset name for `X`. |
 | `y_dataset` | string | — | — | Demo dataset name for `y`. |
 | `run_async` | boolean | — | `false` | Run in the background, return a `job_id`. |
