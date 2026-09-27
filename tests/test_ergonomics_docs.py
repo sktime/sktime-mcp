@@ -14,6 +14,7 @@ from sktime_mcp.tools.data_tools import load_data_source_tool, release_data_hand
 from sktime_mcp.tools.evaluate import evaluate_tool
 from sktime_mcp.tools.inspect_data import inspect_data_tool
 from sktime_mcp.tools.instantiate import instantiate_tool, release_handle_tool
+from sktime_mcp.tools.list_available_data import list_available_data_tool
 
 
 def _release(handle):
@@ -196,3 +197,29 @@ def test_every_dispatchable_name_is_declared():
     dispatched = set(re.findall(r'name == "([a-z_]+)"', src))
     declared = {t.name for t in asyncio.run(list_tools())}
     assert dispatched == declared, dispatched ^ declared
+
+
+# -- (h) list_available_data omits the filtered-out category -----------------
+
+
+def test_list_available_data_demo_filter_omits_active_handles(data_handle):
+    res = list_available_data_tool(is_demo=True)
+    assert res["success"]
+    assert "active_handles" not in res
+    assert res["total"] == sum(len(v) for v in res["system_demos"].values())
+
+
+def test_list_available_data_handles_filter_omits_system_demos(data_handle):
+    res = list_available_data_tool(is_demo=False)
+    assert res["success"]
+    assert "system_demos" not in res
+    assert data_handle in {h["handle"] for h in res["active_handles"]}
+    assert res["total"] == len(res["active_handles"])
+
+
+def test_list_available_data_unfiltered_has_both(data_handle):
+    res = list_available_data_tool()
+    assert "system_demos" in res and "active_handles" in res
+    assert res["total"] == sum(len(v) for v in res["system_demos"].values()) + len(
+        res["active_handles"]
+    )

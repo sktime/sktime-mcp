@@ -552,7 +552,8 @@ async def list_tools() -> list[Tool]:
             description=(
                 "List all data available for use — system demo datasets and active "
                 "user-loaded data handles — in a single unified response. "
-                "Use is_demo=true for demos only, is_demo=false for handles only, "
+                "Use is_demo=true for demos only (response has no active_handles key), "
+                "is_demo=false for handles only (no system_demos key), "
                 "or omit is_demo to get both."
             ),
             inputSchema={

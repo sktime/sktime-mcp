@@ -103,6 +103,10 @@ Lists demo datasets and active user-loaded data handles in one response.
 | :--- | :--- | :---: | :--- |
 | `is_demo` | boolean | — | `true` = demos only, `false` = live handles only, omit = both. |
 
+Returns `system_demos` (dict of task -> dataset names) and `active_handles`
+(list of handle records); a filtered-out category is omitted from the
+response rather than returned empty.
+
 ---
 
 ## Instantiation and handles

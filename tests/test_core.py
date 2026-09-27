@@ -195,7 +195,7 @@ class TestTools:
 
         assert result["success"]
         assert len(result["system_demos"]) > 0
-        assert result["active_handles"] == []
+        assert "active_handles" not in result
         assert result["total"] > 0
         assert "airline" in result["system_demos"]["forecasting"]
 
@@ -206,7 +206,7 @@ class TestTools:
         result = list_available_data_tool(is_demo=False)
 
         assert result["success"]
-        assert result["system_demos"] == {}
+        assert "system_demos" not in result
         assert isinstance(result["active_handles"], list)
         assert result["total"] == len(result["active_handles"])
 
