@@ -196,14 +196,17 @@ async def test_sse_app_completes_initialize_and_serves_tools(tmp_path: Path):
                 "--port",
                 str(port),
             ],
-            env={**os.environ, "PYTHONPATH": src_dir},
+            env={**os.environ, "PYTHONPATH": src_dir, "SKTIME_MCP_HTTP_TOKEN": "wire-token"},
             stdout=log,
             stderr=subprocess.STDOUT,
         )
         try:
             _wait_for_http(f"http://127.0.0.1:{port}/", proc)
             with anyio.fail_after(60):
-                async with sse_client(f"http://127.0.0.1:{port}/sse") as (read, write):
+                async with sse_client(
+                    f"http://127.0.0.1:{port}/sse",
+                    headers={"Authorization": "Bearer wire-token"},
+                ) as (read, write):
                     async with ClientSession(read, write) as session:
                         init = await session.initialize()
                         listed = await session.list_tools()
@@ -215,7 +218,8 @@ async def test_sse_app_completes_initialize_and_serves_tools(tmp_path: Path):
             proc.wait(timeout=15)
 
     assert init.server_info.name == "sktime-mcp"
-    assert len(listed.tools) == EXPECTED_TOOL_COUNT
+    # run_command is hidden over HTTP by default (tests/test_http_security.py).
+    assert len(listed.tools) == EXPECTED_TOOL_COUNT - 1
     assert result.is_error is False
     assert _body(result)["success"] is True
     assert "Unexpected ASGI message" not in log_path.read_text()
