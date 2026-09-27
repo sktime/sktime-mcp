@@ -8,6 +8,7 @@ and running fit/predict operations.
 import asyncio
 import inspect
 import logging
+import re
 import uuid
 from collections import deque
 from typing import Any
@@ -96,6 +97,40 @@ _MAX_PREDICTION_ROWS = 500
 # for callable metrics/aligners). Everything else starting with "_" is blocked
 # (BUG-11) — notably __reduce__/__class__/__getattribute__ and private methods.
 _ALLOWED_DUNDERS = frozenset({"__call__", "__len__", "__repr__", "__str__"})
+
+
+# Factory functions LLMs commonly try in a craft spec, mapped to the class
+# constructor expression that craft does accept.
+_FACTORY_HINTS: dict[str, str] = {
+    "make_reduction": (
+        "RecursiveTabularRegressionForecaster(estimator=<sklearn regressor>, "
+        "window_length=<int>) for strategy='recursive' "
+        "(DirectTabularRegressionForecaster for 'direct'), or "
+        "YfromX(estimator=<sklearn regressor>) to regress y on exogenous X only"
+    ),
+    "make_pipeline": (
+        "the '*' operator, e.g. 'Detrender() * NaiveForecaster()', or "
+        "TransformedTargetForecaster(steps=[...])"
+    ),
+}
+
+
+def _spec_name_error(spec: str, err: NameError) -> str:
+    """Explain a NameError raised by craft: specs must be class constructor calls."""
+    name = getattr(err, "name", None)
+    if not name:
+        match = re.search(r"name '([^']+)' is not defined", str(err))
+        name = match.group(1) if match else str(err)
+    msg = (
+        f"'{name}' is not a known sktime class. instantiate specs must be class "
+        "constructor expressions such as 'NaiveForecaster(sp=12)' or "
+        "'Detrender() * ARIMA()'; factory functions (e.g. make_reduction) are not "
+        "supported. "
+    )
+    hint = _FACTORY_HINTS.get(name)
+    if hint:
+        return msg + f"Use {hint} instead."
+    return msg + f"Check the name with query_registry(query='{name}')."
 
 
 def _is_sktime_object(obj: Any) -> bool:
@@ -401,6 +436,11 @@ class Executor:
                 "estimator": estimator_name,
                 "spec": spec,
             }
+        except NameError as e:
+            # craft evaluates the spec; an unknown name is a bare NameError,
+            # e.g. for factory functions such as make_reduction (F-66).
+            logger.error("instantiate failed: %s", e)
+            return {"success": False, "error": _spec_name_error(spec, e)}
         except Exception as e:
             import sys
 
