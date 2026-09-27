@@ -216,7 +216,7 @@ class TagResolver:
             tags["capability:pred_int"] = probabilistic
 
         if handles_missing is not None:
-            tags["handles-missing-data"] = handles_missing
+            tags["capability:missing_values"] = handles_missing
 
         if multivariate is not None:
             tags["capability:multivariate"] = multivariate
