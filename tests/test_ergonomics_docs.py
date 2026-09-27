@@ -2,12 +2,14 @@
 
 import asyncio
 import contextlib
+import json
+import re
 
 import pytest
 
 from sktime_mcp.runtime.executor import _resolve_metric_scoring, get_executor
 from sktime_mcp.runtime.handles import get_handle_manager
-from sktime_mcp.server import list_tools
+from sktime_mcp.server import call_tool, list_tools
 from sktime_mcp.tools.data_tools import load_data_source_tool, release_data_handle_tool
 from sktime_mcp.tools.evaluate import evaluate_tool
 from sktime_mcp.tools.inspect_data import inspect_data_tool
@@ -158,3 +160,39 @@ def test_inspect_data_with_est_id_points_at_estimator_tools():
         assert "estimator handle" in res["error"]
     finally:
         _release(h)
+
+
+# -- (i) undeclared tools are not dispatchable; unknown-tool shape -----------
+
+
+def _call(name, arguments):
+    out = asyncio.run(call_tool(name, arguments))
+    return json.loads(out[0].text)
+
+
+def test_unknown_tool_response_has_success_false():
+    res = _call("no_such_tool", {})
+    assert res == {"success": False, "error": "Unknown tool: no_such_tool"}
+
+
+@pytest.mark.parametrize("name", ["list_data_sources", "auto_format_on_load"])
+def test_undeclared_tools_are_not_dispatchable(name):
+    declared = {t.name for t in asyncio.run(list_tools())}
+    assert name not in declared
+    executor = get_executor()
+    before = executor._auto_format_enabled
+    res = _call(name, {"enabled": False})
+    assert res == {"success": False, "error": f"Unknown tool: {name}"}
+    assert executor._auto_format_enabled == before  # no state mutation
+
+
+def test_every_dispatchable_name_is_declared():
+    # Every `name == "..."` branch in call_tool must be a declared tool.
+    import inspect
+
+    import sktime_mcp.server as server_module
+
+    src = inspect.getsource(server_module.call_tool)
+    dispatched = set(re.findall(r'name == "([a-z_]+)"', src))
+    declared = {t.name for t in asyncio.run(list_tools())}
+    assert dispatched == declared, dispatched ^ declared

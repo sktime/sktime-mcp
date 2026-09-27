@@ -1106,15 +1106,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         elif name == "load_data_source":
             result = load_data_source_tool(arguments["config"], arguments.get("run_async", False))
 
-        elif name == "list_data_sources":
-            # Deprecated — info is now in load_data_source description
-            logger.warning(
-                "list_data_sources is deprecated; info is in load_data_source description"
-            )
-            from sktime_mcp.tools.data_tools import list_data_sources_tool
-
-            result = list_data_sources_tool()
-
         elif name == "release_data_handle":
             result = release_data_handle_tool(arguments["data_handle"])
 
@@ -1145,15 +1136,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 format=arguments.get("format", "csv"),
                 overwrite=arguments.get("overwrite", False),
             )
-
-        elif name == "auto_format_on_load":
-            # Deprecated — now controlled via SKTIME_MCP_AUTO_FORMAT env var
-            logger.warning(
-                "auto_format_on_load is deprecated; use env var SKTIME_MCP_AUTO_FORMAT=true/false"
-            )
-            from sktime_mcp.tools.format_tools import auto_format_on_load_tool
-
-            result = auto_format_on_load_tool(arguments.get("enabled", True))
 
         # -- Visualization ---------------------------------------------------
         elif name == "plot_series":
@@ -1210,7 +1192,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         elif name == "run_command":
             result = run_command_tool(arguments["command"])
         else:
-            result = {"error": f"Unknown tool: {name}"}
+            result = {"success": False, "error": f"Unknown tool: {name}"}
 
         logger.info(f"=== Result for {name} ===")
 
