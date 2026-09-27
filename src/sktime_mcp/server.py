@@ -256,12 +256,18 @@ async def list_tools() -> list[Tool]:
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Maximum results (default: 50). Ignored if task='tag'.",
+                        "description": (
+                            "Maximum results per page (default: 50). Also applies to "
+                            "task='tag': tags are paginated, check total/has_more."
+                        ),
                         "default": 50,
                     },
                     "offset": {
                         "type": "integer",
-                        "description": "Skip this many results for pagination (default: 0). Ignored if task='tag'.",
+                        "description": (
+                            "Skip this many results for pagination (default: 0). "
+                            "Also applies to task='tag'."
+                        ),
                         "default": 0,
                     },
                 },
@@ -693,7 +699,8 @@ async def list_tools() -> list[Tool]:
                 "infer/set frequency, remove duplicate timestamps, fill index gaps, "
                 "and forward/backward-fill missing values; returns changes_applied. "
                 "action='convert': convert y to a different sktime mtype via convert_to() "
-                "(requires to_mtype, e.g. 'pd.DataFrame', 'pd.Series', 'np.ndarray'). "
+                "(requires to_mtype, e.g. 'pd.DataFrame' or 'pd.Series'; see to_mtype "
+                "for the accepted list). "
                 "Replaces the legacy format_time_series tool."
             ),
             inputSchema={
@@ -729,8 +736,11 @@ async def list_tools() -> list[Tool]:
                     "to_mtype": {
                         "type": "string",
                         "description": (
-                            "(convert only, required) Target sktime mtype string, "
-                            "e.g. 'pd.DataFrame', 'pd.Series', 'np.ndarray'."
+                            "(convert only, required) Target sktime mtype string. "
+                            "Accepted mtypes: 'pd.Series' or 'pd.DataFrame' (Series), "
+                            "'pd-multiindex', 'nested_univ' or 'df-list' (Panel), "
+                            "'pd_multiindex_hier' (Hierarchical). Index-less numpy mtypes "
+                            "are rejected because they drop the time index."
                         ),
                     },
                 },

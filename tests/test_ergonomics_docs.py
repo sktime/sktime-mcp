@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import json
+import pathlib
 import re
 
 import pytest
@@ -223,3 +224,42 @@ def test_list_available_data_unfiltered_has_both(data_handle):
     assert res["total"] == sum(len(v) for v in res["system_demos"].values()) + len(
         res["active_handles"]
     )
+
+
+# -- (d)-(g) schema and docs drift -------------------------------------------
+
+_ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+def test_query_registry_schema_says_tags_are_paginated():
+    tools = {t.name: t for t in asyncio.run(list_tools())}
+    props = tools["query_registry"].inputSchema["properties"]
+    for key in ("limit", "offset"):
+        desc = props[key]["description"]
+        assert "Ignored" not in desc, (key, desc)
+        assert "task='tag'" in desc, (key, desc)
+
+
+def test_transform_data_schema_does_not_advertise_np_ndarray():
+    tools = {t.name: t for t in asyncio.run(list_tools())}
+    tool = tools["transform_data"]
+    to_mtype = tool.inputSchema["properties"]["to_mtype"]["description"]
+    assert "np.ndarray" not in tool.description
+    assert "np.ndarray" not in to_mtype
+    assert "pd.Series" in to_mtype and "pd-multiindex" in to_mtype
+
+
+def test_tool_reference_documents_url_source_with_url_key():
+    text = (_ROOT / "docs" / "source" / "tool-reference.md").read_text()
+    url_row = next(line for line in text.splitlines() if line.startswith("| `url` |"))
+    assert "`url`" in url_row.split("|")[2]
+    assert "`path`" not in url_row
+
+
+def test_readme_tables_list_all_tools_and_config_vars():
+    text = (_ROOT / "README.md").read_text()
+    declared = {t.name for t in asyncio.run(list_tools())}
+    missing = {name for name in declared if f"`{name}`" not in text}
+    assert not missing, missing
+    for var in ("SKTIME_MCP_MAX_DATA_HANDLES", "SKTIME_MCP_MAX_RESPONSE_TOKENS"):
+        assert f"| `{var}` |" in text, var

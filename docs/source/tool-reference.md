@@ -80,8 +80,8 @@ Discover sktime estimators, metrics, or capability tags.
 | `task` | string | — | — | Filter by scitype: `forecaster`, `classifier`, `regressor`, `transformer`, `clusterer`, `detector`, `splitter`, `metric`, `param_est`, `aligner`, `network`. Set to `tag`/`tags` to list available tags instead. |
 | `tags` | object | — | — | Filter by capability tags, e.g. `{"capability:pred_int": true}`. Ignored when `task="tag"`. |
 | `query` | string | — | — | Case-insensitive substring search over name and description. Combines with `task` and `tags`. |
-| `limit` | integer | — | `50` | Maximum results. |
-| `offset` | integer | — | `0` | Skip this many results (pagination). |
+| `limit` | integer | — | `50` | Maximum results per page. Also applies to `task="tag"`: tags are paginated, check `total`/`has_more`. |
+| `offset` | integer | — | `0` | Skip this many results (pagination). Also applies to `task="tag"`. |
 
 Commonly useful tags: `capability:pred_int` (prediction intervals),
 `capability:multivariate`, `capability:missing_values`, `requires-fh-in-fit`.
@@ -231,7 +231,7 @@ Supported `config.type` values:
 | `pandas` | `data`, `time_column`, `target_column` |
 | `file` | `path` (CSV / `.xlsx` / Parquet), `time_column`, `target_column` |
 | `sql` | connection and query keys, `time_column`, `target_column` |
-| `url` | `path`/URL, `time_column`, `target_column` |
+| `url` | `url` (HTTP/HTTPS link to a CSV / `.xlsx` / Parquet file), `time_column`, `target_column` |
 
 ```json
 {
@@ -276,7 +276,7 @@ Returns a **new** handle; the input handle is unchanged.
 | `auto_infer_freq` | boolean | — | `true` | *(format)* Infer and set `DatetimeIndex` frequency. |
 | `fill_missing` | boolean | — | `true` | *(format)* Forward/backward-fill missing values. |
 | `remove_duplicates` | boolean | — | `true` | *(format)* Drop duplicate timestamps, keeping the first. |
-| `to_mtype` | string | — | — | *(convert, required)* Target mtype, e.g. `pd.DataFrame`, `pd.Series`, `np.ndarray`. |
+| `to_mtype` | string | — | — | *(convert, required)* Target mtype: `pd.Series` or `pd.DataFrame` (Series), `pd-multiindex`, `nested_univ` or `df-list` (Panel), `pd_multiindex_hier` (Hierarchical). Index-less numpy mtypes (`np.ndarray`, `numpy3D`, …) are rejected because they drop the time index. |
 
 `action="format"` also fills index gaps and reports what it did in `changes_applied`.
 

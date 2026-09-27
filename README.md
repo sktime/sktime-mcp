@@ -177,6 +177,7 @@ This exposes standard SSE on `/sse` and message passing on `/messages/`.
 You can configure the server's behavior at runtime using environment variables:
 
 - `SKTIME_MCP_MAX_RESPONSE_TOKENS`: Maximum tokens allowed per tool response (e.g., `10000`). If a response exceeds this limit, it is truncated and appended with a notice. Set to `0` (default) for unlimited.
+- `SKTIME_MCP_MAX_DATA_HANDLES`: Maximum number of data handles kept in memory; the oldest are evicted beyond this. Defaults to `50`.
 - `SKTIME_MCP_LOG_LEVEL`: Server logging verbosity level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Defaults to `WARNING`.
 - `SKTIME_MCP_AUTO_FORMAT`: Enables or disables automatic time-series formatting during data loading.
 - `SKTIME_MCP_JOB_MAX_AGE_HOURS`: Maximum hours before completed background jobs are automatically pruned. Defaults to `24`.
@@ -239,6 +240,8 @@ The server can be configured via environment variables:
 | `SKTIME_MCP_AUTO_FORMAT` | Automatically format time series data on load (`true`/`false`) | `"true"` |
 | `SKTIME_MCP_JOB_MAX_AGE_HOURS` | Maximum age in hours before background jobs are cleared | `24` |
 | `SKTIME_MCP_JOB_CLEANUP_INTERVAL` | Interval in seconds for periodic job cleanup checks | `3600` |
+| `SKTIME_MCP_MAX_DATA_HANDLES` | Maximum number of data handles kept in memory; the oldest are evicted beyond this | `50` |
+| `SKTIME_MCP_MAX_RESPONSE_TOKENS` | Maximum tokens per tool response; longer responses are truncated with a notice (`0` = unlimited) | `0` |
 
 ## 📚 Available Tools
 
@@ -250,7 +253,9 @@ The full tool reference is in the project documentation: https://sktime.github.i
 | Bring data into the session | `load_data_source`, `inspect_data`, `transform_data`, `split_data`, `save_data` | Load files, inline data, SQL, or URLs into handles; inspect, clean, split, and persist them. |
 | Build and run models | `instantiate`, `fit`, `predict`, `update`, `get_fitted_params`, `call_method` | Create sktime estimators or pipelines, fit them, forecast, update, or call native methods. |
 | Evaluate and reproduce | `evaluate`, `export_code`, `save_model`, `load_model` | Cross-validate, generate Python code, and persist fitted models. |
+| Visualize | `plot_series` | Plot one or more series to a PNG/SVG/WebP file, or inline as base64. |
 | Manage runtime state | `list_handles`, `release_handle`, `release_data_handle`, `list_jobs`, `check_job_status`, `cancel_job` | See what is in memory, clean it up, and track async work. |
+| Repair the environment | `run_command` | Runs an arbitrary shell command on the host — install missing packages, inspect files. |
 
 The practical mental model is simple: prompts create tool calls, tool calls create handles, and handles let later prompts continue the workflow.
 
