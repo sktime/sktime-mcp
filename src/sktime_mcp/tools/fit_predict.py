@@ -8,6 +8,7 @@ import logging
 from typing import Any
 
 from sktime_mcp.runtime.executor import get_executor
+from sktime_mcp.tools._params import coerce_integer
 
 logger = logging.getLogger(__name__)
 
@@ -15,17 +16,16 @@ logger = logging.getLogger(__name__)
 def _validate_horizon(horizon: Any) -> dict[str, Any]:
     """
     Validate the horizon parameter.
-    Checks if the horizon parameter is strictly integer or not
+    Accepts ints and integral floats (``12.0`` is a valid JSON integer, F-46);
+    the coerced int is returned under ``"horizon"``.
     Checks if the horizon parameter is greater than 0 or not
     """
     warnings = []
-    if not isinstance(horizon, int):
+    horizon, err = coerce_integer(horizon, "horizon")
+    if err:
         return {
             "valid": False,
-            "error": (
-                f"'horizon' must be an integer, got {type(horizon).__name__}. "
-                f'Example: {{"horizon": 12}}'
-            ),
+            "error": f'{err} Example: {{"horizon": 12}}',
             "warnings": warnings,
         }
     if horizon <= 0:
@@ -34,7 +34,7 @@ def _validate_horizon(horizon: Any) -> dict[str, Any]:
             "error": f"Invalid horizon={horizon}. horizon must be a positive integer greater than 0.",
             "warnings": warnings,
         }
-    return {"valid": True, "warnings": warnings}
+    return {"valid": True, "horizon": horizon, "warnings": warnings}
 
 
 def fit_tool(
@@ -152,6 +152,7 @@ def predict_tool(
             "success": False,
             "error": validation["error"],
         }
+    horizon = validation["horizon"]
 
     executor = get_executor()
 
