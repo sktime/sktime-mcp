@@ -104,8 +104,11 @@ def _is_sktime_object(obj: Any) -> bool:
     craft evaluates arbitrary specs, so a spec like "42" returns an int. Such
     non-objects should not receive an estimator handle (BUG-10). We accept
     anything deriving from skbase's BaseObject, falling back to a duck-typed
-    check for get_params + a scitype tag.
+    check for get_params + a scitype tag. A bare class (spec "NaiveForecaster"
+    without parentheses) has both attributes but is not an instance.
     """
+    if isinstance(obj, type):
+        return False
     try:
         from skbase.base import BaseObject
 
@@ -612,6 +615,20 @@ class Executor:
                 instance = craft(spec)
             finally:
                 _craft_module.all_estimators = original_all
+
+            # A bare class name ("NaiveForecaster") evaluates to the class;
+            # wrapping it in a handle made fit fail with "missing 1 required
+            # positional argument: 'y'" (#556 item 25).
+            if isinstance(instance, type):
+                name = instance.__name__
+                return {
+                    "success": False,
+                    "error": (
+                        f"Spec '{spec}' names the class {name} but does not "
+                        f"instantiate it. Call it with its parameters, e.g. "
+                        f"'{name}()' or '{name}(sp=12)'."
+                    ),
+                }
 
             # Reject specs that don't produce an sktime object — e.g. "42",
             # "[1,2,3]", "None" otherwise got est_ handles that failed

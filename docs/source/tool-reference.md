@@ -116,7 +116,8 @@ Composition is expressed directly in the spec — sktime validates it.
 | :--- | :--- | :---: | :--- |
 | `spec` | string | ✅ | Craft spec, e.g. `ARIMA(order=(1, 1, 1))` or `Detrender() * ARIMA()`. |
 
-Returns an `est_…` handle.
+Returns an `est_…` handle. The spec must *call* the class: a bare class name
+such as `NaiveForecaster` is rejected with a hint to write `NaiveForecaster()`.
 
 ### `list_handles`
 
