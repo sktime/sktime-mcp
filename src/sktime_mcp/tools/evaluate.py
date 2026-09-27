@@ -8,7 +8,14 @@ import asyncio
 import logging
 from typing import Any
 
-from sktime_mcp.runtime.executor import _resolve_metric_scoring, _run_evaluate, get_executor
+from sktime_mcp.runtime.executor import (
+    _build_evaluate_result,
+    _check_step_length,
+    _normalize_fh,
+    _resolve_metric_scoring,
+    _run_evaluate,
+    get_executor,
+)
 from sktime_mcp.runtime.jobs import get_job_manager
 
 logger = logging.getLogger(__name__)
@@ -90,14 +97,25 @@ def evaluate_tool(
     cv_folds: int = 3,
     metric: str | None = None,
     initial_window: int | None = None,
+    fh: int | list[int] | None = None,
+    step_length: int = 1,
     run_async: bool = False,
 ) -> dict[str, Any]:
     """
     Cross-validate an estimator on a dataset.
 
     y and X accept data_handle ids or built-in demo dataset names.
+    Each fold trains on an expanding window and scores the ``fh`` steps after
+    its cutoff (int n -> steps 1..n; list -> exactly those steps; default 1).
+    Cutoffs advance by ``step_length`` (default 1). Without ``initial_window``,
+    exactly ``cv_folds`` folds are run, the last ending at the final observation.
     Set run_async=True to run as a background job.
     """
+    try:
+        _normalize_fh(fh)
+        _check_step_length(step_length)
+    except ValueError as e:
+        return {"success": False, "error": str(e)}
     if initial_window is None and cv_folds < 1:
         return {
             "success": False,
@@ -139,6 +157,8 @@ def evaluate_tool(
                 cv_folds=cv_folds,
                 metric=metric,
                 initial_window=initial_window,
+                fh=fh,
+                step_length=step_length,
                 job_id=job_id,
             )
         )
@@ -178,18 +198,11 @@ def evaluate_tool(
             }
 
     try:
-        fold_results, metrics, summary = _run_evaluate(
-            instance, _y, _X, cv_folds, scoring, initial_window
+        fold_results, metrics, summary, cv_info = _run_evaluate(
+            instance, _y, _X, cv_folds, scoring, initial_window, fh, step_length
         )
     except Exception as e:
         logger.exception("Error during evaluate")
         return {"success": False, "error": str(e)}
 
-    return {
-        "success": True,
-        "metrics": metrics,
-        "fold_results": fold_results,
-        "summary": summary,
-        "cv_folds_run": len(fold_results),
-        "cv_folds_requested": cv_folds,
-    }
+    return _build_evaluate_result(fold_results, metrics, summary, cv_info, cv_folds, initial_window)
