@@ -881,7 +881,10 @@ async def list_tools() -> list[Tool]:
                     },
                     "path": {
                         "type": "string",
-                        "description": "Local directory or URI where the model will be saved",
+                        "description": (
+                            "Local directory (a file:// URI is accepted) or MLflow URI "
+                            "(runs:/, models:/, s3://, ...) where the model will be saved"
+                        ),
                     },
                     "mlflow_params": {
                         "type": "object",

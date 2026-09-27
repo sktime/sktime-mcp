@@ -167,3 +167,45 @@ class TestExportCodeRunsOutsideServer:
         assert res["success"], res
         assert "y = load_airline()" in res["code"]
         assert "y, X" not in res["code"]
+
+
+# ---------------------------------------------------------------------------
+# F-29: save_model with a file:// URI
+# ---------------------------------------------------------------------------
+
+
+class TestSaveModelFileUri:
+    def test_resolve_file_uri_to_local_path(self, tmp_path):
+        target = tmp_path / "model_dir"
+        assert resolve_model_path(f"file://{target}") == str(target)
+        assert resolve_model_path(f"file://localhost{target}") == str(target)
+        assert resolve_model_path("file://~/model_dir") == str(Path("~/model_dir").expanduser())
+
+    def test_other_schemes_still_pass_through(self):
+        for uri in ("s3://bucket/model", "runs:/abc/model", "models:/m/1"):
+            assert resolve_model_path(uri) == uri
+
+    def test_save_model_file_uri_targets_local_dir(self, monkeypatch, tmp_path):
+        import sktime_mcp.tools.save_model as save_model_module
+
+        calls = {}
+
+        def fake_save_model(**kwargs):
+            calls.update(kwargs)
+
+        monkeypatch.setattr(save_model_module, "_get_mlflow_save_model", lambda: fake_save_model)
+        monkeypatch.chdir(tmp_path)
+
+        hm = get_handle_manager()
+        handle = hm.create_handle("NaiveForecaster", object())
+        hm.mark_fitted(handle)
+        try:
+            target = tmp_path / "saved" / "model"
+            result = save_model_tool(handle, f"file://{target}")
+        finally:
+            hm.release_handle(handle)
+
+        assert result["success"], result
+        assert calls["path"] == str(target)
+        assert result["saved_path"] == str(target)
+        assert not (tmp_path / "file:").exists()

@@ -340,7 +340,7 @@ Fit examples unpack `(y, X)` datasets such as `longley` and pass `X`.
 | Argument | Type | Required | Description |
 | :--- | :--- | :---: | :--- |
 | `estimator_handle` | string | ✅ | Estimator to save. |
-| `path` | string | ✅ | Local directory or URI. |
+| `path` | string | ✅ | Local directory (`file://` URIs accepted) or MLflow URI. |
 | `mlflow_params` | object | — | Extra parameters for `sktime.utils.mlflow_sktime.save_model`. |
 
 ### `load_model`
