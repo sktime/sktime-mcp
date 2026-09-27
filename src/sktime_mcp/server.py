@@ -325,7 +325,8 @@ async def list_tools() -> list[Tool]:
             name="fit",
             description=(
                 "Fit an estimator on data. "
-                "Provide explicit X_handle and/or y_handle (or datasets) depending on the estimator's scitype. "
+                "Provide explicit X_handle and/or y_handle (or datasets) depending on the estimator's scitype; "
+                "each handle/dataset pair (y_handle vs y_dataset, X_handle vs X_dataset) is mutually exclusive. "
                 "A data handle loaded with exog_columns carries X alongside its target: "
                 "fit(y_handle=h) uses that X automatically (reported under 'exogenous')."
             ),
@@ -340,23 +341,27 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": (
                             "Optional: data handle whose exogenous columns (exog_columns) are used as X. "
-                            "Errors if the handle has no exogenous columns. Do not pass the same handle as y_handle."
+                            "Errors if the handle has no exogenous columns. Do not pass the same handle as y_handle. "
+                            "Mutually exclusive with X_dataset."
                         ),
                     },
                     "y_handle": {
                         "type": "string",
                         "description": (
-                            "Optional: data handle whose target series is y. "
+                            "Optional: data handle whose target series is y. Mutually exclusive with y_dataset. "
                             "If it carries exogenous columns and X_handle/X_dataset are omitted, they are used as X."
                         ),
                     },
                     "X_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset name for X data",
+                        "description": (
+                            "Optional: Demo dataset name for X data; it must ship exogenous data "
+                            "(a target-only dataset such as 'airline' is refused). Mutually exclusive with X_handle."
+                        ),
                     },
                     "y_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset name for y data",
+                        "description": "Optional: Demo dataset name for y data. Mutually exclusive with y_handle.",
                     },
                     "fh": {
                         "description": "Optional: Forecast horizon (e.g. 12 or [1,2,3]) to pass to fit",
@@ -418,20 +423,27 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": (
                             "Optional: data handle whose exogenous columns are the future X for the horizon "
-                            "(required if the forecaster was fitted with X). Errors if the handle has none."
+                            "(required if the forecaster was fitted with X). Errors if the handle has none. "
+                            "Mutually exclusive with X_dataset."
                         ),
                     },
                     "y_handle": {
                         "type": "string",
-                        "description": "Optional: Handle from load_data_source for y data (needed for annotators)",
+                        "description": (
+                            "Optional: Handle from load_data_source for y data (needed for annotators). "
+                            "Mutually exclusive with y_dataset."
+                        ),
                     },
                     "X_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset name for X data",
+                        "description": (
+                            "Optional: Demo dataset name for X data; it must ship exogenous data "
+                            "(a target-only dataset such as 'airline' is refused). Mutually exclusive with X_handle."
+                        ),
                     },
                     "y_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset name for y data",
+                        "description": "Optional: Demo dataset name for y data. Mutually exclusive with y_handle.",
                     },
                     "run_async": {
                         "type": "boolean",
@@ -459,20 +471,26 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": (
                             "Optional: data handle whose exogenous columns are used as X. "
-                            "Errors if the handle has none."
+                            "Errors if the handle has none. Mutually exclusive with X_dataset."
                         ),
                     },
                     "y_handle": {
                         "type": "string",
-                        "description": "Optional: data handle whose target series is the new y",
+                        "description": (
+                            "Optional: data handle whose target series is the new y. "
+                            "Mutually exclusive with y_dataset."
+                        ),
                     },
                     "X_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset for X data",
+                        "description": (
+                            "Optional: Demo dataset for X data; it must ship exogenous data. "
+                            "Mutually exclusive with X_handle."
+                        ),
                     },
                     "y_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset for y data",
+                        "description": "Optional: Demo dataset for y data. Mutually exclusive with y_handle.",
                     },
                 },
                 "required": ["estimator_handle"],
@@ -543,7 +561,8 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": (
                             "Optional: exogenous time series: a data_handle id (its exogenous columns are "
-                            "used; errors if it has none) or demo dataset name."
+                            "used; errors if it has none) or a demo dataset name that ships exogenous data "
+                            "(a target-only dataset such as 'airline' is refused, also as X == y)."
                         ),
                     },
                     "cv_folds": {
