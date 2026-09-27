@@ -37,6 +37,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 from sktime_mcp.config import settings
+from sktime_mcp.redaction import redact_for_logging
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_tool,
@@ -144,6 +145,19 @@ def _apply_response_token_limit(tool_name: str, text: str) -> str:
     if budget < 0:
         budget = 0
     return text[:budget] + notice
+
+
+def _summarize_result(result: Any, response_text: str) -> str:
+    """One-line, secret-free summary of a tool result for the INFO log.
+
+    The full (redacted) body is only logged at DEBUG; see ``call_tool``.
+    """
+    size = len(response_text.encode("utf-8"))
+    if isinstance(result, dict):
+        success = result.get("success", "n/a")
+        keys = ", ".join(str(k) for k in result)
+        return f"success={success} keys=[{keys}] bytes={size}"
+    return f"type={type(result).__name__} bytes={size}"
 
 
 def sanitize_for_json(obj, _seen=None):
@@ -1011,7 +1025,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     importlib.invalidate_caches()
 
     logger.info(f"=== Tool Call: {name} ===")
-    logger.info(f"Arguments: {json.dumps(arguments, indent=2)}")
+    if logger.isEnabledFor(logging.INFO):
+        logger.info(
+            "Arguments: %s",
+            json.dumps(redact_for_logging(arguments), indent=2, default=str),
+        )
 
     try:
         # -- Discovery -------------------------------------------------------
@@ -1207,12 +1225,19 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         else:
             result = {"error": f"Unknown tool: {name}"}
 
-        logger.info(f"=== Result for {name} ===")
-
         sanitized_result = sanitize_for_json(result)
-        logger.info(f"{json.dumps(sanitized_result, indent=2, default=str)}")
-
         response_text = json.dumps(sanitized_result, indent=2, default=str)
+
+        logger.info(
+            "=== Result for %s: %s", name, _summarize_result(sanitized_result, response_text)
+        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Result body for %s: %s",
+                name,
+                json.dumps(redact_for_logging(sanitized_result), indent=2, default=str),
+            )
+
         truncated_text = _apply_response_token_limit(name, response_text)
 
         return [TextContent(type="text", text=truncated_text)]

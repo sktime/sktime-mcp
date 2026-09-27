@@ -9,6 +9,7 @@ from typing import Any
 
 import pandas as pd
 
+from ...redaction import redact_connection_string
 from ..base import DataSourceAdapter
 
 
@@ -193,18 +194,13 @@ class SQLAdapter(DataSourceAdapter):
         return identifier
 
     def _sanitize_connection_string(self, conn_string: str) -> str:
-        """Remove credentials from connection string for metadata."""
-        # Hide password in connection string but preserve the dialect/protocol
-        if "@" in conn_string:
-            try:
-                protocol_auth, rest = conn_string.split("@", 1)
-                if "://" in protocol_auth:
-                    protocol, _ = protocol_auth.split("://", 1)
-                    return f"{protocol}://***@{rest}"
-                return f"***@{rest}"
-            except Exception:
-                return f"***@{conn_string.split('@')[-1]}"
-        return conn_string
+        """Remove credentials from connection string for metadata.
+
+        Masks the userinfo password and any credential-like query parameter or
+        ``key=value`` pair (``password``, ``PWD``, ``token``, ``credentials_path``,
+        ...), for both URL-style and ODBC-style strings.
+        """
+        return redact_connection_string(conn_string)
 
     def validate(self, data: pd.DataFrame) -> tuple[bool, dict[str, Any]]:
         """Validate SQL data using pandas adapter validation."""

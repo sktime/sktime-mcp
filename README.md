@@ -234,7 +234,7 @@ The server can be configured via environment variables:
 
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
-| `SKTIME_MCP_LOG_LEVEL` | Logging verbosity (e.g. `INFO`, `DEBUG`, `WARNING`) | `"WARNING"` |
+| `SKTIME_MCP_LOG_LEVEL` | Logging verbosity (e.g. `INFO`, `DEBUG`, `WARNING`). `INFO` logs redacted tool arguments and a one-line result summary; `DEBUG` adds the redacted result body. Credentials (passwords, tokens, API keys) are masked and long strings / inline data are truncated before logging. | `"WARNING"` |
 | `SKTIME_MCP_LOG_PATH` | Optional file path to output logs to in addition to stderr | (None) |
 | `SKTIME_MCP_AUTO_FORMAT` | Automatically format time series data on load (`true`/`false`) | `"true"` |
 | `SKTIME_MCP_JOB_MAX_AGE_HOURS` | Maximum age in hours before background jobs are cleared | `24` |
