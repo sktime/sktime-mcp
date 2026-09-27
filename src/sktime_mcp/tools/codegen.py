@@ -4,8 +4,12 @@ Code generation tool for sktime MCP.
 Generates Python code to recreate estimators and pipelines.
 """
 
+import ast
+import inspect
 import json
 import keyword
+import re
+import textwrap
 from typing import Any
 
 from sktime_mcp.runtime.executor import _get_demo_datasets
@@ -53,6 +57,44 @@ def _loader_for(dataset: str, demo_datasets: dict) -> tuple[str, str]:
     return "sktime.datasets", "load_airline"
 
 
+def _loader_returns_pair(module: str, func: str) -> bool:
+    """Return True when ``module.func()`` returns a ``(y, X)`` 2-tuple.
+
+    Decided statically from the loader's ``return`` statements so that
+    export_code never loads a dataset (some demo loaders download data).
+    A loader that cannot be inspected is assumed to return a single object.
+    """
+    try:
+        loader = getattr(__import__(module, fromlist=[func]), func)
+        tree = ast.parse(textwrap.dedent(inspect.getsource(loader)))
+    except Exception:
+        return False
+    fn = tree.body[0]
+    if not isinstance(fn, ast.FunctionDef):
+        return False
+
+    arities: set[int] = set()
+
+    def _visit(node: ast.AST) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                continue
+            if isinstance(child, ast.Return) and child.value is not None:
+                value = child.value
+                arities.add(len(value.elts) if isinstance(value, ast.Tuple) else 1)
+            _visit(child)
+
+    _visit(fn)
+    return arities == {2}
+
+
+def _load_series_lines(module: str, func: str) -> str:
+    """Import + load lines for a demo dataset, unpacking ``(y, X)`` loaders."""
+    if _loader_returns_pair(module, func):
+        return f"from {module} import {func}\ny, X = {func}()  # X: exogenous features"
+    return f"from {module} import {func}\ny = {func}()"
+
+
 def _fit_example(
     var_name: str,
     obj_type: str,
@@ -88,8 +130,7 @@ print(predictions)
         return f"""
 
 # Example usage (transformer):
-from {module} import {func}
-y = {func}()
+{_load_series_lines(module, func)}
 
 y_transformed = {var_name}.fit_transform(y)
 print(y_transformed)
@@ -101,8 +142,7 @@ print(y_transformed)
         return f"""
 
 # Example usage (splitter):
-from {module} import {func}
-y = {func}()
+{_load_series_lines(module, func)}
 
 for train_idx, test_idx in {var_name}.split(y):
     print("train:", train_idx, "test:", test_idx)
@@ -111,6 +151,21 @@ for train_idx, test_idx in {var_name}.split(y):
     # Default: forecaster.
     ds = dataset or handle_info.metadata.get("training_dataset") or "airline"
     module, func = _loader_for(ds, demo_datasets)
+    if _loader_returns_pair(module, func):
+        # Exogenous X must also cover the forecast horizon, so hold out the
+        # tail of the dataset instead of forecasting past its end (F-28).
+        return f"""
+
+# Example usage (forecaster with exogenous X):
+from {module} import {func}
+from sktime.split import temporal_train_test_split
+y, X = {func}()
+y_train, y_test, X_train, X_test = temporal_train_test_split(y, X, test_size=4)
+
+{var_name}.fit(y_train, X=X_train, fh=y_test.index)
+predictions = {var_name}.predict(X=X_test)
+print(predictions)
+"""
     return f"""
 
 # Example usage (forecaster):
@@ -122,6 +177,88 @@ fh = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]  # 12-step ahead forecast
 predictions = {var_name}.predict(fh=fh)
 print(predictions)
 """
+
+
+# Names the server injects into craft's namespace (executor.instantiate) and
+# the import line each one needs in standalone code.
+_NAMESPACE_IMPORTS = {
+    "np": "import numpy as np",
+    "numpy": "import numpy",
+    "pd": "import pandas as pd",
+    "pandas": "import pandas",
+}
+_NAMESPACE_USE = re.compile(r"\b(np|numpy|pd|pandas)\.")
+
+
+def _construction_code(var_name: str, spec: str) -> tuple[str, list[str]]:
+    """Return ``(code, warnings)`` that rebuilds ``spec`` outside the server.
+
+    ``craft(spec)`` only works for specs that mention ``np.``/``pd.`` because
+    the server injects those modules into craft's registry (F-28). For such
+    specs, when the spec is a single expression whose class names sktime can
+    resolve, emit the module and class imports plus the spec itself as plain
+    Python. Otherwise fall back to craft and warn that the spec needs the
+    namespace.
+    """
+    craft_code = f"from sktime.registry import craft\n\n{var_name} = craft({_format_value(spec)})"
+    names = sorted(set(_NAMESPACE_USE.findall(spec)))
+    if not names:
+        return craft_code, []
+
+    def _fallback(reason: str) -> tuple[str, list[str]]:
+        return craft_code, [
+            f"The spec references {', '.join(names)}, which craft() resolves only inside "
+            f"the server; {reason}, so the generated craft() call needs those names "
+            "registered in craft's namespace before it runs."
+        ]
+
+    try:
+        ast.parse(spec, mode="eval")
+    except SyntaxError:
+        return _fallback("the spec is a multi-statement block")
+
+    try:
+        class_imports = _class_imports(spec)
+    except Exception as exc:
+        return _fallback(f"its class imports could not be resolved ({exc})")
+
+    import_lines = [_NAMESPACE_IMPORTS[name] for name in names] + class_imports
+    return "\n".join(import_lines) + f"\n\n{var_name} = {spec}", []
+
+
+def _class_imports(spec: str) -> list[str]:
+    """Import lines for every bare name in ``spec`` that craft would resolve.
+
+    Only ``ast.Name`` nodes are looked up (``pd.Timedelta`` is an attribute of
+    ``pd``, not a class to import), which is what ``eval`` inside craft
+    resolves against its registry. Unknown names raise ``KeyError``.
+    """
+    import builtins
+
+    from sktime.registry import all_estimators
+    from sktime.registry._craft import _get_public_import
+
+    register = dict(all_estimators())
+    try:
+        from sktime.registry._craft import _all_sklearn_estimators
+
+        register = {**dict(_all_sklearn_estimators()), **register}
+    except Exception:  # pragma: no cover - sklearn helper is private
+        pass
+
+    used = {
+        node.id
+        for node in ast.walk(ast.parse(spec, mode="eval"))
+        if isinstance(node, ast.Name)
+        and node.id not in _NAMESPACE_IMPORTS
+        and not hasattr(builtins, node.id)
+    }
+    lines = []
+    for name in sorted(used):
+        if name not in register:
+            raise KeyError(f"{name!r} is not an sktime/sklearn estimator")
+        lines.append(f"from {_get_public_import(register[name].__module__)} import {name}")
+    return lines
 
 
 def export_code_tool(
@@ -186,8 +323,9 @@ def export_code_tool(
     # false-positived on any list argument (BUG-04).
     is_pipeline = bool(spec and "*" in spec) or hasattr(instance, "steps")
 
+    warnings: list[str] = []
     if spec:
-        code = f"from sktime.registry import craft\n\n{var_name} = craft({_format_value(spec)})"
+        code, warnings = _construction_code(var_name, spec)
     elif handle_info.metadata.get("source") == "loaded" and handle_info.metadata.get("path"):
         # Loaded models carry no craft spec; emit a load_model snippet instead of
         # failing with "No craft spec found" (NB-17).
@@ -213,10 +351,13 @@ def export_code_tool(
         example = _fit_example(var_name, obj_type, dataset, handle_info, demo_datasets)
         code += example
 
-    return {
+    result = {
         "success": True,
         "code": code,
         "estimator_name": estimator_name,
         "is_pipeline": is_pipeline,
         "handle": handle,
     }
+    if warnings:
+        result["warnings"] = warnings
+    return result

@@ -323,6 +323,11 @@ the image as a base64 string.
 
 Emit standalone, runnable Python that reconstructs the estimator.
 
+Specs that reference `np.`/`pd.` are emitted as explicit imports plus the
+constructor call (the server-side `craft()` namespace is not available
+outside the server); a `warnings` list is returned when that is not possible.
+Fit examples unpack `(y, X)` datasets such as `longley` and pass `X`.
+
 | Argument | Type | Required | Default | Description |
 | :--- | :--- | :---: | :--- | :--- |
 | `handle` | string | ✅ | — | Estimator/pipeline handle. |
