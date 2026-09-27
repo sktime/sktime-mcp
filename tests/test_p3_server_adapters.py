@@ -172,3 +172,61 @@ class TestRunCommandBackgroundChild:
         assert res["success"] is True
         assert res["timed_out"] is False
         assert res["output"] == "hello"
+
+
+# ---------------------------------------------------------------------------
+# F-61: file adapter csv_options / parse_dates
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def csv_path(tmp_path):
+    p = tmp_path / "tiny.csv"
+    pd.DataFrame(
+        {"date": ["2020-01-01", "2020-01-02", "2020-01-03"], "value": [1.0, 2.0, 3.0]}
+    ).to_csv(p, index=False)
+    return p
+
+
+class TestFileAdapterOptions:
+    def test_parse_dates_false_is_honoured(self, csv_path):
+        adapter = FileAdapter(
+            {
+                "type": "file",
+                "path": str(csv_path),
+                "time_column": "date",
+                "target_column": "value",
+                "parse_dates": False,
+            }
+        )
+        df = adapter.load()
+        assert not isinstance(df.index, pd.DatetimeIndex)
+        assert list(df.index) == ["2020-01-01", "2020-01-02", "2020-01-03"]
+
+    def test_parse_dates_default_still_parses(self, csv_path):
+        adapter = FileAdapter({"type": "file", "path": str(csv_path), "time_column": "date"})
+        assert isinstance(adapter.load().index, pd.DatetimeIndex)
+
+    def test_csv_options_string_is_structured_error(self, csv_path):
+        adapter = FileAdapter({"type": "file", "path": str(csv_path), "csv_options": "sep=,"})
+        with pytest.raises(ValueError, match="csv_options"):
+            adapter.load()
+
+        res = get_executor().load_data_source(
+            {"type": "file", "path": str(csv_path), "csv_options": "sep=,", "target_column": "value"}
+        )
+        assert res["success"] is False
+        assert res.get("error_type") != "AttributeError"
+        assert "csv_options" in res["error"]
+
+    def test_csv_options_not_mutated(self, csv_path):
+        opts = {"encoding": "utf-8"}
+        FileAdapter({"type": "file", "path": str(csv_path), "csv_options": opts}).load()
+        assert opts == {"encoding": "utf-8"}
+
+    def test_excel_options_string_is_structured_error(self, tmp_path):
+        adapter = FileAdapter(
+            {"type": "file", "path": str(tmp_path / "x.xlsx"), "excel_options": "sheet=0"}
+        )
+        with pytest.raises(ValueError, match="excel_options"):
+            adapter._load_excel(tmp_path / "x.xlsx")

@@ -43,7 +43,7 @@ class FileAdapter(DataSourceAdapter):
             },
 
             # Common options
-            "parse_dates": True,
+            "parse_dates": True,  # False keeps the time column's raw dtype
             "frequency": "D"
         }
     """
@@ -85,15 +85,18 @@ class FileAdapter(DataSourceAdapter):
             raise ValueError(
                 f"Time column {time_col!r} not found in data. Available columns: [{available}]"
             )
+        # An explicit parse_dates=false keeps the time column's raw dtype
+        # (no datetime coercion at all, F-61); the default parses it.
+        parse_dates = self.config.get("parse_dates", True) is not False
         if time_col and time_col in df.columns:
-            if self.config.get("parse_dates", True):
+            if parse_dates:
                 with contextlib.suppress(Exception):
                     df[time_col] = pd.to_datetime(df[time_col])
             df = df.set_index(time_col)
 
         # Only ensure datetime index if it looks like it should be one
         # or if we have a time_column. For RangeIndex, keep it as is.
-        if not isinstance(df.index, pd.DatetimeIndex) and time_col:
+        if parse_dates and not isinstance(df.index, pd.DatetimeIndex) and time_col:
             try:
                 df.index = pd.to_datetime(df.index)
             except Exception as e:
@@ -135,6 +138,23 @@ class FileAdapter(DataSourceAdapter):
 
         return df
 
+    def _options(self, key: str) -> dict[str, Any]:
+        """Return a copy of the ``<format>_options`` mapping from the config.
+
+        A copy, so the defaults set below never leak into the caller's dict;
+        a non-mapping (e.g. a string) is a structured error rather than a raw
+        AttributeError from ``setdefault`` (F-61).
+        """
+        options = self.config.get(key)
+        if options is None:
+            return {}
+        if not isinstance(options, dict):
+            raise ValueError(
+                f"'{key}' must be an object mapping option names to values, "
+                f"got {type(options).__name__}."
+            )
+        return dict(options)
+
     def _detect_format(self, path: Path) -> str:
         """Detect file format from extension."""
         suffix = path.suffix.lower()
@@ -161,7 +181,7 @@ class FileAdapter(DataSourceAdapter):
 
     def _load_csv(self, path: Path) -> pd.DataFrame:
         """Load CSV file."""
-        csv_options = self.config.get("csv_options", {})
+        csv_options = self._options("csv_options")
 
         # Set defaults
         csv_options.setdefault("sep", ",")
@@ -184,14 +204,14 @@ class FileAdapter(DataSourceAdapter):
 
     def _load_excel(self, path: Path) -> pd.DataFrame:
         """Load Excel file."""
+        excel_options = self._options("excel_options")
+
         try:
             import openpyxl  # noqa: F401
         except ImportError as e:
             raise ImportError(
                 "openpyxl is required for Excel files. Install with: pip install openpyxl"
             ) from e
-
-        excel_options = self.config.get("excel_options", {})
 
         # Set defaults
         excel_options.setdefault("sheet_name", 0)
@@ -222,7 +242,7 @@ class FileAdapter(DataSourceAdapter):
 
     def _load_json(self, path: Path) -> pd.DataFrame:
         """Load a JSON file written by save_data (records orient)."""
-        json_options = self.config.get("json_options", {})
+        json_options = self._options("json_options")
         json_options.setdefault("orient", "records")
         try:
             df = pd.read_json(path, **json_options)
