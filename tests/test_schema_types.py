@@ -60,3 +60,51 @@ def test_previously_untyped_properties_are_typed(tool_name, prop, expected_types
     tools = {t.name: t for t in asyncio.run(list_tools())}
     prop_schema = tools[tool_name].inputSchema["properties"][prop]
     assert prop_schema["type"] == expected_types
+
+
+def test_query_registry_task_is_constrained_to_valid_scitypes():
+    """The task filter rejects unknown scitypes at the schema level (#407).
+
+    Catches the common 'forecasting' vs 'forecaster' mistake before the call
+    reaches the server, instead of relying on the runtime error message.
+    The enum mirrors the scitypes accepted by the runtime check in
+    query_registry.py, plus the 'tag'/'tags' special case.
+    """
+    tools = {t.name: t for t in asyncio.run(list_tools())}
+    task_schema = tools["query_registry"].inputSchema["properties"]["task"]
+    assert task_schema["enum"] == [
+        "aligner",
+        "catalogue",
+        "classifier",
+        "clusterer",
+        "dataset",
+        "dataset_classification",
+        "dataset_forecasting",
+        "dataset_regression",
+        "detector",
+        "early_classifier",
+        "estimator",
+        "forecaster",
+        "metric",
+        "metric_detection",
+        "metric_forecasting",
+        "metric_forecasting_proba",
+        "network",
+        "object",
+        "param_est",
+        "reconciler",
+        "regressor",
+        "splitter",
+        "transformer",
+        "transformer-pairwise",
+        "transformer-pairwise-panel",
+        "tag",
+        "tags",
+    ]
+
+
+def test_evaluate_cv_folds_has_minimum_one():
+    """cv_folds must be a positive fold count (#407)."""
+    tools = {t.name: t for t in asyncio.run(list_tools())}
+    folds_schema = tools["evaluate"].inputSchema["properties"]["cv_folds"]
+    assert folds_schema["minimum"] == 1
