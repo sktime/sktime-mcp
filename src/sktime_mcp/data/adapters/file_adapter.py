@@ -5,6 +5,7 @@ Supports loading data from local files with automatic format detection.
 """
 
 import contextlib
+import importlib
 from pathlib import Path
 from typing import Any
 
@@ -202,20 +203,29 @@ class FileAdapter(DataSourceAdapter):
 
         return df
 
+    # pandas engine per Excel extension: legacy .xls needs xlrd, not openpyxl (F-64)
+    _EXCEL_ENGINES = {".xls": "xlrd"}
+    _DEFAULT_EXCEL_ENGINE = "openpyxl"
+
     def _load_excel(self, path: Path) -> pd.DataFrame:
         """Load Excel file."""
         excel_options = self._options("excel_options")
 
+        engine = excel_options.get("engine") or self._EXCEL_ENGINES.get(
+            path.suffix.lower(), self._DEFAULT_EXCEL_ENGINE
+        )
         try:
-            import openpyxl  # noqa: F401
+            importlib.import_module(engine)
         except ImportError as e:
             raise ImportError(
-                "openpyxl is required for Excel files. Install with: pip install openpyxl"
+                f"{engine} is required for {path.suffix or 'Excel'} files. "
+                f"Install with: pip install {engine}"
             ) from e
 
         # Set defaults
         excel_options.setdefault("sheet_name", 0)
         excel_options.setdefault("header", 0)
+        excel_options.setdefault("engine", engine)
 
         try:
             df = pd.read_excel(path, **excel_options)

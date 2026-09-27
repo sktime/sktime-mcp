@@ -213,7 +213,12 @@ class TestFileAdapterOptions:
             adapter.load()
 
         res = get_executor().load_data_source(
-            {"type": "file", "path": str(csv_path), "csv_options": "sep=,", "target_column": "value"}
+            {
+                "type": "file",
+                "path": str(csv_path),
+                "csv_options": "sep=,",
+                "target_column": "value",
+            }
         )
         assert res["success"] is False
         assert res.get("error_type") != "AttributeError"
@@ -328,3 +333,39 @@ class TestSQLAdapter:
         assert "[SQL:" not in msg
         assert "parameters:" not in msg
         assert "value" in msg and "scalar" in msg.lower()
+
+
+# ---------------------------------------------------------------------------
+# F-64: Dockerfile extras and xlrd for .xls
+# ---------------------------------------------------------------------------
+
+
+class TestPackagingExtras:
+    def test_dockerfile_installs_sql_and_files_extras(self):
+        dockerfile = (REPO_ROOT / "Dockerfile").read_text()
+        install_lines = [ln for ln in dockerfile.splitlines() if "pip install" in ln]
+        assert install_lines, "no pip install line in Dockerfile"
+        assert any(re.search(r"\[sql,\s*files\]", ln) for ln in install_lines), install_lines
+
+    def test_files_extra_includes_xlrd(self):
+        pyproject = (REPO_ROOT / "pyproject.toml").read_text()
+        files_block = re.search(r"^files\s*=\s*\[(.*?)^\]", pyproject, re.S | re.M)
+        assert files_block, "no [files] extra"
+        assert "xlrd" in files_block.group(1)
+        all_block = re.search(r"^all\s*=\s*\[(.*?)^\]", pyproject, re.S | re.M)
+        assert all_block and "xlrd" in all_block.group(1)
+
+    def test_xls_missing_engine_error_names_xlrd(self, tmp_path, monkeypatch):
+        monkeypatch.setitem(sys.modules, "xlrd", None)
+        adapter = FileAdapter({"type": "file", "path": str(tmp_path / "old.xls")})
+        with pytest.raises(ImportError) as excinfo:
+            adapter._load_excel(tmp_path / "old.xls")
+        assert "xlrd" in str(excinfo.value)
+        assert "openpyxl" not in str(excinfo.value)
+
+    def test_xlsx_missing_engine_error_names_openpyxl(self, tmp_path, monkeypatch):
+        monkeypatch.setitem(sys.modules, "openpyxl", None)
+        adapter = FileAdapter({"type": "file", "path": str(tmp_path / "new.xlsx")})
+        with pytest.raises(ImportError) as excinfo:
+            adapter._load_excel(tmp_path / "new.xlsx")
+        assert "openpyxl" in str(excinfo.value)
