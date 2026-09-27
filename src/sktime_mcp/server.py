@@ -381,6 +381,10 @@ async def list_tools() -> list[Tool]:
             description=(
                 "Generate predictions from a fitted estimator. "
                 "Supports different modes like predict, predict_interval, predict_quantiles. "
+                "The full result is also registered as a data handle, returned as "
+                "`prediction_handle`: pass it to plot_series (with the train/test handles), "
+                "save_data, or call_method on a metric (y_pred_data_handle) to score it "
+                "against a test split. "
                 "A forecaster fitted with exogenous data needs FUTURE X covering the horizon: "
                 "pass X_handle (e.g. the test half from split_data) or X_dataset."
             ),
@@ -823,7 +827,8 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="plot_series",
             description=(
-                "Plot one or more time series natively. "
+                "Plot one or more time series natively, e.g. the train and test handles from "
+                "split_data together with the prediction_handle returned by predict. "
                 "Can save the plot to a specified path as a PNG file or return it as a base64 string."
             ),
             inputSchema={

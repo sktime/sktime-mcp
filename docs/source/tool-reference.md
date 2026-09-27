@@ -166,6 +166,17 @@ Generate predictions from a fitted estimator.
 
 Interval and quantile forecasts are **modes of this tool**, not separate tools.
 
+The full result is also registered as a **data handle** and returned as
+`prediction_handle` (metadata `source: "prediction"`, plus `estimator_handle`,
+`mode`, `horizon`, `cutoff`). Use it like any other handle: `plot_series` it next
+to the train/test handles, `save_data` it to a file, `inspect_data` it, or score
+it with `call_method` on a metric, e.g.
+`{"y_true_data_handle": "<test handle>", "y_pred_data_handle": "<prediction_handle>"}`.
+Interval/quantile handles hold the flattened columns of the JSON response
+(e.g. `Coverage_0.9_lower`). When the JSON is truncated (over 500 rows) the
+handle still holds the complete forecast. For `run_async`, the handle is in the
+job result.
+
 ### `update`
 
 Update a fitted estimator with new data.
@@ -305,7 +316,7 @@ the image as a base64 string.
 
 | Argument | Type | Required | Default | Description |
 | :--- | :--- | :---: | :--- | :--- |
-| `data_handles` | array of string | ✅ | — | Handles to plot, e.g. train, test, forecast. |
+| `data_handles` | array of string | ✅ | — | Handles to plot, e.g. the train/test handles from `split_data` and the `prediction_handle` from `predict`. |
 | `labels` | array of string | — | — | Legend label per handle. |
 | `title` | string | — | — | Plot title. |
 | `path` | string | — | — | Save location, e.g. `/tmp/plot.png`. Omit to get base64 back. |
