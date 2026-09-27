@@ -434,7 +434,8 @@ async def list_tools() -> list[Tool]:
                     "y_handle": {
                         "type": "string",
                         "description": (
-                            "Optional: Handle from load_data_source for y data (needed for annotators). "
+                            "Optional: data handle whose target series is y: the series a detector "
+                            "annotates or a transformer transforms (as in fit). Forecasters ignore it. "
                             "Mutually exclusive with y_dataset."
                         ),
                     },
