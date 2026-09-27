@@ -104,8 +104,11 @@ def _is_sktime_object(obj: Any) -> bool:
     craft evaluates arbitrary specs, so a spec like "42" returns an int. Such
     non-objects should not receive an estimator handle (BUG-10). We accept
     anything deriving from skbase's BaseObject, falling back to a duck-typed
-    check for get_params + a scitype tag.
+    check for get_params + a scitype tag. A bare class (spec "NaiveForecaster"
+    without parentheses) has both attributes but is not an instance.
     """
+    if isinstance(obj, type):
+        return False
     try:
         from skbase.base import BaseObject
 
@@ -158,6 +161,76 @@ def _cap_prediction_rows(
         "note": f"forecast truncated; {hint}",
     }
     return kept, note
+
+
+_PROBA_QUANTILES = [0.05, 0.5, 0.95]
+
+
+def _is_distribution(obj: Any) -> bool:
+    """True for a probability distribution as returned by predict_proba.
+
+    skpro and sktime (vendored ``sktime.base._proba``) both derive from a
+    ``BaseDistribution``; fall back to duck typing on mean/var/quantile,
+    excluding pandas objects which also have those methods.
+    """
+    if isinstance(obj, (pd.Series, pd.DataFrame)):
+        return False
+    for module in ("skpro.distributions.base", "sktime.base._proba._base"):
+        try:
+            base = __import__(module, fromlist=["BaseDistribution"]).BaseDistribution
+        except Exception:
+            continue
+        if isinstance(obj, base):
+            return True
+    return all(callable(getattr(obj, m, None)) for m in ("mean", "var", "quantile"))
+
+
+def _summarize_distribution(dist: Any) -> tuple[dict[str, Any], pd.DataFrame]:
+    """Numeric summary of a predict_proba distribution (F-23).
+
+    Returns the JSON-ready summary (``distribution`` class name, ``mean`` and
+    ``var`` keyed by time point, ``quantiles`` keyed by time point then level)
+    and a frame with the same values, columns flattened like interval
+    forecasts (``<var>_mean``, ``<var>_var``, ``<var>_0.05`` ...), for the
+    prediction handle. ``sanitize_for_json`` used to send back ``repr(dist)``.
+    """
+    mean = pd.DataFrame(dist.mean())
+    var = pd.DataFrame(dist.var())
+    if var.shape == mean.shape:
+        var.columns = mean.columns
+    quantiles = pd.DataFrame(dist.quantile(_PROBA_QUANTILES))
+    univariate = mean.shape[1] == 1
+
+    if isinstance(quantiles.columns, pd.MultiIndex):
+        levels = [str(col[-1]) for col in quantiles.columns.values]
+        flat = ["_".join(map(str, col)) for col in quantiles.columns.values]
+    else:
+        levels = flat = [str(col) for col in quantiles.columns]
+
+    frame = pd.concat([mean.add_suffix("_mean"), var.add_suffix("_var"), quantiles], axis=1)
+    frame.columns = [
+        *mean.add_suffix("_mean").columns,
+        *var.add_suffix("_var").columns,
+        *flat,
+    ]
+
+    index = list(_index_to_str(mean.index))
+    quantiles_json = quantiles.copy()
+    quantiles_json.columns = levels if univariate else flat
+    quantiles_json.index = index
+    if univariate:
+        mean_json = dict(zip(index, mean.iloc[:, 0].tolist(), strict=True))
+        var_json = dict(zip(index, var.iloc[:, 0].tolist(), strict=True))
+    else:
+        mean_json = mean.set_axis(index).to_dict(orient="index")
+        var_json = var.set_axis(index).to_dict(orient="index")
+    summary = {
+        "distribution": type(dist).__name__,
+        "mean": mean_json,
+        "var": var_json,
+        "quantiles": quantiles_json.to_dict(orient="index"),
+    }
+    return summary, frame
 
 
 def _get_index_frequency_metadata(
@@ -613,6 +686,20 @@ class Executor:
             finally:
                 _craft_module.all_estimators = original_all
 
+            # A bare class name ("NaiveForecaster") evaluates to the class;
+            # wrapping it in a handle made fit fail with "missing 1 required
+            # positional argument: 'y'" (#556 item 25).
+            if isinstance(instance, type):
+                name = instance.__name__
+                return {
+                    "success": False,
+                    "error": (
+                        f"Spec '{spec}' names the class {name} but does not "
+                        f"instantiate it. Call it with its parameters, e.g. "
+                        f"'{name}()' or '{name}(sp=12)'."
+                    ),
+                }
+
             # Reject specs that don't produce an sktime object — e.g. "42",
             # "[1,2,3]", "None" otherwise got est_ handles that failed
             # confusingly downstream (BUG-10).
@@ -935,6 +1022,30 @@ class Executor:
                     }
                 predictions = instance.predict(series)
             else:
+                proba_modes = (
+                    "predict_interval",
+                    "predict_quantiles",
+                    "predict_proba",
+                    "predict_var",
+                )
+                get_tag = getattr(instance, "get_tag", None)
+                if (
+                    mode in proba_modes
+                    and get_tag is not None
+                    and not get_tag("capability:pred_int", True, raise_error=False)
+                ):
+                    # sktime raises "does not have the capability to return
+                    # fully probabilistic predictions ... open an issue" (F-23)
+                    return {
+                        "success": False,
+                        "error": (
+                            f"{type(instance).__name__} does not support {mode}: it has no "
+                            "probabilistic forecasting capability (capability:pred_int is "
+                            "False). Use mode='predict' for point forecasts, or a "
+                            "forecaster with interval support such as NaiveForecaster, "
+                            "ThetaForecaster or ARIMA."
+                        ),
+                    }
                 if mode == "predict":
                     predictions = instance.predict(fh=fh, **kwargs)
                 elif mode == "predict_interval":
@@ -942,7 +1053,17 @@ class Executor:
                 elif mode == "predict_quantiles":
                     predictions = instance.predict_quantiles(fh=fh, alpha=alpha, **kwargs)
                 elif mode == "predict_proba":
-                    predictions = instance.predict_proba(fh=fh, **kwargs)
+                    try:
+                        predictions = instance.predict_proba(fh=fh, **kwargs)
+                    except NotImplementedError as e:
+                        return {
+                            "success": False,
+                            "error": (
+                                f"{type(instance).__name__} does not support predict_proba "
+                                f"here: {e}. Use mode='predict_interval' or "
+                                "'predict_quantiles' for its probabilistic forecasts."
+                            ),
+                        }
                 elif mode == "predict_var":
                     predictions = instance.predict_var(fh=fh, **kwargs)
                 else:
@@ -956,9 +1077,16 @@ class Executor:
             # didn't happen (N-01).
             horizon = (len(fh) if hasattr(fh, "__len__") else fh) if is_forecast else None
 
+            # predict_proba returns a distribution object whose repr() was
+            # all the response carried (F-23): summarise it numerically; the
+            # summary frame is what the prediction handle stores.
+            distribution = None
+            if _is_distribution(predictions):
+                distribution, predictions = _summarize_distribution(predictions)
+
             # Register the forecast as a data handle so it can be plotted,
             # saved and scored (F-06). Non-frame results (ndarray from a
-            # classifier, a distribution from predict_proba) are not handles.
+            # classifier) are not handles.
             prediction_handle = None
             if isinstance(predictions, (pd.Series, pd.DataFrame)):
                 prediction_handle = self._register_prediction_handle(
@@ -970,7 +1098,12 @@ class Executor:
                 )
 
             truncated_note = None
-            if isinstance(predictions, pd.Series):
+            if distribution is not None:
+                result = distribution
+                for key in ("mean", "var", "quantiles"):
+                    result[key], note = _cap_prediction_rows(result[key], prediction_handle)
+                    truncated_note = truncated_note or note
+            elif isinstance(predictions, pd.Series):
                 predictions_copy = predictions.copy()
                 predictions_copy.index = _index_to_str(predictions_copy.index)
                 result, truncated_note = _cap_prediction_rows(

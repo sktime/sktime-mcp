@@ -397,7 +397,10 @@ async def list_tools() -> list[Tool]:
                     },
                     "horizon": {
                         "type": "integer",
-                        "description": "Forecast horizon (default: 12)",
+                        "description": (
+                            "Forecast horizon (default: 12). Capped by the server's "
+                            "SKTIME_MCP_MAX_HORIZON (default 10000); larger requests are rejected."
+                        ),
                         "default": 12,
                     },
                     "mode": {

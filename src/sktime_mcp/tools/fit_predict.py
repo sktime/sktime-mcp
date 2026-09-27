@@ -7,9 +7,26 @@ Executes complete forecasting workflows.
 import logging
 from typing import Any
 
+from sktime_mcp.config import settings
 from sktime_mcp.runtime.executor import get_executor
 
 logger = logging.getLogger(__name__)
+
+
+def horizon_cap_error(requested: int) -> str | None:
+    """Error text when *requested* steps exceed ``SKTIME_MCP_MAX_HORIZON``, else None.
+
+    predict(horizon=100000) used to forecast every step before truncating the
+    response to 500 rows (F-24); the cap rejects such requests before any work.
+    """
+    cap = settings.max_horizon
+    if requested <= cap:
+        return None
+    return (
+        f"horizon={requested} exceeds the server's maximum forecast horizon of "
+        f"{cap} steps (SKTIME_MCP_MAX_HORIZON). Request at most {cap} steps, or "
+        "raise SKTIME_MCP_MAX_HORIZON in the server environment."
+    )
 
 
 def _validate_horizon(horizon: Any) -> dict[str, Any]:
@@ -17,6 +34,7 @@ def _validate_horizon(horizon: Any) -> dict[str, Any]:
     Validate the horizon parameter.
     Checks if the horizon parameter is strictly integer or not
     Checks if the horizon parameter is greater than 0 or not
+    Checks that it does not exceed ``SKTIME_MCP_MAX_HORIZON`` (F-24)
     """
     warnings = []
     if not isinstance(horizon, int):
@@ -34,6 +52,9 @@ def _validate_horizon(horizon: Any) -> dict[str, Any]:
             "error": f"Invalid horizon={horizon}. horizon must be a positive integer greater than 0.",
             "warnings": warnings,
         }
+    cap_error = horizon_cap_error(horizon)
+    if cap_error:
+        return {"valid": False, "error": cap_error, "warnings": warnings}
     return {"valid": True, "warnings": warnings}
 
 
