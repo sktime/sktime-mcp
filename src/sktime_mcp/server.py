@@ -736,8 +736,12 @@ async def list_tools() -> list[Tool]:
             description=(
                 "Persist the target series (y) and any exogenous features (X) behind a "
                 "data handle to a local file. Combines y and X into one table. Creates "
-                "parent directories as needed. Supported formats: csv (default, writes "
-                "index as first column), parquet, json (records orient, ISO dates)."
+                "parent directories as needed. Supported formats: csv (default), parquet, "
+                "json (records orient). csv/json write the time index as a column named "
+                "after the index ('time' if unnamed; 'time_index' if that collides with a "
+                "data column) and report it as time_column - pass that back as "
+                "load_data_source's time_column to reload the file. parquet keeps the "
+                "index in the file; reload it without time_column."
             ),
             inputSchema={
                 "type": "object",
@@ -881,7 +885,10 @@ async def list_tools() -> list[Tool]:
                     },
                     "path": {
                         "type": "string",
-                        "description": "Local directory or URI where the model will be saved",
+                        "description": (
+                            "Local directory (a file:// URI is accepted) or MLflow URI "
+                            "(runs:/, models:/, s3://, ...) where the model will be saved"
+                        ),
                     },
                     "mlflow_params": {
                         "type": "object",
