@@ -7,6 +7,7 @@ that exposes sktime's registry and execution capabilities to LLMs.
 
 import argparse
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -115,35 +116,175 @@ logger = logging.getLogger(__name__)
 server = Server("sktime-mcp")
 
 _CHARS_PER_TOKEN = 4
+# Strings at or below this length are never shortened; the marker alone would
+# not save anything worthwhile.
+_MIN_STRING_CUT = 32
+_STRING_TRUNCATION_MARKER = "...[truncated]"
 
 
-def _apply_response_token_limit(tool_name: str, text: str) -> str:
-    """Truncate *text* to the configured token budget and append a notice.
+def _serialized_len(obj: Any) -> int:
+    """Length of *obj* as it will be sent on the wire (same dumps settings as call_tool)."""
+    return len(json.dumps(obj, indent=2, default=str))
 
-    Reads ``SKTIME_MCP_MAX_RESPONSE_TOKENS`` from environment variable at call time so
-    that live config changes are respected.
-    Returns *text* unchanged when the limit is 0 (unlimited) or not set.
+
+def _format_path(path: tuple) -> str:
+    """Render a key/index path such as ``("fold_results", 2, "y_pred")`` as a string."""
+    out = ""
+    for part in path:
+        if isinstance(part, int):
+            out += f"[{part}]"
+        else:
+            out += f".{part}" if out else str(part)
+    return out
+
+
+def _collect_cuttable(obj: Any, path: tuple, out: list[tuple[int, tuple]]) -> None:
+    """Collect ``(serialized_size, path)`` for every value that can still be shortened.
+
+    Candidates are lists/dicts with at least two entries and strings longer
+    than ``_MIN_STRING_CUT``. The top-level envelope dict itself and its
+    ``truncated`` entry are never candidates, so keys such as ``success`` and
+    ``error`` are always preserved.
+    """
+    if isinstance(obj, dict):
+        if path and len(obj) >= 2:
+            out.append((_serialized_len(obj), path))
+        for key, value in obj.items():
+            if not path and key == "truncated":
+                continue
+            _collect_cuttable(value, (*path, key), out)
+    elif isinstance(obj, list):
+        if len(obj) >= 2:
+            out.append((_serialized_len(obj), path))
+        for index, value in enumerate(obj):
+            _collect_cuttable(value, (*path, index), out)
+    elif isinstance(obj, str) and len(obj) > _MIN_STRING_CUT:
+        out.append((len(obj) + 2, path))
+
+
+def _pick_cut_target(candidates: list[tuple[int, tuple]]) -> tuple:
+    """Choose which candidate to cut next.
+
+    Starts from the largest candidate, then descends into a direct child while
+    that child accounts for more than half of its parent's size. This keeps
+    record-like dicts intact (``{"fold": 1, "score": 0.2, "y_pred": [...]}``
+    loses entries of ``y_pred`` rather than the ``score`` key) and only cuts a
+    parent container when its size is spread across many entries.
+    """
+    sizes = {path: size for size, path in candidates}
+    size, path = max(candidates, key=lambda item: item[0])
+    while True:
+        children = [
+            (child_size, child_path)
+            for child_path, child_size in sizes.items()
+            if len(child_path) == len(path) + 1 and child_path[: len(path)] == path
+        ]
+        if not children:
+            return path
+        child_size, child_path = max(children, key=lambda item: item[0])
+        if child_size * 2 <= size:
+            return path
+        size, path = child_size, child_path
+
+
+def _get_at(obj: Any, path: tuple) -> Any:
+    for part in path:
+        obj = obj[part]
+    return obj
+
+
+def _set_at(obj: Any, path: tuple, value: Any) -> None:
+    _get_at(obj, path[:-1])[path[-1]] = value
+
+
+def _shrink(value: Any, keep_fraction: float) -> tuple[Any, int, int]:
+    """Return ``(shortened_value, shown, total)`` for a list, dict or string.
+
+    ``keep_fraction`` is the share of the value's serialized size that may
+    remain. At least one entry (or character) is removed so that repeated calls
+    always make progress.
+    """
+    total = len(value)
+    keep_fraction = min(1.0, max(0.0, keep_fraction))
+    if isinstance(value, str):
+        keep = int(total * keep_fraction) - len(_STRING_TRUNCATION_MARKER)
+        keep = max(0, min(total - 1, keep))
+        return value[:keep] + _STRING_TRUNCATION_MARKER, keep, total
+
+    keep = max(1, min(total - 1, int(total * keep_fraction)))
+    if isinstance(value, dict):
+        return dict(list(value.items())[:keep]), keep, total
+    return value[:keep], keep, total
+
+
+def _apply_response_token_limit(tool_name: str, result: Any) -> Any:
+    """Shrink *result* structurally so its JSON serialization fits the token budget.
+
+    Reads ``SKTIME_MCP_MAX_RESPONSE_TOKENS`` (via ``settings``) at call time so
+    that live config changes are respected; a limit of 0 (the default) means
+    unlimited and returns *result* unchanged.
+
+    When the serialized response exceeds the budget, the largest list/dict/string
+    values are progressively capped (keeping the first N entries or characters)
+    until the response fits or nothing more can be cut. The envelope dict itself
+    is never cut, so ``success`` and the other top-level keys are preserved and
+    the response is always valid JSON. A ``truncated`` object is added with the
+    human-readable ``notice`` and a ``fields`` list of
+    ``{"field", "shown", "total", "unit"}`` entries describing what was cut.
+
+    The caller's *result* is not mutated.
     """
     from sktime_mcp.config import settings
 
     max_tokens = settings.max_response_tokens
     if max_tokens <= 0:
-        return text  # unlimited
+        return result  # unlimited
 
     max_chars = max_tokens * _CHARS_PER_TOKEN
-    if len(text) <= max_chars:
-        return text
+    if _serialized_len(result) <= max_chars:
+        return result
 
     notice = (
-        f"\n\n[sktime-mcp] Response truncated: output exceeded the SKTIME_MCP_MAX_RESPONSE_TOKENS "
+        f"[sktime-mcp] Response truncated: output exceeded the SKTIME_MCP_MAX_RESPONSE_TOKENS "
         f"limit of {max_tokens} tokens (tool: {tool_name}). "
         "Increase SKTIME_MCP_MAX_RESPONSE_TOKENS or narrow your query for full results."
     )
-    # Reserve space for the notice inside the budget
-    budget = max_chars - len(notice)
-    if budget < 0:
-        budget = 0
-    return text[:budget] + notice
+    work = copy.deepcopy(result) if isinstance(result, dict) else {"result": copy.deepcopy(result)}
+    work.pop("truncated", None)
+    records: dict[tuple, dict[str, Any]] = {}
+    work["truncated"] = {"notice": notice, "fields": []}
+
+    while True:
+        current_size = _serialized_len(work)
+        excess = current_size - max_chars
+        if excess <= 0:
+            break
+        candidates: list[tuple[int, tuple]] = []
+        _collect_cuttable(work, (), candidates)
+        if not candidates:
+            break
+        path = _pick_cut_target(candidates)
+        value = _get_at(work, path)
+        # Measure what the value costs inside the whole document (indentation
+        # included) so the keep fraction lands close to the budget in one step.
+        _set_at(work, path, type(value)())
+        cost = max(1, current_size - _serialized_len(work))
+        new_value, shown, total = _shrink(value, (cost - excess) / cost)
+        _set_at(work, path, new_value)
+        record = records.get(path)
+        if record is None:
+            record = {
+                "field": _format_path(path),
+                "shown": shown,
+                "total": total,
+                "unit": "chars" if isinstance(new_value, str) else "items",
+            }
+            records[path] = record
+            work["truncated"]["fields"].append(record)
+        else:
+            record["shown"] = shown
+
+    return work
 
 
 def sanitize_for_json(obj, _seen=None):
@@ -1212,10 +1353,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         sanitized_result = sanitize_for_json(result)
         logger.info(f"{json.dumps(sanitized_result, indent=2, default=str)}")
 
-        response_text = json.dumps(sanitized_result, indent=2, default=str)
-        truncated_text = _apply_response_token_limit(name, response_text)
+        limited_result = _apply_response_token_limit(name, sanitized_result)
+        response_text = json.dumps(limited_result, indent=2, default=str)
 
-        return [TextContent(type="text", text=truncated_text)]
+        return [TextContent(type="text", text=response_text)]
     except Exception as e:
         logger.exception(f"Error in tool {name}")
         return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
