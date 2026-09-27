@@ -124,6 +124,18 @@ def _column_names(X: Any) -> list[str]:
     return [str(name)] if name is not None else []
 
 
+def _index_to_str(index: pd.Index) -> pd.Index:
+    """Stringify an index for JSON keys.
+
+    ``index.astype(str)`` raises on a MultiIndex (panel/hierarchical
+    forecasts, F-11); its levels are joined with "_", like the flattened
+    interval/quantile columns.
+    """
+    if isinstance(index, pd.MultiIndex):
+        return pd.Index(["_".join(map(str, key)) for key in index])
+    return index.astype(str)
+
+
 def _cap_prediction_rows(
     result: dict, prediction_handle: str | None = None
 ) -> tuple[dict, dict | None]:
@@ -733,6 +745,7 @@ class Executor:
             elif obj_type == "transformer":
                 is_transformer = True
 
+        warnings_out = []
         try:
             if is_classifier_or_regressor:
                 # With decoupled X and y handles, X is features and y is labels
@@ -742,6 +755,19 @@ class Executor:
                     instance.fit(y, X)
                 else:
                     instance.fit(y)
+            elif obj_type == "detector":
+                # A detector annotates one series, which sktime calls X. It is
+                # the MCP target slot (y_handle/y_dataset), or the X slot when
+                # no target was given. fit(y, X=X) collided on X (F-10).
+                if y is not None:
+                    instance.fit(y)
+                    if X is not None:
+                        warnings_out.append(
+                            "X was ignored: a detector annotates a single series (y); "
+                            "it takes no exogenous data."
+                        )
+                else:
+                    instance.fit(X)
             elif obj_type == "clusterer":
                 if y is not None:
                     instance.fit(X, y)
@@ -757,7 +783,10 @@ class Executor:
                     instance.fit(y)
 
             self._handle_manager.mark_fitted(handle_id)
-            return {"success": True, "handle": handle_id, "fitted": True}
+            out = {"success": True, "handle": handle_id, "fitted": True}
+            if warnings_out:
+                out["warnings"] = warnings_out
+            return out
         except Exception as e:
             logger.error("%s failed: %s", type(e).__name__, e, exc_info=True)
             return {"success": False, "error": str(e)}
@@ -800,6 +829,7 @@ class Executor:
                 is_classifier_or_regressor = True
             elif obj_type in ("transformer", "clusterer"):
                 is_transformer = True
+        is_detector = obj_type == "detector"
 
         # A forecaster fitted with X needs future X at predict; sktime otherwise
         # raises an opaque KeyError on the horizon index (F-05).
@@ -815,20 +845,22 @@ class Executor:
 
         dropped_y_warning = None
         try:
-            if fh is None and not (is_classifier_or_regressor or is_transformer):
+            if fh is None and not (is_classifier_or_regressor or is_transformer or is_detector):
                 fh = list(range(1, 13))
 
             kwargs = {}
             if X is not None:
                 kwargs["X"] = X
-            if y is not None:
-                # y at predict is only for annotators; forwarding it to a
-                # forecaster raised a raw "unexpected keyword argument 'y'"
-                # TypeError (NB-18). Only pass it when predict accepts it.
+            if y is not None and obj_type not in ("transformer", "detector"):
+                # For transformers and detectors y is the series itself (handled
+                # in their branches below). Forwarding it to a forecaster raised
+                # a raw "unexpected keyword argument 'y'" TypeError (NB-18):
+                # only pass it when predict accepts it. A transformer has no
+                # predict at all, so the signature lookup must not raise (F-31).
                 accepts_y = False
                 try:
                     accepts_y = "y" in inspect.signature(instance.predict).parameters
-                except (ValueError, TypeError):
+                except (ValueError, TypeError, AttributeError):
                     accepts_y = False
                 if accepts_y:
                     kwargs["y"] = y
@@ -851,17 +883,57 @@ class Executor:
             elif is_transformer:
                 if mode == "predict":
                     if obj_type == "clusterer":
-                        predictions = (
-                            instance.predict(X) if X is not None else instance.predict(fh=fh)
-                        )  # some clusterers might use predict(X)
+                        # predict(fh=...) on a clusterer raised a raw TypeError (F-54)
+                        if X is None:
+                            return {
+                                "success": False,
+                                "error": (
+                                    "Clusterer predict needs the panel to assign clusters "
+                                    "to: pass X_handle or X_dataset."
+                                ),
+                            }
+                        predictions = instance.predict(X)
                     else:
-                        # For transformer, transform is basically the predict equivalent if X is passed
-                        if X is not None:
+                        # predict for a transformer is transform. The series is y
+                        # (as in fit, with X as extra data) or X alone; only the
+                        # X route used to work (F-31).
+                        if y is not None:
+                            predictions = (
+                                instance.transform(y, X) if X is not None else instance.transform(y)
+                            )
+                        elif X is not None:
                             predictions = instance.transform(X)
                         else:
-                            return {"success": False, "error": "Transform requires X"}
+                            return {
+                                "success": False,
+                                "error": (
+                                    "Transformer predict (transform) needs the series to "
+                                    "transform: pass y_handle (as in fit) or X_handle."
+                                ),
+                            }
                 else:
                     return {"success": False, "error": f"Mode {mode} not supported for {obj_type}"}
+            elif is_detector:
+                # Detectors have predict(X): the series to annotate, no fh (F-10).
+                if mode != "predict":
+                    return {
+                        "success": False,
+                        "error": (
+                            f"Mode {mode} not supported for detector. Use mode='predict' "
+                            "for the detection frame, or call_method with predict_points, "
+                            "predict_segments, predict_scores or transform."
+                        ),
+                    }
+                series = y if y is not None else X
+                if series is None:
+                    return {
+                        "success": False,
+                        "error": (
+                            "Detector predict needs the series to annotate: pass y_handle "
+                            "or y_dataset (as in fit; X_handle/X_dataset also work)."
+                        ),
+                    }
+                predictions = instance.predict(series)
             else:
                 if mode == "predict":
                     predictions = instance.predict(fh=fh, **kwargs)
@@ -878,7 +950,7 @@ class Executor:
 
             from sktime_mcp.server import sanitize_for_json
 
-            is_forecast = not (is_classifier_or_regressor or is_transformer)
+            is_forecast = not (is_classifier_or_regressor or is_transformer or is_detector)
             # horizon is only meaningful for forecasters; echoing it for
             # classifiers/regressors/transformers implied a truncation that
             # didn't happen (N-01).
@@ -900,13 +972,13 @@ class Executor:
             truncated_note = None
             if isinstance(predictions, pd.Series):
                 predictions_copy = predictions.copy()
-                predictions_copy.index = predictions_copy.index.astype(str)
+                predictions_copy.index = _index_to_str(predictions_copy.index)
                 result, truncated_note = _cap_prediction_rows(
                     predictions_copy.to_dict(), prediction_handle
                 )
             elif isinstance(predictions, pd.DataFrame):
                 predictions_copy = predictions.copy()
-                predictions_copy.index = predictions_copy.index.astype(str)
+                predictions_copy.index = _index_to_str(predictions_copy.index)
                 # Flatten multiindex columns (predict_interval/quantiles) for JSON.
                 if isinstance(predictions_copy.columns, pd.MultiIndex):
                     predictions_copy.columns = [
@@ -1254,6 +1326,7 @@ class Executor:
                     "handle": handle_id,
                     "fitted": True,
                     **({"exogenous": resolved["exogenous"]} if resolved["exogenous"] else {}),
+                    **({"warnings": fit_result["warnings"]} if fit_result.get("warnings") else {}),
                 },
             )
             return {"success": True, "handle": handle_id}
@@ -1694,8 +1767,8 @@ class Executor:
                     changes_made["frequency"] = freq
 
         # 4. Fill missing values
-        if fill_missing and y.isna().any():
-            n_missing = y.isna().sum()
+        if fill_missing and y.isna().values.any():
+            n_missing = int(y.isna().sum().sum())
             y = y.ffill().bfill()
             if X is not None:
                 X = X.ffill().bfill()
