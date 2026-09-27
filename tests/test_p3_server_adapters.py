@@ -100,3 +100,18 @@ class TestIntegralFloats:
         res = predict_tool(estimator_handle="est_does_not_matter", horizon=2.5)
         assert res["success"] is False
         assert "integer" in res["error"]
+
+
+# ---------------------------------------------------------------------------
+# F-48: the JSON-string `tags` branch is unreachable (schema says object)
+# ---------------------------------------------------------------------------
+
+
+class TestTagsStringBranchRemoved:
+    def test_string_tags_is_structured_error_not_parsed(self):
+        res = query_registry_tool(task="forecaster", tags='{"capability:pred_int": true}')
+        assert res["success"] is False
+        assert "dict" in res["error"].lower()
+
+    def test_docstring_no_longer_claims_json_string_support(self):
+        assert "JSON string" not in (query_registry_tool.__doc__ or "")
