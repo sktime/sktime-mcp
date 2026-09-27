@@ -61,10 +61,7 @@ def _assert_values_preserved(y, dates, values):
     """Every original (timestamp, value) pair survives formatting, and nothing is NaN."""
     assert not y.isna().any(), y
     stamps = pd.DatetimeIndex(dates)
-    if isinstance(y.index, pd.PeriodIndex):
-        keys = stamps.to_period(y.index.freq)
-    else:
-        keys = stamps
+    keys = stamps.to_period(y.index.freq) if isinstance(y.index, pd.PeriodIndex) else stamps
     for key, value in zip(keys, values, strict=True):
         assert key in y.index, (key, y.index)
         assert y.loc[key] == value, (key, y.loc[key], value)
@@ -224,5 +221,26 @@ class TestChangesMadeCounts:
             assert int(y.isna().sum()) == 0
             assert res["metadata"]["missing_values"] == {"sales": 0}
             assert res["changes_made"]["missing_filled"] == 2
+        finally:
+            _pop(ex, res["data_handle"])
+
+
+class TestFinerCandidateRejected:
+    def test_minute_burst_inside_30min_data_is_not_expanded(self):
+        # Three readings one minute apart would let pandas infer "min" from that
+        # window; every timestamp sits on a minute boundary, so only the modal
+        # interval check stops the series being blown up 30-fold.
+        ex = get_executor()
+        regular = pd.date_range("2024-01-01 00:00", periods=12, freq="30min")
+        burst = pd.DatetimeIndex(["2024-01-01 06:01", "2024-01-01 06:02"])
+        dates = [str(ts) for ts in regular.append(burst).sort_values()]
+        values = [float(v) for v in range(len(dates))]
+        res = _load(ex, dates, values)
+        try:
+            y = ex._data_handles[res["data_handle"]]["y"]
+            assert len(y) == len(dates)
+            assert list(y) == values
+            assert not res["changes_made"]["frequency_set"]
+            assert "does not align" in res["changes_made"]["frequency_warning"]
         finally:
             _pop(ex, res["data_handle"])
