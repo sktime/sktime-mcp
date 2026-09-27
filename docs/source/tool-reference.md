@@ -154,7 +154,7 @@ Generate predictions from a fitted estimator.
 | Argument | Type | Required | Default | Description |
 | :--- | :--- | :---: | :--- | :--- |
 | `estimator_handle` | string | ✅ | — | Handle of a **fitted** estimator. |
-| `horizon` | integer | — | `12` | Forecast horizon. |
+| `horizon` | integer | — | `12` | Forecast horizon. At most `SKTIME_MCP_MAX_HORIZON` steps (default 10000); larger requests are rejected before any work, with or without `run_async`. |
 | `mode` | string | — | `predict` | One of `predict`, `predict_interval`, `predict_quantiles`, `predict_proba`, `predict_var`. |
 | `coverage` | float or list | — | `0.9` | Coverage level(s) — used by `predict_interval`. |
 | `alpha` | float or list | — | — | Quantile level(s) — used by `predict_quantiles`. |

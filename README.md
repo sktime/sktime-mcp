@@ -180,6 +180,7 @@ You can configure the server's behavior at runtime using environment variables:
 - `SKTIME_MCP_LOG_LEVEL`: Server logging verbosity level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Defaults to `WARNING`.
 - `SKTIME_MCP_AUTO_FORMAT`: Enables or disables automatic time-series formatting during data loading.
 - `SKTIME_MCP_JOB_MAX_AGE_HOURS`: Maximum hours before completed background jobs are automatically pruned. Defaults to `24`.
+- `SKTIME_MCP_MAX_HORIZON`: Maximum forecast horizon (steps) a `predict` or `split_data` call may request; larger horizons are rejected before any computation. Defaults to `10000`.
 
 ### Connecting from an LLM Client
 
@@ -239,6 +240,7 @@ The server can be configured via environment variables:
 | `SKTIME_MCP_AUTO_FORMAT` | Automatically format time series data on load (`true`/`false`) | `"true"` |
 | `SKTIME_MCP_JOB_MAX_AGE_HOURS` | Maximum age in hours before background jobs are cleared | `24` |
 | `SKTIME_MCP_JOB_CLEANUP_INTERVAL` | Interval in seconds for periodic job cleanup checks | `3600` |
+| `SKTIME_MCP_MAX_HORIZON` | Maximum forecast horizon (steps) for `predict` / `split_data`; larger requests are rejected up front | `10000` |
 
 ## 📚 Available Tools
 

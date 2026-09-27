@@ -10,6 +10,7 @@ import uuid
 from typing import Any
 
 from sktime_mcp.runtime.executor import get_executor
+from sktime_mcp.tools.fit_predict import horizon_cap_error
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,11 @@ def split_data_tool(
                 "success": False,
                 "error": f"fh must be an integer or list of integers, got {type(fh).__name__}",
             }
+        # A hold-out longer than SKTIME_MCP_MAX_HORIZON could never be
+        # forecast, so apply predict's cap here too (F-24).
+        cap_error = horizon_cap_error(fh if isinstance(fh, int) else max(fh))
+        if cap_error:
+            return {"success": False, "error": cap_error.replace("horizon=", "fh=", 1)}
 
     data_info = executor._data_handles[data_handle]
     y = data_info["y"]
