@@ -50,6 +50,8 @@ def test_every_schema_property_declares_a_type():
     ("tool_name", "prop", "expected_types"),
     [
         ("fit", "fh", ["integer", "array"]),
+        ("fit", "X_handle", ["string", "array"]),
+        ("fit", "X_dataset", ["string", "array"]),
         ("predict", "coverage", ["number", "array"]),
         ("predict", "alpha", ["number", "array"]),
         ("split_data", "fh", ["integer", "array"]),
@@ -60,3 +62,4 @@ def test_previously_untyped_properties_are_typed(tool_name, prop, expected_types
     tools = {t.name: t for t in asyncio.run(list_tools())}
     prop_schema = tools[tool_name].inputSchema["properties"][prop]
     assert prop_schema["type"] == expected_types
+    assert "anyOf" not in prop_schema
