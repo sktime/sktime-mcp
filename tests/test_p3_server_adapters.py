@@ -115,3 +115,27 @@ class TestTagsStringBranchRemoved:
 
     def test_docstring_no_longer_claims_json_string_support(self):
         assert "JSON string" not in (query_registry_tool.__doc__ or "")
+
+
+# ---------------------------------------------------------------------------
+# F-49: sets serialise as lists, not as their repr string
+# ---------------------------------------------------------------------------
+
+
+class TestSanitizeSets:
+    def test_set_becomes_sorted_list(self):
+        assert sanitize_for_json({3, 1, 2}) == [1, 2, 3]
+
+    def test_frozenset_becomes_sorted_list(self):
+        assert sanitize_for_json(frozenset({"b", "a"})) == ["a", "b"]
+
+    def test_nested_set_in_dict_is_json_serialisable(self):
+        out = sanitize_for_json({"tags": {"x", "y"}})
+        assert out == {"tags": ["x", "y"]}
+        json.dumps(out)
+
+    def test_unsortable_set_falls_back_to_list(self):
+        out = sanitize_for_json({1, "a"})
+        assert isinstance(out, list)
+        assert set(out) == {1, "a"}
+        json.dumps(out)
