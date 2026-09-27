@@ -231,3 +231,96 @@ class TestConvertKeepsExogenous:
         assert new["X"] is not None, "convert dropped the exogenous X"
         pd.testing.assert_frame_equal(new["X"], X)
         assert any("exogenous" in c.lower() for c in res["changes_applied"]), res
+
+
+# ---------------------------------------------------------------------------
+# F-32 / N-2: save_data json edge cases and the reported time column
+# ---------------------------------------------------------------------------
+
+
+def _load_back(ex, path, fmt, time_column, target_column):
+    return ex.load_data_source(
+        {
+            "type": "file",
+            "path": str(path),
+            "format": fmt,
+            "time_column": time_column,
+            "target_column": target_column,
+        }
+    )
+
+
+class TestSaveDataEdges:
+    def test_json_multiindex_handle(self, register_handle, tmp_path):
+        idx = pd.MultiIndex.from_product(
+            [["a", "b"], pd.period_range("2024-01", periods=3, freq="M")],
+            names=["instance", "period"],
+        )
+        y = pd.DataFrame({"value": range(6)}, index=idx, dtype=float)
+        dh = register_handle("test_json_multiindex", y)
+
+        out = tmp_path / "panel.json"
+        res = save_data_tool(dh, path=str(out), format="json")
+        assert res["success"], res
+        assert res["time_column"] == "period"
+        assert res["index_columns"] == ["instance", "period"]
+        records = json.loads(out.read_text())
+        assert records[0] == {"instance": "a", "period": "2024-01", "value": 0.0}
+
+    def test_json_column_named_time(self, register_handle, tmp_path):
+        idx = pd.date_range("2024-01-01", periods=3, freq="D")
+        y = pd.DataFrame({"time": [1.0, 2.0, 3.0], "value": [4.0, 5.0, 6.0]}, index=idx)
+        dh = register_handle("test_json_time_col", y)
+
+        out = tmp_path / "t.json"
+        res = save_data_tool(dh, path=str(out), format="json")
+        assert res["success"], res
+        assert res["time_column"] == "time_index"
+        records = json.loads(out.read_text())
+        assert set(records[0]) == {"time_index", "time", "value"}
+
+    @pytest.mark.parametrize("fmt", ["csv", "json"])
+    def test_named_index_round_trips_with_reported_time_column(
+        self, register_handle, tmp_path, fmt
+    ):
+        idx = pd.date_range("2024-01-01", periods=4, freq="D", name="date")
+        y = pd.Series([1.0, 2.0, 3.0, 4.0], index=idx, name="value")
+        dh = register_handle(f"test_roundtrip_{fmt}", y)
+
+        out = tmp_path / f"series.{fmt}"
+        res = save_data_tool(dh, path=str(out), format=fmt)
+        assert res["success"], res
+        assert res["time_column"] == "date"
+
+        ex = get_executor()
+        loaded = _load_back(ex, out, fmt, res["time_column"], "value")
+        try:
+            assert loaded["success"], loaded
+            y_back = ex._data_handles[loaded["data_handle"]]["y"]
+            assert isinstance(y_back.index, (pd.DatetimeIndex, pd.PeriodIndex))
+            assert list(y_back.values) == [1.0, 2.0, 3.0, 4.0]
+            assert loaded["metadata"].get("exog_columns", []) == []
+        finally:
+            ex._data_handles.pop(loaded.get("data_handle"), None)
+
+    def test_unnamed_index_written_as_time(self, register_handle, tmp_path):
+        idx = pd.date_range("2024-01-01", periods=3, freq="D")
+        y = pd.Series([1.0, 2.0, 3.0], index=idx, name="value")
+        dh = register_handle("test_unnamed_idx", y)
+
+        out = tmp_path / "s.csv"
+        res = save_data_tool(dh, path=str(out), format="csv")
+        assert res["success"], res
+        assert res["time_column"] == "time"
+        assert out.read_text().splitlines()[0] == "time,value"
+
+    def test_parquet_reports_index_kept_in_file(self, register_handle, tmp_path):
+        pytest.importorskip("pyarrow")
+        idx = pd.date_range("2024-01-01", periods=3, freq="D", name="date")
+        y = pd.Series([1.0, 2.0, 3.0], index=idx, name="value")
+        dh = register_handle("test_parquet_idx", y)
+
+        res = save_data_tool(dh, path=str(tmp_path / "s.parquet"), format="parquet")
+        assert res["success"], res
+        assert res["time_column"] is None
+        assert "index" in res["note"].lower()

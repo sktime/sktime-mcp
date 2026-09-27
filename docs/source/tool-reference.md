@@ -292,6 +292,14 @@ The format comes from the `format` argument, **not** the file extension.
 Writing to `out.parquet` with the default `format` produces a CSV.
 ```
 
+CSV and JSON write the time index as a column named after the index
+(`time` when the index is unnamed, `time_index` if that name is already a
+data column). The response reports it as `time_column`; pass that value back
+as `load_data_source`'s `time_column` to reload the file with its time index.
+A MultiIndex becomes one column per level, listed in `index_columns`.
+Parquet keeps the index in the file itself (`time_column` is `null`) and is
+reloaded without `time_column`.
+
 ### `release_data_handle`
 
 | Argument | Type | Required | Description |

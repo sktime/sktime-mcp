@@ -22,6 +22,33 @@ _FORMAT_WRITERS = {
 }
 
 
+def _index_to_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    """Move every index level into a column with a non-colliding name.
+
+    Level names are kept when present; an unnamed time level becomes
+    ``"time"`` and other unnamed levels ``"level_<i>"``. A name that is
+    already a data column gets an ``_index`` suffix (then ``_index_2``, ...)
+    instead of failing with "cannot insert time, already exists" (F-32).
+    Returns the frame with a RangeIndex and the list of index column names,
+    the last of which is the time level.
+    """
+    taken = {str(c) for c in df.columns}
+    n_levels = df.index.nlevels
+    names: list[str] = []
+    for i, level_name in enumerate(df.index.names):
+        if level_name is not None:
+            base = str(level_name)
+        else:
+            base = "time" if i == n_levels - 1 else f"level_{i}"
+        candidate, n = base, 1
+        while candidate in taken:
+            n += 1
+            candidate = f"{base}_index" if n == 2 else f"{base}_index_{n - 1}"
+        names.append(candidate)
+        taken.add(candidate)
+    return df.reset_index(names=names), names
+
+
 def save_data_tool(
     data_handle: str,
     path: str,
@@ -32,6 +59,15 @@ def save_data_tool(
 
     Supports CSV, Parquet, and JSON output formats. The target
     directory is created automatically if it does not exist.
+
+    CSV and JSON write the time index as a regular column named after the
+    index (``"time"`` when the index is unnamed; ``"time_index"`` if that
+    name is already a data column). The name used is returned as
+    ``time_column`` so the file can be loaded back with
+    ``load_data_source(time_column=<time_column>)``. A MultiIndex (panel or
+    hierarchical data) becomes one column per level, listed in
+    ``index_columns``; ``time_column`` is the last level. Parquet keeps the
+    index in the file itself, so it is loaded back without ``time_column``.
 
     Parameters
     ----------
@@ -57,6 +93,11 @@ def save_data_tool(
         - ``"format"`` (str) -- The format used to write the file.
         - ``"rows"`` (int) -- Number of rows written to the file.
         - ``"overwritten"`` (bool) -- True if an existing file was replaced.
+        - ``"time_column"`` (str or None) -- Name of the column holding the time
+          index (csv/json); None for parquet, which stores the index itself.
+        - ``"index_columns"`` (list of str or None) -- All index level columns
+          written (csv/json); a single-element list unless the index is a
+          MultiIndex.
         - ``"error"`` (str, optional) -- Error message if "success" is False.
     """
     executor = get_executor()
@@ -110,26 +151,37 @@ def save_data_tool(
         abs_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Write
-        if fmt == "json":
-            # records orient drops the index; write it as a "time" column so the
-            # file round-trips through load_data_source(time_column="time").
-            out_df = df.copy()
-            out_df.index = out_df.index.astype(str)
-            out_df = out_df.reset_index(names="time")
-            out_df.to_json(str(abs_path), orient="records", indent=2)
-        elif fmt == "parquet":
+        if fmt == "parquet":
+            # Parquet stores the index in the file; pd.read_parquet restores it.
             df.to_parquet(str(abs_path))
+            index_columns = None
         else:
-            # CSV — include the index as a time column
-            df.to_csv(str(abs_path))
+            # csv/json: the index becomes explicit column(s) so the file
+            # round-trips through load_data_source(time_column=...) (N-2).
+            out_df, index_columns = _index_to_columns(df)
+            if fmt == "json":
+                # Period/Timestamp values are not JSON serialisable as-is.
+                for col in index_columns:
+                    out_df[col] = out_df[col].astype(str)
+                out_df.to_json(str(abs_path), orient="records", indent=2)
+            else:
+                out_df.to_csv(str(abs_path), index=False)
 
-        return {
+        result = {
             "success": True,
             "saved_path": str(abs_path),
             "format": fmt,
             "rows": len(df),
             "overwritten": existed,
+            "time_column": index_columns[-1] if index_columns else None,
+            "index_columns": index_columns,
         }
+        if fmt == "parquet":
+            result["note"] = (
+                "Parquet keeps the index in the file; load it back with "
+                "load_data_source without time_column."
+            )
+        return result
 
     except Exception as e:
         logger.exception("Error saving data")
