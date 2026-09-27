@@ -139,3 +139,36 @@ class TestSanitizeSets:
         assert isinstance(out, list)
         assert set(out) == {1, "a"}
         json.dumps(out)
+
+
+# ---------------------------------------------------------------------------
+# F-50: run_command with a backgrounded child holding stdout
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX process groups")
+class TestRunCommandBackgroundChild:
+    def test_timeout_returns_partial_output_and_kills_process_group(self, monkeypatch):
+        monkeypatch.setattr(run_command_module, "_TIMEOUT_SECONDS", 1)
+        started = time.monotonic()
+        res = run_command_tool("sleep 3 & pid=$!; echo started $pid")
+        elapsed = time.monotonic() - started
+
+        assert elapsed < 2.5, f"took {elapsed:.1f}s: waited for the background child"
+        assert res["success"] is False
+        assert res["timed_out"] is True
+        assert "started" in res["output"]
+        assert "timed out" in res["error"].lower()
+
+        # The background sleep must not outlive the tool call.
+        pid = int(res["output"].split()[1])
+        status = Path(f"/proc/{pid}/status")
+        if status.exists():
+            state = re.search(r"^State:\s+(\S)", status.read_text(), re.M)
+            assert state and state.group(1) == "Z", f"pid {pid} still alive"
+
+    def test_fast_command_is_not_marked_timed_out(self):
+        res = run_command_tool("echo hello")
+        assert res["success"] is True
+        assert res["timed_out"] is False
+        assert res["output"] == "hello"
