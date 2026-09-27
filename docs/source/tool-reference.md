@@ -415,4 +415,8 @@ packages and inspecting the filesystem on your behalf. If you need a hard
 guarantee, run the server inside a container (see the Docker option in the
 {doc}`user-guide`) so the blast radius is the container rather than your machine.
 
+Over HTTP/SSE (`sktime_mcp.app`) this tool is hidden and rejected by default;
+set `SKTIME_MCP_HTTP_DISABLE_RUN_COMMAND=false` to expose it to authenticated
+HTTP clients. Stdio clients always see it.
+
 See {doc}`developer/architecture` for the full trust boundary.

@@ -61,9 +61,15 @@ on ask-every-time, or turn it off, unless you actively want the assistant
 installing packages and inspecting files for you. See {doc}`tool-reference`.
 ```
 
-The server has no authentication layer of its own: it runs as you, with your
-filesystem permissions. Treat it as a local trusted tool, and use a container if
-you want a harder boundary.
+Over stdio the server has no authentication layer: it runs as you, with your
+filesystem permissions, for the one client that launched it. Treat it as a local
+trusted tool, and use a container if you want a harder boundary.
+
+The HTTP/SSE app (`sktime_mcp.app`) is reachable by anything on the network, so
+it requires a bearer token (`SKTIME_MCP_HTTP_TOKEN`), checks `Host`/`Origin`
+headers against an allow-list, and hides `run_command` from HTTP clients by
+default. See the configuration table in the README for the `SKTIME_MCP_HTTP_*`
+variables.
 
 ### From Conversation to Code
 Once you've found a workflow that works, you can turn your conversation into a permanent asset. Ask the assistant to **"export the Python code,"** and it will generate a standalone script that reproduces your entire analysis exactly.

@@ -160,17 +160,40 @@ sktime-mcp
 ```
 
 #### HTTP/SSE Mode via FastAPI (for Web Browsers or ChatGPT)
-To expose the MCP server as a REST API over SSE (Server-Sent Events) for direct consumption:
+The same server can be served over HTTP/SSE (Server-Sent Events). Because the
+server runs with your account's privileges, the HTTP app **requires a bearer
+token** and refuses to start without one:
+
 ```bash
+export SKTIME_MCP_HTTP_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+echo "$SKTIME_MCP_HTTP_TOKEN"   # keep this; clients must send it
 PYTHONPATH=src .venv/bin/uvicorn sktime_mcp.app:app --host 127.0.0.1 --port 8001
 ```
-This exposes standard SSE on `/sse` and message passing on `/messages/`.
 
-> **Note for ChatGPT Web Users:** ChatGPT runs in the cloud and cannot connect to `http://127.0.0.1` (you will get an "Unsafe URL" error). You must expose your local server to the internet using a secure tunnel like [ngrok](https://ngrok.com/):
-> ```bash
-> ngrok http 8001
-> ```
-> Then use the provided `https://<your-ngrok-id>.ngrok-free.app/sse` URL in ChatGPT.
+This exposes SSE on `/sse` and message passing on `/messages/`. Every request to
+them must carry `Authorization: Bearer <token>` (only the `/` health check is
+public); anything else gets `401`. Over HTTP the app also:
+
+- rejects requests whose `Host`/`Origin` header is not on the allow-list
+  (DNS-rebinding protection; defaults to `localhost` and `127.0.0.1` on any
+  port — set `SKTIME_MCP_HTTP_ALLOWED_HOSTS` / `SKTIME_MCP_HTTP_ALLOWED_ORIGINS`
+  when you serve it under another name), and applies the same origin list as
+  its CORS policy;
+- hides the `run_command` tool (arbitrary shell) from HTTP clients unless you set
+  `SKTIME_MCP_HTTP_DISABLE_RUN_COMMAND=false`. Stdio clients are unaffected.
+
+`SKTIME_MCP_HTTP_INSECURE=true` starts the app without a token for throwaway
+local experiments; it logs a loud warning and must never be used on a port that
+anything but your own machine can reach.
+
+> **Note for ChatGPT Web Users:** ChatGPT runs in the cloud and cannot connect to
+> `http://127.0.0.1` (you will get an "Unsafe URL" error). If you tunnel the
+> server to the internet (for example with [ngrok](https://ngrok.com/)), you are
+> exposing a process that runs as you: only do so with `SKTIME_MCP_HTTP_TOKEN`
+> set, add the tunnel hostname to `SKTIME_MCP_HTTP_ALLOWED_HOSTS` (and the
+> `https://` origin to `SKTIME_MCP_HTTP_ALLOWED_ORIGINS`), configure the client
+> to send the `Authorization: Bearer <token>` header, and leave `run_command`
+> disabled. Stop the tunnel when you are done.
 
 ### Configuration (Environment Variables)
 
@@ -239,6 +262,11 @@ The server can be configured via environment variables:
 | `SKTIME_MCP_AUTO_FORMAT` | Automatically format time series data on load (`true`/`false`) | `"true"` |
 | `SKTIME_MCP_JOB_MAX_AGE_HOURS` | Maximum age in hours before background jobs are cleared | `24` |
 | `SKTIME_MCP_JOB_CLEANUP_INTERVAL` | Interval in seconds for periodic job cleanup checks | `3600` |
+| `SKTIME_MCP_HTTP_TOKEN` | Bearer token required on every HTTP/SSE request (`sktime_mcp.app`); the app refuses to start without it | (None) |
+| `SKTIME_MCP_HTTP_INSECURE` | Serve HTTP/SSE with no token (`true`); logs a warning, local experiments only | `"false"` |
+| `SKTIME_MCP_HTTP_ALLOWED_HOSTS` | Comma-separated `Host` values accepted over HTTP (`name:*` = any port); DNS-rebinding protection | `localhost, localhost:*, 127.0.0.1, 127.0.0.1:*` |
+| `SKTIME_MCP_HTTP_ALLOWED_ORIGINS` | Comma-separated `Origin` values accepted over HTTP (`scheme://name:*` = any port); also the CORS allow-list | `http://localhost, http://localhost:*, http://127.0.0.1, http://127.0.0.1:*` |
+| `SKTIME_MCP_HTTP_DISABLE_RUN_COMMAND` | Hide `run_command` from HTTP/SSE clients (stdio unaffected) | `"true"` |
 
 ## 📚 Available Tools
 
