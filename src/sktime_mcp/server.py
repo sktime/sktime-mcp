@@ -527,7 +527,12 @@ async def list_tools() -> list[Tool]:
                     },
                     "metric": {
                         "type": "string",
-                        "description": "Optional: performance metric name (e.g. 'MeanAbsolutePercentageError').",
+                        "description": (
+                            "Optional: performance metric. A metric class name "
+                            "(e.g. 'MeanAbsolutePercentageError', case-insensitive) or "
+                            "one of the aliases mape, smape, mae, mse, rmse, mase, msle, "
+                            "rmsse."
+                        ),
                     },
                     "initial_window": {
                         "type": "integer",

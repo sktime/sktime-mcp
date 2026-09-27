@@ -184,18 +184,47 @@ def _get_index_frequency_metadata(
     return fallback
 
 
+# Short metric aliases accepted by evaluate(metric=...), matched case-insensitively.
+# Keep in sync with the ``metric`` description in server.py and the tool reference.
+_METRIC_ALIASES: dict[str, tuple[str, dict[str, Any]]] = {
+    "mape": ("MeanAbsolutePercentageError", {}),
+    "smape": ("MeanAbsolutePercentageError", {"symmetric": True}),
+    "mae": ("MeanAbsoluteError", {}),
+    "mse": ("MeanSquaredError", {}),
+    "rmse": ("MeanSquaredError", {"square_root": True}),
+    "mase": ("MeanAbsoluteScaledError", {}),
+    "msle": ("MeanSquaredLogError", {}),
+    "rmsse": ("MeanSquaredScaledError", {"square_root": True}),
+}
+
+
+def _unknown_metric_error(metric_name: str) -> str:
+    return (
+        f"Unknown metric: {metric_name}. Use a metric class name (e.g. "
+        "'MeanAbsolutePercentageError', case-insensitive) or one of the aliases "
+        f"{', '.join(_METRIC_ALIASES)}. "
+        "Check available metrics with query_registry(task='metric')."
+    )
+
+
 def _resolve_metric_scoring(metric_name: str) -> Any | None:
-    """Return an instantiated sktime forecasting metric by name, or None if not found."""
+    """Return an instantiated sktime forecasting metric by name, or None if not found.
+
+    Accepts registry class names case-insensitively plus the short aliases in
+    ``_METRIC_ALIASES`` (e.g. "mape", "rmse").
+    """
     try:
         from sktime.registry import all_estimators
     except ImportError:  # pragma: no cover
         return None
+    key = metric_name.strip().lower()
+    class_name, params = _METRIC_ALIASES.get(key, (key, {}))
     try:
         metrics_df = all_estimators("metric", as_dataframe=True)
-        row = metrics_df[metrics_df["name"] == metric_name]
+        row = metrics_df[metrics_df["name"].str.lower() == class_name.lower()]
         if row.empty:
             return None
-        return row.iloc[0]["object"]()
+        return row.iloc[0]["object"](**params)
     except Exception as e:
         logger.warning(f"Failed to resolve metric '{metric_name}': {e}")
         return None
@@ -1128,10 +1157,7 @@ class Executor:
             if metric:
                 scoring = _resolve_metric_scoring(metric)
                 if scoring is None:
-                    raise ValueError(
-                        f"Unknown metric: {metric}. "
-                        "Check available metrics with query_registry(task='metric')."
-                    )
+                    raise ValueError(_unknown_metric_error(metric))
 
             # Step 2: Run cross-validation
             self._job_manager.update_job(

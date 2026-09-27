@@ -203,7 +203,7 @@ Cross-validate an estimator.
 | `y` | string | ✅ | — | Target series: a data handle ID **or** a demo dataset name. |
 | `X` | string | — | — | Exogenous series: data handle ID or demo dataset name. |
 | `cv_folds` | integer | — | `3` | Number of folds. Ignored when `initial_window` is set. |
-| `metric` | string | — | — | Metric name, e.g. `MeanAbsolutePercentageError`. |
+| `metric` | string | — | — | Metric class name (case-insensitive), e.g. `MeanAbsolutePercentageError`, or an alias: `mape`, `smape`, `mae`, `mse`, `rmse`, `mase`, `msle`, `rmsse`. |
 | `initial_window` | integer | — | — | Initial training window for expanding-window CV. |
 | `run_async` | boolean | — | `false` | Run in the background, return a `job_id`. |
 
