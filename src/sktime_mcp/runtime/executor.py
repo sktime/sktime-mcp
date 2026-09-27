@@ -1292,7 +1292,7 @@ class Executor:
 
             from sktime_mcp.data import DataSourceRegistry
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             adapter = DataSourceRegistry.create_adapter(config)
             data = await loop.run_in_executor(None, adapter.load)
 
