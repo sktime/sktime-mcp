@@ -158,6 +158,20 @@ def _candidate_frequencies(index: pd.DatetimeIndex, most_common_diff: pd.Timedel
     return candidates
 
 
+def _missing_values_report(y: Any, X: Any) -> dict[str, int]:
+    """Per-column NaN counts of the stored data, as plain ints (load-response shape)."""
+    report: dict[str, int] = {}
+    for obj in (y, X):
+        if obj is None:
+            continue
+        if isinstance(obj, pd.DataFrame):
+            report.update({str(col): int(n) for col, n in obj.isna().sum().items()})
+        else:
+            name = obj.name if getattr(obj, "name", None) is not None else "target"
+            report[str(name)] = int(obj.isna().sum())
+    return report
+
+
 # Max forecast rows returned inline before truncation (NB-22). Normal horizons
 # (<= a few dozen) are never affected; a 1000-step forecast would otherwise
 # flood the client with ~30KB+ of inline JSON.
@@ -1490,7 +1504,7 @@ class Executor:
 
         # 1. Remove duplicates
         if remove_duplicates and y.index.duplicated().any():
-            n_duplicates = y.index.duplicated().sum()
+            n_duplicates = int(y.index.duplicated().sum())
             y = y[~y.index.duplicated(keep="first")]
             if X is not None:
                 X = X[~X.index.duplicated(keep="first")]
@@ -1566,7 +1580,9 @@ class Executor:
 
         # 4. Fill missing values
         if fill_missing and y.isna().any(axis=None):
-            n_missing = y.isna().sum()
+            n_missing = (
+                int(y.isna().sum().sum()) if isinstance(y, pd.DataFrame) else int(y.isna().sum())
+            )
             y = y.ffill().bfill()
             if X is not None:
                 X = X.ffill().bfill()
@@ -1600,6 +1616,7 @@ class Executor:
                 "rows": len(y),
                 "start_date": str(y.index.min()),
                 "end_date": str(y.index.max()),
+                "missing_values": _missing_values_report(y, X),
             },
             "validation": data_info.get("validation", {}),
             "config": data_info.get("config", {}),
