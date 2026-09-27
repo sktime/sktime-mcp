@@ -336,13 +336,36 @@ class Executor:
             ),
         }
 
+    def _no_dataset_exog_error(self, name: str) -> dict[str, Any]:
+        """Error body for a demo dataset used as X that carries no exogenous data."""
+        return {
+            "success": False,
+            "error": (
+                f"Demo dataset '{name}' has no exogenous data: it is a target series only "
+                "and cannot be used as X. Omit the X argument, or pick a dataset that "
+                "ships exogenous features (e.g. 'longley')."
+            ),
+        }
+
+    @staticmethod
+    def _ambiguous_slot_error(slot: str, handle: str, dataset: str) -> dict[str, Any]:
+        """Error body when both a data handle and a demo dataset name the same slot."""
+        return {
+            "success": False,
+            "error": (
+                f"Ambiguous {slot} input: both {slot}_handle='{handle}' and "
+                f"{slot}_dataset='{dataset}' were given. Pass exactly one of them."
+            ),
+        }
+
     def _resolve_source(self, source: str, prefer: str = "y") -> dict[str, Any]:
         """Resolve a source id to a series, trying data_handle then demo dataset.
 
-        ``prefer`` selects which component to return ("y" or "X"). For a data
-        handle "X" is its stored exogenous frame — an error if the handle has
-        none (F-05: it used to fall through to the target). For a demo dataset
-        the other component is the fallback when the preferred one is absent.
+        ``prefer`` selects which component to return ("y" or "X"). "X" is the
+        stored exogenous frame of a data handle or the exogenous data of a
+        demo dataset — an error if the source has none (F-05 / #556 item 6:
+        it used to fall through to the target, so X == y silently regressed
+        the target on itself).
         """
         if source in self._data_handles:
             if prefer == "X":
@@ -353,8 +376,11 @@ class Executor:
             return {"success": True, "data": self._data_handles[source]["y"]}
         res = self.load_dataset(source)
         if res["success"]:
-            first, second = ("X", "y") if prefer == "X" else ("y", "X")
-            data = res[first] if res[first] is not None else res[second]
+            if prefer == "X":
+                if res["X"] is None:
+                    return self._no_dataset_exog_error(source)
+                return {"success": True, "data": res["X"]}
+            data = res["y"] if res["y"] is not None else res["X"]
             return {"success": True, "data": data}
         return res
 
@@ -374,7 +400,15 @@ class Executor:
         no explicit X source is given (predict passes ``auto_X=False`` because
         it needs *future* X). The result's ``exogenous`` entry
         ({"handle", "columns"}) records X taken from a data handle, or is None.
+
+        A handle and a dataset for the same slot (``y_handle`` + ``y_dataset``,
+        ``X_handle`` + ``X_dataset``) is ambiguous and refused (#556 item 6:
+        the dataset used to win silently).
         """
+        if y_handle and y_dataset:
+            return self._ambiguous_slot_error("y", y_handle, y_dataset)
+        if X_handle and X_dataset:
+            return self._ambiguous_slot_error("X", X_handle, X_dataset)
         if X_handle and X_handle == y_handle:
             return {
                 "success": False,
@@ -407,6 +441,8 @@ class Executor:
             data_res = self.load_dataset(X_dataset)
             if not data_res["success"]:
                 return data_res
+            if data_res["X"] is None:
+                return self._no_dataset_exog_error(X_dataset)
             y = data_res["y"]
             X = data_res["X"]
         else:
@@ -414,7 +450,9 @@ class Executor:
                 data_res = self.load_dataset(X_dataset)
                 if not data_res["success"]:
                     return data_res
-                X = data_res["X"] if data_res["X"] is not None else data_res["y"]
+                if data_res["X"] is None:
+                    return self._no_dataset_exog_error(X_dataset)
+                X = data_res["X"]
 
             if y_dataset:
                 data_res = self.load_dataset(y_dataset)
@@ -435,7 +473,9 @@ class Executor:
 
         Refuses ``X == y`` for a data handle (the target would be regressed on
         itself) and, when ``X`` is omitted, uses the exogenous columns stored
-        on a ``y`` data handle.
+        on a ``y`` data handle. A demo dataset used as ``X`` must ship exogenous
+        data; it never falls back to its target (so ``X == y`` on a
+        target-only dataset such as 'airline' is refused too).
         """
         if X and y == X and y in self._data_handles:
             return {
@@ -965,7 +1005,9 @@ class Executor:
                     # the prefix selects the dataset component
                     actual_key = k.replace("_dataset", "")
                     if actual_key == "X":
-                        value = data_res["X"] if data_res["X"] is not None else data_res["y"]
+                        if data_res["X"] is None:
+                            return self._no_dataset_exog_error(v)
+                        value = data_res["X"]
                     else:
                         value = data_res["y"]
                     kwargs[actual_key] = value
