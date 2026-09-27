@@ -8,6 +8,7 @@ and running fit/predict operations.
 import asyncio
 import inspect
 import logging
+import re
 import uuid
 from collections import deque
 from typing import Any
@@ -98,6 +99,40 @@ _MAX_PREDICTION_ROWS = 500
 _ALLOWED_DUNDERS = frozenset({"__call__", "__len__", "__repr__", "__str__"})
 
 
+# Factory functions LLMs commonly try in a craft spec, mapped to the class
+# constructor expression that craft does accept.
+_FACTORY_HINTS: dict[str, str] = {
+    "make_reduction": (
+        "RecursiveTabularRegressionForecaster(estimator=<sklearn regressor>, "
+        "window_length=<int>) for strategy='recursive' "
+        "(DirectTabularRegressionForecaster for 'direct'), or "
+        "YfromX(estimator=<sklearn regressor>) to regress y on exogenous X only"
+    ),
+    "make_pipeline": (
+        "the '*' operator, e.g. 'Detrender() * NaiveForecaster()', or "
+        "TransformedTargetForecaster(steps=[...])"
+    ),
+}
+
+
+def _spec_name_error(spec: str, err: NameError) -> str:
+    """Explain a NameError raised by craft: specs must be class constructor calls."""
+    name = getattr(err, "name", None)
+    if not name:
+        match = re.search(r"name '([^']+)' is not defined", str(err))
+        name = match.group(1) if match else str(err)
+    msg = (
+        f"'{name}' is not a known sktime class. instantiate specs must be class "
+        "constructor expressions such as 'NaiveForecaster(sp=12)' or "
+        "'Detrender() * ARIMA()'; factory functions (e.g. make_reduction) are not "
+        "supported. "
+    )
+    hint = _FACTORY_HINTS.get(name)
+    if hint:
+        return msg + f"Use {hint} instead."
+    return msg + f"Check the name with query_registry(query='{name}')."
+
+
 def _is_sktime_object(obj: Any) -> bool:
     """True if *obj* is a genuine sktime estimator/object, not a bare value.
 
@@ -149,18 +184,47 @@ def _get_index_frequency_metadata(
     return fallback
 
 
+# Short metric aliases accepted by evaluate(metric=...), matched case-insensitively.
+# Keep in sync with the ``metric`` description in server.py and the tool reference.
+_METRIC_ALIASES: dict[str, tuple[str, dict[str, Any]]] = {
+    "mape": ("MeanAbsolutePercentageError", {}),
+    "smape": ("MeanAbsolutePercentageError", {"symmetric": True}),
+    "mae": ("MeanAbsoluteError", {}),
+    "mse": ("MeanSquaredError", {}),
+    "rmse": ("MeanSquaredError", {"square_root": True}),
+    "mase": ("MeanAbsoluteScaledError", {}),
+    "msle": ("MeanSquaredLogError", {}),
+    "rmsse": ("MeanSquaredScaledError", {"square_root": True}),
+}
+
+
+def _unknown_metric_error(metric_name: str) -> str:
+    return (
+        f"Unknown metric: {metric_name}. Use a metric class name (e.g. "
+        "'MeanAbsolutePercentageError', case-insensitive) or one of the aliases "
+        f"{', '.join(_METRIC_ALIASES)}. "
+        "Check available metrics with query_registry(task='metric')."
+    )
+
+
 def _resolve_metric_scoring(metric_name: str) -> Any | None:
-    """Return an instantiated sktime forecasting metric by name, or None if not found."""
+    """Return an instantiated sktime forecasting metric by name, or None if not found.
+
+    Accepts registry class names case-insensitively plus the short aliases in
+    ``_METRIC_ALIASES`` (e.g. "mape", "rmse").
+    """
     try:
         from sktime.registry import all_estimators
     except ImportError:  # pragma: no cover
         return None
+    key = metric_name.strip().lower()
+    class_name, params = _METRIC_ALIASES.get(key, (key, {}))
     try:
         metrics_df = all_estimators("metric", as_dataframe=True)
-        row = metrics_df[metrics_df["name"] == metric_name]
+        row = metrics_df[metrics_df["name"].str.lower() == class_name.lower()]
         if row.empty:
             return None
-        return row.iloc[0]["object"]()
+        return row.iloc[0]["object"](**params)
     except Exception as e:
         logger.warning(f"Failed to resolve metric '{metric_name}': {e}")
         return None
@@ -284,13 +348,33 @@ class Executor:
                 "Evicted data handle %s (limit %d reached)", handle_id, self._max_data_handles
             )
 
+    def is_data_handle(self, handle_id: str) -> bool:
+        """True if *handle_id* is (or was) a data handle, by store or by ``data_`` prefix."""
+        return (
+            handle_id in self._data_handles
+            or handle_id in self._evicted_data
+            or handle_id.startswith("data_")
+        )
+
+    def is_estimator_handle(self, handle_id: str) -> bool:
+        """True if *handle_id* is (or was) an estimator handle, by store or ``est_`` prefix."""
+        hm = self._handle_manager
+        return hm.exists(handle_id) or hm.was_evicted(handle_id) or handle_id.startswith("est_")
+
     def data_handle_missing(self, handle_id: str) -> dict[str, Any]:
         """Error body for a missing data handle — distinguishes evicted from unknown.
 
         Returns the ``error`` string plus the capped available-handles summary,
-        so callers can splat it into a not-found response.
+        so callers can splat it into a not-found response. An estimator handle
+        passed where a data handle is expected names the right tools (F-66).
         """
-        if handle_id in self._evicted_data:
+        if self.is_estimator_handle(handle_id):
+            error = (
+                f"'{handle_id}' is an estimator handle, not a data handle. Estimator "
+                "handles are managed with list_handles/release_handle; data tools take "
+                "data_... ids from load_data_source (see list_available_data)."
+            )
+        elif handle_id in self._evicted_data:
             error = (
                 f"Data handle '{handle_id}' was evicted (handle limit "
                 f"{self._max_data_handles} reached); reload the source."
@@ -401,6 +485,11 @@ class Executor:
                 "estimator": estimator_name,
                 "spec": spec,
             }
+        except NameError as e:
+            # craft evaluates the spec; an unknown name is a bare NameError,
+            # e.g. for factory functions such as make_reduction (F-66).
+            logger.error("instantiate failed: %s", e)
+            return {"success": False, "error": _spec_name_error(spec, e)}
         except Exception as e:
             import sys
 
@@ -796,6 +885,16 @@ class Executor:
         try:
             instance = self._handle_manager.get_instance(handle_id)
         except KeyError:
+            if self.is_data_handle(handle_id):
+                return {
+                    "success": False,
+                    "error": (
+                        f"'{handle_id}' is a data handle; call_method takes an estimator "
+                        "handle (est_...) from instantiate. Pass data handles through "
+                        "*_data_handle kwargs, e.g. "
+                        f"kwargs={{'y_data_handle': '{handle_id}'}}."
+                    ),
+                }
             return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
 
         # Block private/dunder methods: they are not part of the estimator API
@@ -1088,10 +1187,7 @@ class Executor:
             if metric:
                 scoring = _resolve_metric_scoring(metric)
                 if scoring is None:
-                    raise ValueError(
-                        f"Unknown metric: {metric}. "
-                        "Check available metrics with query_registry(task='metric')."
-                    )
+                    raise ValueError(_unknown_metric_error(metric))
 
             # Step 2: Run cross-validation
             self._job_manager.update_job(

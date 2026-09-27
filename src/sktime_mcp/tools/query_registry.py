@@ -33,8 +33,10 @@ def query_registry_tool(
               Example JSON string: '{"capability:pred_int": true}'.
               Ignored when task="tag".
         query: Search by name/description (substring, case-insensitive).
-        limit: Maximum number of results to return (default: 50). Ignored when task="tag".
-        offset: Number of results to skip for pagination (default: 0). Ignored when task="tag".
+        limit: Maximum number of results per page (default: 50). Also applies to
+              task="tag": tags are paginated, check total/has_more.
+        offset: Number of results to skip for pagination (default: 0). Also applies
+              to task="tag".
 
     Returns:
         A dictionary with:

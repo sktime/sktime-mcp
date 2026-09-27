@@ -256,12 +256,18 @@ async def list_tools() -> list[Tool]:
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Maximum results (default: 50). Ignored if task='tag'.",
+                        "description": (
+                            "Maximum results per page (default: 50). Also applies to "
+                            "task='tag': tags are paginated, check total/has_more."
+                        ),
                         "default": 50,
                     },
                     "offset": {
                         "type": "integer",
-                        "description": "Skip this many results for pagination (default: 0). Ignored if task='tag'.",
+                        "description": (
+                            "Skip this many results for pagination (default: 0). "
+                            "Also applies to task='tag'."
+                        ),
                         "default": 0,
                     },
                 },
@@ -527,7 +533,12 @@ async def list_tools() -> list[Tool]:
                     },
                     "metric": {
                         "type": "string",
-                        "description": "Optional: performance metric name (e.g. 'MeanAbsolutePercentageError').",
+                        "description": (
+                            "Optional: performance metric. A metric class name "
+                            "(e.g. 'MeanAbsolutePercentageError', case-insensitive) or "
+                            "one of the aliases mape, smape, mae, mse, rmse, mase, msle, "
+                            "rmsse."
+                        ),
                     },
                     "initial_window": {
                         "type": "integer",
@@ -547,7 +558,8 @@ async def list_tools() -> list[Tool]:
             description=(
                 "List all data available for use — system demo datasets and active "
                 "user-loaded data handles — in a single unified response. "
-                "Use is_demo=true for demos only, is_demo=false for handles only, "
+                "Use is_demo=true for demos only (response has no active_handles key), "
+                "is_demo=false for handles only (no system_demos key), "
                 "or omit is_demo to get both."
             ),
             inputSchema={
@@ -687,7 +699,8 @@ async def list_tools() -> list[Tool]:
                 "infer/set frequency, remove duplicate timestamps, fill index gaps, "
                 "and forward/backward-fill missing values; returns changes_applied. "
                 "action='convert': convert y to a different sktime mtype via convert_to() "
-                "(requires to_mtype, e.g. 'pd.DataFrame', 'pd.Series', 'np.ndarray'). "
+                "(requires to_mtype, e.g. 'pd.DataFrame' or 'pd.Series'; see to_mtype "
+                "for the accepted list). "
                 "Replaces the legacy format_time_series tool."
             ),
             inputSchema={
@@ -723,8 +736,11 @@ async def list_tools() -> list[Tool]:
                     "to_mtype": {
                         "type": "string",
                         "description": (
-                            "(convert only, required) Target sktime mtype string, "
-                            "e.g. 'pd.DataFrame', 'pd.Series', 'np.ndarray'."
+                            "(convert only, required) Target sktime mtype string. "
+                            "Accepted mtypes: 'pd.Series' or 'pd.DataFrame' (Series), "
+                            "'pd-multiindex', 'nested_univ' or 'df-list' (Panel), "
+                            "'pd_multiindex_hier' (Hierarchical). Index-less numpy mtypes "
+                            "are rejected because they drop the time index."
                         ),
                     },
                 },
@@ -1101,15 +1117,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         elif name == "load_data_source":
             result = load_data_source_tool(arguments["config"], arguments.get("run_async", False))
 
-        elif name == "list_data_sources":
-            # Deprecated — info is now in load_data_source description
-            logger.warning(
-                "list_data_sources is deprecated; info is in load_data_source description"
-            )
-            from sktime_mcp.tools.data_tools import list_data_sources_tool
-
-            result = list_data_sources_tool()
-
         elif name == "release_data_handle":
             result = release_data_handle_tool(arguments["data_handle"])
 
@@ -1140,15 +1147,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 format=arguments.get("format", "csv"),
                 overwrite=arguments.get("overwrite", False),
             )
-
-        elif name == "auto_format_on_load":
-            # Deprecated — now controlled via SKTIME_MCP_AUTO_FORMAT env var
-            logger.warning(
-                "auto_format_on_load is deprecated; use env var SKTIME_MCP_AUTO_FORMAT=true/false"
-            )
-            from sktime_mcp.tools.format_tools import auto_format_on_load_tool
-
-            result = auto_format_on_load_tool(arguments.get("enabled", True))
 
         # -- Visualization ---------------------------------------------------
         elif name == "plot_series":
@@ -1205,7 +1203,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         elif name == "run_command":
             result = run_command_tool(arguments["command"])
         else:
-            result = {"error": f"Unknown tool: {name}"}
+            result = {"success": False, "error": f"Unknown tool: {name}"}
 
         logger.info(f"=== Result for {name} ===")
 
