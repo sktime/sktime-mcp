@@ -127,7 +127,7 @@ def test_other_modes_register_flattened_frame(split, forecaster, released, mode,
     assert len(y) == HORIZON
     assert not isinstance(y.columns, pd.MultiIndex)
     first_row = next(iter(res[key].values()))
-    assert [str(c) for c in y.columns] == list(first_row.keys())
+    assert list(y.columns) == list(first_row.keys())
     assert stored["metadata"]["mode"] == mode
     assert stored["metadata"]["source"] == "prediction"
 
