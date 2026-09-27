@@ -85,27 +85,22 @@ def fit_tool(
             y = data_res["y"]
 
     if run_async:
-        import asyncio
+        from sktime_mcp.runtime.jobs import get_job_manager, start_background_job
 
-        from sktime_mcp.runtime.jobs import get_job_manager
-
-        job_manager = get_job_manager()
+        # Resolve the handle before creating a job so a missing/evicted handle
+        # fails fast instead of producing a job that fails a second later.
         try:
-            handle_info = executor._handle_manager.get_info(estimator_handle)
-            estimator_name = handle_info.estimator_name
-        except Exception:
-            estimator_name = "Unknown"
+            estimator_name = executor._handle_manager.get_info(estimator_handle).estimator_name
+        except KeyError:
+            return {
+                "success": False,
+                "error": executor._handle_manager.describe_missing(estimator_handle),
+            }
 
         source_name = y_dataset if y_dataset else (y_handle if y_handle else "data")
-        job_id = job_manager.create_job(
-            job_type="fit",
-            estimator_handle=estimator_handle,
-            estimator_name=estimator_name,
-            dataset_name=source_name,
-            total_steps=2,
-        )
-        task = asyncio.create_task(
-            executor.fit_async(
+        return start_background_job(
+            get_job_manager(),
+            lambda job_id: executor.fit_async(
                 handle_id=estimator_handle,
                 X_dataset=X_dataset,
                 y_dataset=y_dataset,
@@ -113,10 +108,13 @@ def fit_tool(
                 y_handle=y_handle,
                 fh=fh,
                 job_id=job_id,
-            )
+            ),
+            job_type="fit",
+            estimator_handle=estimator_handle,
+            estimator_name=estimator_name,
+            dataset_name=source_name,
+            total_steps=2,
         )
-        job_manager.register_task(job_id, task)
-        return {"success": True, "job_id": job_id, "status": "running"}
     fit_result = executor.fit(estimator_handle, y=y, X=X, fh=fh)
 
     if fit_result.get("success") and y_dataset:
@@ -156,27 +154,21 @@ def predict_tool(
     executor = get_executor()
 
     if run_async:
-        import asyncio
+        from sktime_mcp.runtime.jobs import get_job_manager, start_background_job
 
-        from sktime_mcp.runtime.jobs import get_job_manager
-
-        job_manager = get_job_manager()
+        # Resolve the handle before creating a job (see fit_tool).
         try:
             estimator_name = executor._handle_manager.get_info(estimator_handle).estimator_name
-        except Exception:
-            estimator_name = "Unknown"
+        except KeyError:
+            return {
+                "success": False,
+                "error": executor._handle_manager.describe_missing(estimator_handle),
+            }
 
         source_name = y_dataset or y_handle or "data"
-        job_id = job_manager.create_job(
-            job_type="predict",
-            estimator_handle=estimator_handle,
-            estimator_name=estimator_name,
-            dataset_name=source_name,
-            horizon=horizon,
-            total_steps=2,
-        )
-        task = asyncio.create_task(
-            executor.predict_async(
+        return start_background_job(
+            get_job_manager(),
+            lambda job_id: executor.predict_async(
                 handle_id=estimator_handle,
                 horizon=horizon,
                 mode=mode,
@@ -187,10 +179,14 @@ def predict_tool(
                 X_handle=X_handle,
                 y_handle=y_handle,
                 job_id=job_id,
-            )
+            ),
+            job_type="predict",
+            estimator_handle=estimator_handle,
+            estimator_name=estimator_name,
+            dataset_name=source_name,
+            horizon=horizon,
+            total_steps=2,
         )
-        job_manager.register_task(job_id, task)
-        return {"success": True, "job_id": job_id, "status": "running"}
 
     X = None
     y = None
