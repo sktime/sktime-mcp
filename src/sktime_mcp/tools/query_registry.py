@@ -8,6 +8,7 @@ import json
 from typing import Any
 
 from sktime_mcp.registry.interface import get_registry
+from sktime_mcp.tools._params import coerce_integer
 
 
 def query_registry_tool(
@@ -48,6 +49,14 @@ def query_registry_tool(
     """
     registry = get_registry()
     try:
+        # Integral floats (5.0) are valid JSON integers; non-integral ones are not (F-46)
+        limit, err = coerce_integer(limit, "limit")
+        if err:
+            return {"success": False, "error": err}
+        offset, err = coerce_integer(offset, "offset")
+        if err:
+            return {"success": False, "error": err}
+
         # Check pagination bounds
         if offset < 0:
             return {"success": False, "error": "offset must be a non-negative integer."}
