@@ -25,6 +25,11 @@ class JobStatus(Enum):
     CANCELLED = "cancelled"
 
 
+# Statuses after which a job can no longer change; only these are ever evicted
+# by cleanup_old_jobs.
+_TERMINAL_STATUSES = frozenset({JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED})
+
+
 @dataclass
 class JobInfo:
     """Information about a background job."""
@@ -367,18 +372,34 @@ class JobManager:
 
     def cleanup_old_jobs(self, max_age_hours: int = 24) -> int:
         """
-        Remove jobs older than max_age_hours.
+        Remove finished jobs that ended more than max_age_hours ago.
+
+        Only terminal jobs (COMPLETED, FAILED, CANCELLED) are eligible: a
+        PENDING or RUNNING job is never evicted here, however old, because
+        dropping its record would orphan the still-running task without
+        cancelling it. Use ``cancel_job`` for those.
 
         Args:
-            max_age_hours: Maximum age in hours
+            max_age_hours: Maximum age in hours; must be at least 1.
 
         Returns:
             Number of jobs removed
+
+        Raises:
+            ValueError: if max_age_hours is below 1 (a zero or negative age
+                would wipe every finished job, which is never intended).
         """
+        if max_age_hours < 1:
+            raise ValueError(f"max_age_hours must be >= 1, got {max_age_hours!r}")
+
         cutoff = datetime.now() - timedelta(hours=max_age_hours)
 
         with self.lock:
-            old_job_ids = [job_id for job_id, job in self.jobs.items() if job.created_at <= cutoff]
+            old_job_ids = [
+                job_id
+                for job_id, job in self.jobs.items()
+                if job.status in _TERMINAL_STATUSES and (job.end_time or job.created_at) <= cutoff
+            ]
 
             for job_id in old_job_ids:
                 del self.jobs[job_id]

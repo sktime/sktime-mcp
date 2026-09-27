@@ -15,6 +15,7 @@ need ``monkeypatch.setenv`` -- no module reload.
 
 import asyncio
 import logging
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -75,6 +76,68 @@ def test_server_has_no_import_time_int_constants():
     assert not hasattr(server, "_get_int_env")
     assert not hasattr(server, "JOB_MAX_AGE_HOURS")
     assert not hasattr(server, "JOB_CLEANUP_INTERVAL_SECS")
+
+
+# ---------------------------------------------------------------------------
+# JobManager.cleanup_old_jobs
+# ---------------------------------------------------------------------------
+
+
+def _add_job(jm: JobManager, status: JobStatus, age_hours: float) -> str:
+    """Create a job with the given status whose timestamps are age_hours old."""
+    job_id = jm.create_job("fit", "handle")
+    job = jm.jobs[job_id]
+    stamp = datetime.now() - timedelta(hours=age_hours)
+    job.status = status
+    job.created_at = stamp
+    if status is not JobStatus.PENDING:
+        job.start_time = stamp
+    if status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
+        job.end_time = stamp
+    return job_id
+
+
+@pytest.mark.parametrize("bad_age", [0, -1, -24])
+def test_cleanup_old_jobs_rejects_non_positive_age_and_removes_nothing(bad_age):
+    """#249: max_age_hours < 1 raises ValueError instead of wiping every job."""
+    jm = JobManager()
+    done = _add_job(jm, JobStatus.COMPLETED, age_hours=100)
+    running = _add_job(jm, JobStatus.RUNNING, age_hours=100)
+
+    with pytest.raises(ValueError, match="max_age_hours"):
+        jm.cleanup_old_jobs(max_age_hours=bad_age)
+
+    assert set(jm.jobs) == {done, running}
+
+
+def test_cleanup_old_jobs_skips_running_and_pending_jobs():
+    """F-51: only terminal jobs older than the cutoff are evicted."""
+    jm = JobManager()
+    old_completed = _add_job(jm, JobStatus.COMPLETED, age_hours=48)
+    old_failed = _add_job(jm, JobStatus.FAILED, age_hours=48)
+    old_cancelled = _add_job(jm, JobStatus.CANCELLED, age_hours=48)
+    fresh_completed = _add_job(jm, JobStatus.COMPLETED, age_hours=1)
+    old_running = _add_job(jm, JobStatus.RUNNING, age_hours=48)
+    old_pending = _add_job(jm, JobStatus.PENDING, age_hours=48)
+    jm._tasks[old_running] = object()  # a live task reference must survive too
+
+    removed = jm.cleanup_old_jobs(max_age_hours=24)
+
+    assert removed == 3
+    assert set(jm.jobs) == {fresh_completed, old_running, old_pending}
+    for job_id in (old_completed, old_failed, old_cancelled):
+        assert jm.get_job(job_id) is None
+    assert old_running in jm._tasks
+
+
+def test_cleanup_old_jobs_ages_by_end_time_not_created_at():
+    """A long-running job that finished recently is kept until it has been done long enough."""
+    jm = JobManager()
+    job_id = _add_job(jm, JobStatus.COMPLETED, age_hours=48)
+    jm.jobs[job_id].end_time = datetime.now() - timedelta(hours=1)
+
+    assert jm.cleanup_old_jobs(max_age_hours=24) == 0
+    assert job_id in jm.jobs
 
 
 # ---------------------------------------------------------------------------
