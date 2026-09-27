@@ -6,6 +6,7 @@ Supports loading data from SQL databases using SQLAlchemy.
 
 import re
 from typing import Any
+from urllib.parse import quote_plus
 
 import pandas as pd
 
@@ -129,17 +130,42 @@ class SQLAdapter(DataSourceAdapter):
             return f"sqlite:///{database}"
 
         # Other databases
-        username = self.config.get("username", "")
-        password = self.config.get("password", "")
+        username = self.config.get("username") or None
+        password = self.config.get("password") or None
         host = self.config.get("host", "localhost")
-        port = self.config.get("port", "")
-        database = self.config.get("database", "")
+        port = self.config.get("port") or None
+        database = self.config.get("database") or None
 
-        # Build connection string
-        auth = f"{username}:{password}@" if username else ""
-        port_str = f":{port}" if port else ""
+        if port is not None:
+            try:
+                port = int(port)
+            except (TypeError, ValueError) as e:
+                raise ValueError(f"'port' must be an integer, got {port!r}") from e
 
-        return f"{dialect}://{auth}{host}{port_str}/{database}"
+        # Credentials may contain '@', '/' or ':' and must be URL-escaped, or
+        # the URL parser splits them in the wrong place (F-62). Prefer
+        # SQLAlchemy's own builder; fall back to quote_plus without it.
+        try:
+            from sqlalchemy.engine import URL
+        except ImportError:
+            auth = ""
+            if username:
+                auth = quote_plus(username)
+                if password:
+                    auth += f":{quote_plus(password)}"
+                auth += "@"
+            port_str = f":{port}" if port else ""
+            return f"{dialect}://{auth}{host}{port_str}/{database or ''}"
+
+        url = URL.create(
+            drivername=dialect,
+            username=username,
+            password=password,
+            host=host,
+            port=port,
+            database=database,
+        )
+        return url.render_as_string(hide_password=False)
 
     def _get_query(self) -> tuple[Any, dict[str, Any]]:
         """Get SQL query and parameters from config."""
@@ -166,6 +192,15 @@ class SQLAdapter(DataSourceAdapter):
             for param_idx, (col, value) in enumerate(filters.items()):
                 column_name = self._validate_identifier(col, "column")
                 param_name = f"filter_{param_idx}"
+                # Only scalars can be bound; a list/dict would surface as a raw
+                # driver error echoing the SQL text and parameters (F-62).
+                if not isinstance(value, (str, int, float, bool)) or value is None:
+                    raise ValueError(
+                        f"Filter value for column '{col}' must be a scalar "
+                        f"(string, number or bool), got {type(value).__name__}. "
+                        "For IN (...) or other compound conditions, pass an explicit "
+                        "'query' instead of 'table' + 'filters'."
+                    )
 
                 # Simple filter handling
                 if isinstance(value, str) and value.startswith((">=", "<=", ">", "<", "!=")):

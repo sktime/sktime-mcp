@@ -230,3 +230,101 @@ class TestFileAdapterOptions:
         )
         with pytest.raises(ValueError, match="excel_options"):
             adapter._load_excel(tmp_path / "x.xlsx")
+
+
+# ---------------------------------------------------------------------------
+# F-62: SQL adapter URL escaping and filter validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def sqlite_db(tmp_path):
+    db = tmp_path / "tiny.db"
+    con = sqlite3.connect(db)
+    try:
+        con.execute("CREATE TABLE sales (date TEXT, value REAL)")
+        con.executemany(
+            "INSERT INTO sales VALUES (?, ?)",
+            [
+                ("2020-01-01", 1.0),
+                ("2020-01-02", 2.0),
+                ("2020-01-03", 3.0),
+                ("2020-01-04", 4.0),
+            ],
+        )
+        con.commit()
+    finally:
+        con.close()
+    return db
+
+
+class TestSQLAdapter:
+    def test_component_url_escapes_credentials(self):
+        adapter = SQLAdapter(
+            {
+                "type": "sql",
+                "dialect": "postgresql",
+                "username": "us@er",
+                "password": "p@ss/w:rd",
+                "host": "db.example",
+                "port": 5432,
+                "database": "sales",
+            }
+        )
+        url = adapter._get_connection_string()
+        assert isinstance(url, str)
+        assert "p@ss/w:rd" not in url
+        assert "us@er" not in url
+
+        sqlalchemy = pytest.importorskip("sqlalchemy")
+        parsed = sqlalchemy.engine.make_url(url)
+        assert parsed.username == "us@er"
+        assert parsed.password == "p@ss/w:rd"
+        assert parsed.host == "db.example"
+        assert parsed.port == 5432
+        assert parsed.database == "sales"
+
+    def test_component_url_escapes_without_sqlalchemy(self, monkeypatch):
+        monkeypatch.setitem(sys.modules, "sqlalchemy", None)
+        monkeypatch.setitem(sys.modules, "sqlalchemy.engine", None)
+        adapter = SQLAdapter(
+            {"dialect": "mysql", "username": "u", "password": "p@ss", "database": "db"}
+        )
+        url = adapter._get_connection_string()
+        assert url == "mysql://u:p%40ss@localhost/db"
+
+    def test_scalar_filters_still_work(self, sqlite_db):
+        pytest.importorskip("sqlalchemy")
+        adapter = SQLAdapter(
+            {
+                "type": "sql",
+                "dialect": "sqlite",
+                "database": str(sqlite_db),
+                "table": "sales",
+                "filters": {"value": ">=2"},
+                "time_column": "date",
+            }
+        )
+        df = adapter.load()
+        assert len(df) == 3
+        assert list(df["value"]) == [2.0, 3.0, 4.0]
+
+    @pytest.mark.parametrize("bad", [[1, 2], {"in": [1, 2]}, (1, 2)])
+    def test_non_scalar_filter_is_structured_error_without_sql(self, sqlite_db, bad):
+        pytest.importorskip("sqlalchemy")
+        adapter = SQLAdapter(
+            {
+                "type": "sql",
+                "dialect": "sqlite",
+                "database": str(sqlite_db),
+                "table": "sales",
+                "filters": {"value": bad},
+                "time_column": "date",
+            }
+        )
+        with pytest.raises(ValueError) as excinfo:
+            adapter.load()
+        msg = str(excinfo.value)
+        assert "[SQL:" not in msg
+        assert "parameters:" not in msg
+        assert "value" in msg and "scalar" in msg.lower()
