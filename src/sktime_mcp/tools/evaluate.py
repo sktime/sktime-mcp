@@ -117,6 +117,13 @@ def evaluate_tool(
     if invalid is not None:
         return invalid
 
+    # X=<handle> resolves to that handle's exogenous columns, a y handle's
+    # stored X is used when X is omitted, and X == y (a handle) is refused as
+    # target leakage (F-05). Resolved here so async calls reject synchronously.
+    sources = executor._resolve_evaluate_sources(y, X)
+    if not sources["success"]:
+        return sources
+
     if run_async:
         job_manager = get_job_manager()
         try:
@@ -153,17 +160,7 @@ def evaluate_tool(
             "error": executor._handle_manager.describe_missing(estimator_handle),
         }
 
-    y_res = executor._resolve_source(y)
-    if not y_res["success"]:
-        return y_res
-    _y = y_res["data"]
-
-    _X = None
-    if X:
-        x_res = executor._resolve_source(X, prefer="X")
-        if not x_res["success"]:
-            return x_res
-        _X = x_res["data"]
+    _y, _X = sources["y"], sources["X"]
 
     scoring = None
     if metric:
@@ -185,7 +182,7 @@ def evaluate_tool(
         logger.exception("Error during evaluate")
         return {"success": False, "error": str(e)}
 
-    return {
+    result = {
         "success": True,
         "metrics": metrics,
         "fold_results": fold_results,
@@ -193,3 +190,6 @@ def evaluate_tool(
         "cv_folds_run": len(fold_results),
         "cv_folds_requested": cv_folds,
     }
+    if sources["exogenous"]:
+        result["exogenous"] = sources["exogenous"]
+    return result

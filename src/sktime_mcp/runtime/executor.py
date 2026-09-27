@@ -116,6 +116,14 @@ def _is_sktime_object(obj: Any) -> bool:
     return hasattr(obj, "get_params") and hasattr(obj, "get_class_tag")
 
 
+def _column_names(X: Any) -> list[str]:
+    """Column names of an exogenous frame, for the ``exogenous`` response entry."""
+    if isinstance(X, pd.DataFrame):
+        return [str(c) for c in X.columns]
+    name = getattr(X, "name", None)
+    return [str(name)] if name is not None else []
+
+
 def _cap_prediction_rows(result: dict) -> tuple[dict, dict | None]:
     """Cap an index-keyed prediction dict, returning (capped, truncation_note)."""
     if not isinstance(result, dict) or len(result) <= _MAX_PREDICTION_ROWS:
@@ -317,14 +325,31 @@ class Executor:
             "n_available_handles": len(handle_ids),
         }
 
+    def _no_exog_error(self, handle_id: str) -> dict[str, Any]:
+        """Error body for a data handle used as X that carries no exogenous columns."""
+        return {
+            "success": False,
+            "error": (
+                f"Data handle '{handle_id}' has no exogenous columns: it holds only the "
+                "target series. Load the source with exog_columns=[...] in "
+                "load_data_source to attach exogenous features, or omit the X argument."
+            ),
+        }
+
     def _resolve_source(self, source: str, prefer: str = "y") -> dict[str, Any]:
         """Resolve a source id to a series, trying data_handle then demo dataset.
 
-        ``prefer`` selects which component of a demo dataset to return
-        ("y" or "X"); the other is the fallback when the preferred one is
-        absent. Data handles always resolve to their primary series.
+        ``prefer`` selects which component to return ("y" or "X"). For a data
+        handle "X" is its stored exogenous frame — an error if the handle has
+        none (F-05: it used to fall through to the target). For a demo dataset
+        the other component is the fallback when the preferred one is absent.
         """
         if source in self._data_handles:
+            if prefer == "X":
+                X = self._data_handles[source].get("X")
+                if X is None:
+                    return self._no_exog_error(source)
+                return {"success": True, "data": X}
             return {"success": True, "data": self._data_handles[source]["y"]}
         res = self.load_dataset(source)
         if res["success"]:
@@ -332,6 +357,113 @@ class Executor:
             data = res[first] if res[first] is not None else res[second]
             return {"success": True, "data": data}
         return res
+
+    def _resolve_xy_inputs(
+        self,
+        *,
+        X_dataset: str | None = None,
+        y_dataset: str | None = None,
+        X_handle: str | None = None,
+        y_handle: str | None = None,
+        auto_X: bool = True,
+    ) -> dict[str, Any]:
+        """Resolve the fit/predict/update data arguments to ``X`` and ``y``.
+
+        ``X_handle`` resolves to the handle's exogenous frame, never its
+        target. With ``auto_X``, a ``y_handle`` that carries X supplies it when
+        no explicit X source is given (predict passes ``auto_X=False`` because
+        it needs *future* X). The result's ``exogenous`` entry
+        ({"handle", "columns"}) records X taken from a data handle, or is None.
+        """
+        if X_handle and X_handle == y_handle:
+            return {
+                "success": False,
+                "error": (
+                    f"X_handle and y_handle name the same data handle '{X_handle}'. Pass "
+                    "only y_handle: the handle's stored exogenous columns are used as X "
+                    "automatically."
+                ),
+            }
+
+        X = None
+        y = None
+        exogenous = None
+
+        if X_handle:
+            if X_handle not in self._data_handles:
+                return {"success": False, **self.data_handle_missing(X_handle)}
+            x_res = self._resolve_source(X_handle, prefer="X")
+            if not x_res["success"]:
+                return x_res
+            X = x_res["data"]
+            exogenous = {"handle": X_handle, "columns": _column_names(X)}
+
+        if y_handle:
+            if y_handle not in self._data_handles:
+                return {"success": False, **self.data_handle_missing(y_handle)}
+            y = self._data_handles[y_handle]["y"]
+
+        if X_dataset and X_dataset == y_dataset:
+            data_res = self.load_dataset(X_dataset)
+            if not data_res["success"]:
+                return data_res
+            y = data_res["y"]
+            X = data_res["X"]
+        else:
+            if X_dataset:
+                data_res = self.load_dataset(X_dataset)
+                if not data_res["success"]:
+                    return data_res
+                X = data_res["X"] if data_res["X"] is not None else data_res["y"]
+
+            if y_dataset:
+                data_res = self.load_dataset(y_dataset)
+                if not data_res["success"]:
+                    return data_res
+                y = data_res["y"]
+
+        if auto_X and X is None and y_handle and not X_dataset:
+            stored = self._data_handles[y_handle].get("X")
+            if stored is not None:
+                X = stored
+                exogenous = {"handle": y_handle, "columns": _column_names(X)}
+
+        return {"success": True, "X": X, "y": y, "exogenous": exogenous}
+
+    def _resolve_evaluate_sources(self, y: str, X: str | None) -> dict[str, Any]:
+        """Resolve evaluate's ``y``/``X`` source ids (data handle or demo dataset).
+
+        Refuses ``X == y`` for a data handle (the target would be regressed on
+        itself) and, when ``X`` is omitted, uses the exogenous columns stored
+        on a ``y`` data handle.
+        """
+        if X and y == X and y in self._data_handles:
+            return {
+                "success": False,
+                "error": (
+                    f"y and X name the same data handle '{y}', which would regress the "
+                    "target on itself (target leakage). Pass only y: the handle's stored "
+                    "exogenous columns are used as X automatically."
+                ),
+            }
+        y_res = self._resolve_source(y)
+        if not y_res["success"]:
+            return y_res
+        _X = None
+        exogenous = None
+        if X:
+            x_res = self._resolve_source(X, prefer="X")
+            if not x_res["success"]:
+                return x_res
+            _X = x_res["data"]
+            if X in self._data_handles:
+                exogenous = {"handle": X, "columns": _column_names(_X)}
+        elif y in self._data_handles:
+            stored = self._data_handles[y].get("X")
+            if stored is not None:
+                _X = stored
+                exogenous = {"handle": y, "columns": _column_names(_X)}
+        return {"success": True, "y": y_res["data"], "X": _X, "exogenous": exogenous}
 
     def instantiate(
         self,
@@ -576,6 +708,18 @@ class Executor:
             elif obj_type in ("transformer", "clusterer"):
                 is_transformer = True
 
+        # A forecaster fitted with X needs future X at predict; sktime otherwise
+        # raises an opaque KeyError on the horizon index (F-05).
+        if X is None and obj_type == "forecaster" and getattr(instance, "_X", None) is not None:
+            return {
+                "success": False,
+                "error": (
+                    "This forecaster was fitted with exogenous data (X) but predict got "
+                    "none. Future X covering the forecast horizon is required: pass "
+                    "X_handle (e.g. the test half from split_data) or X_dataset."
+                ),
+            }
+
         dropped_y_warning = None
         try:
             if fh is None and not (is_classifier_or_regressor or is_transformer):
@@ -712,36 +856,17 @@ class Executor:
             self._job_manager.update_job(job_id, completed_steps=0, current_step="Loading data...")
             await asyncio.sleep(0.01)
 
-            X = None
-            y = None
-
-            if X_handle:
-                if X_handle not in self._data_handles:
-                    raise ValueError(f"Unknown X data handle: {X_handle}")
-                X = self._data_handles[X_handle]["y"]
-
-            if y_handle:
-                if y_handle not in self._data_handles:
-                    raise ValueError(f"Unknown y data handle: {y_handle}")
-                y = self._data_handles[y_handle]["y"]
-
-            if X_dataset and X_dataset == y_dataset:
-                data_res = self.load_dataset(X_dataset)
-                if not data_res["success"]:
-                    raise ValueError(data_res.get("error", "Failed to load dataset"))
-                y = data_res["y"]
-                X = data_res["X"]
-            else:
-                if X_dataset:
-                    data_res = self.load_dataset(X_dataset)
-                    if not data_res["success"]:
-                        raise ValueError(data_res.get("error", "Failed to load dataset"))
-                    X = data_res["X"] if data_res["X"] is not None else data_res["y"]
-                if y_dataset:
-                    data_res = self.load_dataset(y_dataset)
-                    if not data_res["success"]:
-                        raise ValueError(data_res.get("error", "Failed to load dataset"))
-                    y = data_res["y"]
+            # predict needs *future* X, so the y_handle's stored X is not reused
+            resolved = self._resolve_xy_inputs(
+                X_dataset=X_dataset,
+                y_dataset=y_dataset,
+                X_handle=X_handle,
+                y_handle=y_handle,
+                auto_X=False,
+            )
+            if not resolved["success"]:
+                raise ValueError(resolved["error"])
+            X, y = resolved["X"], resolved["y"]
 
             fh = list(range(1, horizon + 1))
 
@@ -969,37 +1094,12 @@ class Executor:
             )
             await asyncio.sleep(0.01)
 
-            X = None
-            y = None
-
-            if X_handle:
-                if X_handle not in self._data_handles:
-                    raise ValueError(f"Unknown X data handle: {X_handle}")
-                X = self._data_handles[X_handle]["y"]
-
-            if y_handle:
-                if y_handle not in self._data_handles:
-                    raise ValueError(f"Unknown y data handle: {y_handle}")
-                y = self._data_handles[y_handle]["y"]
-
-            if X_dataset and X_dataset == y_dataset:
-                data_res = self.load_dataset(X_dataset)
-                if not data_res["success"]:
-                    raise ValueError(data_res["error"])
-                y = data_res["y"]
-                X = data_res["X"]
-            else:
-                if X_dataset:
-                    data_res = self.load_dataset(X_dataset)
-                    if not data_res["success"]:
-                        raise ValueError(data_res["error"])
-                    X = data_res["X"] if data_res["X"] is not None else data_res["y"]
-
-                if y_dataset:
-                    data_res = self.load_dataset(y_dataset)
-                    if not data_res["success"]:
-                        raise ValueError(data_res["error"])
-                    y = data_res["y"]
+            resolved = self._resolve_xy_inputs(
+                X_dataset=X_dataset, y_dataset=y_dataset, X_handle=X_handle, y_handle=y_handle
+            )
+            if not resolved["success"]:
+                raise ValueError(resolved["error"])
+            X, y = resolved["X"], resolved["y"]
 
             # Step 2: Fit model
             self._job_manager.update_job(
@@ -1034,7 +1134,12 @@ class Executor:
                 status=JobStatus.COMPLETED,
                 completed_steps=2,
                 current_step="Training completed successfully.",
-                result={"success": True, "handle": handle_id, "fitted": True},
+                result={
+                    "success": True,
+                    "handle": handle_id,
+                    "fitted": True,
+                    **({"exogenous": resolved["exogenous"]} if resolved["exogenous"] else {}),
+                },
             )
             return {"success": True, "handle": handle_id}
 
@@ -1074,17 +1179,10 @@ class Executor:
             except KeyError as err:
                 raise ValueError(self._handle_manager.describe_missing(handle_id)) from err
 
-            y_res = self._resolve_source(y)
-            if not y_res["success"]:
-                raise ValueError(y_res["error"])
-            _y = y_res["data"]
-
-            _X = None
-            if X:
-                x_res = self._resolve_source(X, prefer="X")
-                if not x_res["success"]:
-                    raise ValueError(x_res["error"])
-                _X = x_res["data"]
+            sources = self._resolve_evaluate_sources(y, X)
+            if not sources["success"]:
+                raise ValueError(sources["error"])
+            _y, _X = sources["y"], sources["X"]
 
             scoring = None
             if metric:
@@ -1121,6 +1219,8 @@ class Executor:
                 "cv_folds_run": len(fold_results),
                 "cv_folds_requested": cv_folds,
             }
+            if sources["exogenous"]:
+                result["exogenous"] = sources["exogenous"]
             self._job_manager.update_job(
                 job_id,
                 status=JobStatus.COMPLETED,
