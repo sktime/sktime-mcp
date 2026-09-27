@@ -209,3 +209,25 @@ class TestSaveModelFileUri:
         assert calls["path"] == str(target)
         assert result["saved_path"] == str(target)
         assert not (tmp_path / "file:").exists()
+
+
+# ---------------------------------------------------------------------------
+# F-30: convert to pd.DataFrame keeps X
+# ---------------------------------------------------------------------------
+
+
+class TestConvertKeepsExogenous:
+    def test_convert_to_dataframe_carries_exog(self, register_handle):
+        idx = pd.date_range("2024-01-01", periods=6, freq="D")
+        y = pd.Series(range(6), index=idx, dtype=float, name="value")
+        X = pd.DataFrame({"temp": range(6), "promo": [0, 1, 0, 1, 0, 1]}, index=idx)
+        dh = register_handle("test_convert_keeps_x", y, X)
+
+        res = transform_data_tool(data_handle=dh, action="convert", to_mtype="pd.DataFrame")
+        assert res["success"], res
+        ex = get_executor()
+        new = ex._data_handles.pop(res["data_handle"])
+        assert isinstance(new["y"], pd.DataFrame)
+        assert new["X"] is not None, "convert dropped the exogenous X"
+        pd.testing.assert_frame_equal(new["X"], X)
+        assert any("exogenous" in c.lower() for c in res["changes_applied"]), res
