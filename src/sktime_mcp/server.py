@@ -325,7 +325,9 @@ async def list_tools() -> list[Tool]:
             name="fit",
             description=(
                 "Fit an estimator on data. "
-                "Provide explicit X_handle and/y_handle (or datasets) depending on the estimator's scitype."
+                "Provide explicit X_handle and/or y_handle (or datasets) depending on the estimator's scitype. "
+                "A data handle loaded with exog_columns carries X alongside its target: "
+                "fit(y_handle=h) uses that X automatically (reported under 'exogenous')."
             ),
             inputSchema={
                 "type": "object",
@@ -336,11 +338,17 @@ async def list_tools() -> list[Tool]:
                     },
                     "X_handle": {
                         "type": "string",
-                        "description": "Optional: Handle from load_data_source for X data (features, panel, etc.)",
+                        "description": (
+                            "Optional: data handle whose exogenous columns (exog_columns) are used as X. "
+                            "Errors if the handle has no exogenous columns. Do not pass the same handle as y_handle."
+                        ),
                     },
                     "y_handle": {
                         "type": "string",
-                        "description": "Optional: Handle from load_data_source for y data (target, labels, etc.)",
+                        "description": (
+                            "Optional: data handle whose target series is y. "
+                            "If it carries exogenous columns and X_handle/X_dataset are omitted, they are used as X."
+                        ),
                     },
                     "X_dataset": {
                         "type": "string",
@@ -367,7 +375,9 @@ async def list_tools() -> list[Tool]:
             name="predict",
             description=(
                 "Generate predictions from a fitted estimator. "
-                "Supports different modes like predict, predict_interval, predict_quantiles."
+                "Supports different modes like predict, predict_interval, predict_quantiles. "
+                "A forecaster fitted with exogenous data needs FUTURE X covering the horizon: "
+                "pass X_handle (e.g. the test half from split_data) or X_dataset."
             ),
             inputSchema={
                 "type": "object",
@@ -406,7 +416,10 @@ async def list_tools() -> list[Tool]:
                     },
                     "X_handle": {
                         "type": "string",
-                        "description": "Optional: Handle from load_data_source for X data",
+                        "description": (
+                            "Optional: data handle whose exogenous columns are the future X for the horizon "
+                            "(required if the forecaster was fitted with X). Errors if the handle has none."
+                        ),
                     },
                     "y_handle": {
                         "type": "string",
@@ -430,7 +443,11 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="update",
-            description=("Update a fitted estimator with new data."),
+            description=(
+                "Update a fitted estimator with new data. "
+                "If y_handle carries exogenous columns and X_handle/X_dataset are omitted, "
+                "they are used as X automatically."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -440,11 +457,14 @@ async def list_tools() -> list[Tool]:
                     },
                     "X_handle": {
                         "type": "string",
-                        "description": "Optional: Handle for X data",
+                        "description": (
+                            "Optional: data handle whose exogenous columns are used as X. "
+                            "Errors if the handle has none."
+                        ),
                     },
                     "y_handle": {
                         "type": "string",
-                        "description": "Optional: Handle for y data",
+                        "description": "Optional: data handle whose target series is the new y",
                     },
                     "X_dataset": {
                         "type": "string",
@@ -504,7 +524,9 @@ async def list_tools() -> list[Tool]:
             name="evaluate",
             description=(
                 "Cross-validate an estimator on a dataset. "
-                "Dataset and data handle inputs supported for y and X."
+                "Dataset and data handle inputs supported for y and X. "
+                "If y is a data handle carrying exogenous columns and X is omitted, they are "
+                "used as X automatically; passing the same handle as y and X is refused."
             ),
             inputSchema={
                 "type": "object",
@@ -519,7 +541,10 @@ async def list_tools() -> list[Tool]:
                     },
                     "X": {
                         "type": "string",
-                        "description": "Optional: exogenous time series data_handle id or demo dataset name.",
+                        "description": (
+                            "Optional: exogenous time series: a data_handle id (its exogenous columns are "
+                            "used; errors if it has none) or demo dataset name."
+                        ),
                     },
                     "cv_folds": {
                         "type": "integer",
