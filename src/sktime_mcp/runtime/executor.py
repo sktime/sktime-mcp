@@ -348,13 +348,33 @@ class Executor:
                 "Evicted data handle %s (limit %d reached)", handle_id, self._max_data_handles
             )
 
+    def is_data_handle(self, handle_id: str) -> bool:
+        """True if *handle_id* is (or was) a data handle, by store or by ``data_`` prefix."""
+        return (
+            handle_id in self._data_handles
+            or handle_id in self._evicted_data
+            or handle_id.startswith("data_")
+        )
+
+    def is_estimator_handle(self, handle_id: str) -> bool:
+        """True if *handle_id* is (or was) an estimator handle, by store or ``est_`` prefix."""
+        hm = self._handle_manager
+        return hm.exists(handle_id) or hm.was_evicted(handle_id) or handle_id.startswith("est_")
+
     def data_handle_missing(self, handle_id: str) -> dict[str, Any]:
         """Error body for a missing data handle — distinguishes evicted from unknown.
 
         Returns the ``error`` string plus the capped available-handles summary,
-        so callers can splat it into a not-found response.
+        so callers can splat it into a not-found response. An estimator handle
+        passed where a data handle is expected names the right tools (F-66).
         """
-        if handle_id in self._evicted_data:
+        if self.is_estimator_handle(handle_id):
+            error = (
+                f"'{handle_id}' is an estimator handle, not a data handle. Estimator "
+                "handles are managed with list_handles/release_handle; data tools take "
+                "data_... ids from load_data_source (see list_available_data)."
+            )
+        elif handle_id in self._evicted_data:
             error = (
                 f"Data handle '{handle_id}' was evicted (handle limit "
                 f"{self._max_data_handles} reached); reload the source."
@@ -865,6 +885,16 @@ class Executor:
         try:
             instance = self._handle_manager.get_instance(handle_id)
         except KeyError:
+            if self.is_data_handle(handle_id):
+                return {
+                    "success": False,
+                    "error": (
+                        f"'{handle_id}' is a data handle; call_method takes an estimator "
+                        "handle (est_...) from instantiate. Pass data handles through "
+                        "*_data_handle kwargs, e.g. "
+                        f"kwargs={{'y_data_handle': '{handle_id}'}}."
+                    ),
+                }
             return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
 
         # Block private/dunder methods: they are not part of the estimator API

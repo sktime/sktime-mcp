@@ -5,11 +5,13 @@ import contextlib
 
 import pytest
 
-from sktime_mcp.runtime.executor import _resolve_metric_scoring
+from sktime_mcp.runtime.executor import _resolve_metric_scoring, get_executor
 from sktime_mcp.runtime.handles import get_handle_manager
 from sktime_mcp.server import list_tools
+from sktime_mcp.tools.data_tools import load_data_source_tool, release_data_handle_tool
 from sktime_mcp.tools.evaluate import evaluate_tool
-from sktime_mcp.tools.instantiate import instantiate_tool
+from sktime_mcp.tools.inspect_data import inspect_data_tool
+from sktime_mcp.tools.instantiate import instantiate_tool, release_handle_tool
 
 
 def _release(handle):
@@ -99,3 +101,60 @@ def test_metric_schema_documents_aliases():
     desc = tools["evaluate"].inputSchema["properties"]["metric"]["description"]
     for alias in ("mape", "smape", "mae", "mse", "rmse", "mase", "msle", "rmsse"):
         assert alias in desc
+
+
+# -- (c) estimator vs data handle mix-ups ------------------------------------
+
+
+@pytest.fixture
+def data_handle():
+    res = load_data_source_tool(
+        {"type": "pandas", "data": {"v": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]}, "target_column": "v"}
+    )
+    assert res["success"], res
+    yield res["data_handle"]
+    get_executor().release_data_handle(res["data_handle"])
+
+
+def test_release_handle_with_data_id_points_at_release_data_handle(data_handle):
+    res = release_handle_tool(data_handle)
+    assert res["success"] is False
+    assert "data handle" in res["error"]
+    assert "release_data_handle" in res["error"]
+    # the data handle itself is untouched
+    assert data_handle in get_executor()._data_handles
+
+
+def test_release_handle_with_unknown_data_prefix_points_at_release_data_handle():
+    res = release_handle_tool("data_never_existed")
+    assert res["success"] is False
+    assert "release_data_handle" in res["error"]
+
+
+def test_call_method_with_data_id_explains_kwargs(data_handle):
+    res = get_executor().call_method(data_handle, "fit", {})
+    assert res["success"] is False
+    assert "estimator handle" in res["error"]
+    assert "_data_handle" in res["error"]
+
+
+def test_release_data_handle_with_est_id_points_at_release_handle():
+    h = instantiate_tool("NaiveForecaster()")["handle"]
+    try:
+        res = release_data_handle_tool(h)
+        assert res["success"] is False
+        assert "estimator handle" in res["error"]
+        assert "release_handle" in res["error"]
+        assert get_handle_manager().exists(h)
+    finally:
+        _release(h)
+
+
+def test_inspect_data_with_est_id_points_at_estimator_tools():
+    h = instantiate_tool("NaiveForecaster()")["handle"]
+    try:
+        res = inspect_data_tool(h)
+        assert res["success"] is False
+        assert "estimator handle" in res["error"]
+    finally:
+        _release(h)
