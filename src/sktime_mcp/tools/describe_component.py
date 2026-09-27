@@ -15,7 +15,9 @@ def describe_component_tool(name: str) -> dict[str, Any]:
     (estimators, transformers, splitters, metrics, aligners).
 
     Args:
-        name: Name of the component class (e.g., "ARIMA", "SlidingWindowSplitter", "MeanAbsolutePercentageError")
+        name: Name of the component class (e.g., "ARIMA", "SlidingWindowSplitter",
+            "MeanAbsolutePercentageError") or its dotted import path
+            (e.g., "sktime.forecasting.arima.ARIMA").
 
     Returns:
         Dictionary with:
@@ -28,22 +30,29 @@ def describe_component_tool(name: str) -> dict[str, Any]:
         - tag_explanations: Human-readable tag descriptions
         - docstring: First 500 chars of docstring
     """
+    if not isinstance(name, str) or not name.strip():
+        return {
+            "success": False,
+            "error": f"name must be a non-empty string naming a component class, got {name!r}",
+            "suggestion": "Use query_registry to discover available component classes",
+        }
+
     registry = get_registry()
     tag_resolver = get_tag_resolver()
 
+    # Registry lookup (exact, then case-insensitive) or a dotted import path of a
+    # BaseObject subclass; the name is never evaluated as an expression.
     node = registry.get_estimator_by_name(name)
     if node is None:
-        # Try case-insensitive search
-        all_estimators = registry.get_all_estimators()
-        matches = [e for e in all_estimators if e.name.lower() == name.lower()]
-        if matches:
-            node = matches[0]
-        else:
-            return {
-                "success": False,
-                "error": f"Unknown component class: {name}",
-                "suggestion": "Use query_registry to discover available component classes",
-            }
+        error: dict[str, Any] = {
+            "success": False,
+            "error": f"Unknown component class: {name}",
+            "suggestion": "Use query_registry to discover available component classes",
+        }
+        did_you_mean = registry.suggest_names(name)
+        if did_you_mean:
+            error["did_you_mean"] = did_you_mean
+        return error
 
     # Get tag explanations
     tag_explanations = tag_resolver.explain_tags(node.tags)

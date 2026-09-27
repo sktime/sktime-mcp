@@ -5,12 +5,20 @@ Thin adapter over sktime's estimator registry.
 Delegates to ``sktime.registry`` functions directly.
 """
 
+import difflib
+import importlib
 import inspect
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# ``package.module.ClassName``: identifiers joined by dots, nothing else. Used
+# to decide whether a name may be resolved by *importing* it; anything that
+# does not match (calls, brackets, operators, ...) is never evaluated.
+_DOTTED_PATH = re.compile(r"^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+$")
 
 
 @dataclass
@@ -73,6 +81,7 @@ class RegistryInterface:
 
     def __init__(self):
         """Initialize the registry interface."""
+        self._index: dict[str, type] | None = None
         try:
             from sktime.registry import all_estimators  # noqa: F401
         except ImportError as e:
@@ -160,25 +169,68 @@ class RegistryInterface:
                 logger.debug(f"Failed to create node for {name}: {e}")
         return results
 
+    def _name_index(self) -> dict[str, type]:
+        """Map every registry class name to its class (built once, then cached)."""
+        if self._index is None:
+            from sktime.registry import all_estimators
+
+            self._index = dict(all_estimators(return_names=True, as_dataframe=False))
+        return self._index
+
+    @staticmethod
+    def _import_base_object(dotted_path: str) -> type | None:
+        """Import ``package.module.ClassName`` and return it if it is a ``BaseObject`` subclass.
+
+        Plain attribute lookup on an imported module; no expression is ever
+        evaluated. Returns ``None`` for import errors, missing attributes and
+        objects that are not sktime/skbase classes.
+        """
+        from skbase.base import BaseObject
+
+        module_name, _, attr = dotted_path.rpartition(".")
+        try:
+            module = importlib.import_module(module_name)
+        except Exception as e:  # ImportError, or anything the module raises on import
+            logger.debug(f"Could not import {module_name!r}: {e}")
+            return None
+        obj = getattr(module, attr, None)
+        if isinstance(obj, type) and issubclass(obj, BaseObject):
+            return obj
+        return None
+
     def get_estimator_by_name(self, name: str) -> EstimatorNode | None:
         """
-        Get a specific estimator by its class name.
+        Get a specific estimator by its class name or dotted import path.
 
-        Uses ``sktime.registry.craft`` for direct class resolution
-        instead of scanning all estimators.
+        Resolution order: exact registry name, case-insensitive registry name,
+        then ``package.module.ClassName`` import restricted to ``BaseObject``
+        subclasses. Names are never evaluated as expressions; anything that
+        does not resolve returns ``None``.
 
         Args:
-            name: The class name of the estimator (e.g., "ARIMA").
+            name: The class name of the estimator (e.g., "ARIMA") or its
+                dotted import path (e.g., "sktime.forecasting.arima.ARIMA").
         """
-        from sktime.registry import craft
+        if not isinstance(name, str) or not name.strip():
+            return None
+        name = name.strip()
 
-        try:
-            cls = craft(name)
-            if isinstance(cls, type):
-                return self._create_node(name, cls)
-        except Exception:
-            pass
-        return None
+        index = self._name_index()
+        cls = index.get(name)
+        if cls is None:
+            lowered = name.lower()
+            cls = next((c for n, c in index.items() if n.lower() == lowered), None)
+        if cls is None and _DOTTED_PATH.match(name):
+            cls = self._import_base_object(name)
+        if cls is None:
+            return None
+        return self._create_node(cls.__name__, cls)
+
+    def suggest_names(self, name: str, n: int = 3) -> list[str]:
+        """Return up to *n* registry class names that look like *name* (did-you-mean)."""
+        if not isinstance(name, str) or not name.strip():
+            return []
+        return difflib.get_close_matches(name.strip(), list(self._name_index()), n=n, cutoff=0.6)
 
     def get_available_tasks(self) -> list[str]:
         """Get list of available scitypes from sktime's base class register."""
