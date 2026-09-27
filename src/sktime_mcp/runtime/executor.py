@@ -124,19 +124,26 @@ def _column_names(X: Any) -> list[str]:
     return [str(name)] if name is not None else []
 
 
-def _cap_prediction_rows(result: dict) -> tuple[dict, dict | None]:
+def _cap_prediction_rows(
+    result: dict, prediction_handle: str | None = None
+) -> tuple[dict, dict | None]:
     """Cap an index-keyed prediction dict, returning (capped, truncation_note)."""
     if not isinstance(result, dict) or len(result) <= _MAX_PREDICTION_ROWS:
         return result, None
     total = len(result)
     kept = dict(list(result.items())[:_MAX_PREDICTION_ROWS])
+    if prediction_handle:
+        hint = (
+            f"the full forecast is stored in data handle '{prediction_handle}' "
+            "(prediction_handle): use save_data to write it to a file, plot_series to "
+            "plot it, or call_method on a metric with y_pred_data_handle to score it"
+        )
+    else:
+        hint = "request a smaller horizon"
     note = {
         "shown": _MAX_PREDICTION_ROWS,
         "total": total,
-        "note": (
-            "forecast truncated; request a smaller horizon or use save_data to write "
-            "the full series to a file"
-        ),
+        "note": f"forecast truncated; {hint}",
     }
     return kept, note
 
@@ -311,6 +318,52 @@ class Executor:
         if len(self._data_handles) >= self._max_data_handles:
             self._cleanup_oldest_data(count=max(1, self._max_data_handles // 5))
         self._data_handles[handle_id] = data
+
+    def _register_prediction_handle(
+        self,
+        predictions: pd.Series | pd.DataFrame,
+        *,
+        estimator_handle: str,
+        mode: str,
+        horizon: int | None,
+        instance: Any,
+    ) -> str:
+        """Store a predict result as a data handle so it can be plotted, saved or scored (F-06).
+
+        Interval/quantile frames get the same flattened columns the JSON
+        response uses; the time index is kept as-is (not stringified) so the
+        handle plots and scores against a test split.
+        """
+        y = predictions.copy()
+        if isinstance(y, pd.DataFrame) and isinstance(y.columns, pd.MultiIndex):
+            y.columns = ["_".join(map(str, col)) for col in y.columns.values]
+
+        cutoff = getattr(instance, "cutoff", None)
+        if cutoff is not None and hasattr(cutoff, "__len__") and len(cutoff) == 1:
+            cutoff = cutoff[0]
+        if isinstance(y, pd.DataFrame):
+            columns = [str(c) for c in y.columns]
+        else:
+            columns = [str(y.name) if y.name is not None else "target"]
+
+        metadata: dict[str, Any] = {
+            "source": "prediction",
+            "estimator_handle": estimator_handle,
+            "mode": mode,
+            "horizon": horizon,
+            "cutoff": str(cutoff) if cutoff is not None else None,
+            "columns": columns,
+            "rows": len(y),
+            "start_date": str(y.index[0]) if len(y) else None,
+            "end_date": str(y.index[-1]) if len(y) else None,
+            "frequency": _get_index_frequency_metadata(y.index),
+        }
+        handle_id = f"data_{uuid.uuid4().hex[:8]}"
+        self._register_data_handle(
+            handle_id,
+            {"y": y, "X": None, "metadata": metadata, "validation": {}, "config": {}},
+        )
+        return handle_id
 
     def summarize_available_handles(self, limit: int = 5) -> dict[str, Any]:
         """Capped view of data-handle ids for not-found error responses.
@@ -825,11 +878,32 @@ class Executor:
 
             from sktime_mcp.server import sanitize_for_json
 
+            is_forecast = not (is_classifier_or_regressor or is_transformer)
+            # horizon is only meaningful for forecasters; echoing it for
+            # classifiers/regressors/transformers implied a truncation that
+            # didn't happen (N-01).
+            horizon = (len(fh) if hasattr(fh, "__len__") else fh) if is_forecast else None
+
+            # Register the forecast as a data handle so it can be plotted,
+            # saved and scored (F-06). Non-frame results (ndarray from a
+            # classifier, a distribution from predict_proba) are not handles.
+            prediction_handle = None
+            if isinstance(predictions, (pd.Series, pd.DataFrame)):
+                prediction_handle = self._register_prediction_handle(
+                    predictions,
+                    estimator_handle=handle_id,
+                    mode=mode,
+                    horizon=horizon,
+                    instance=instance,
+                )
+
             truncated_note = None
             if isinstance(predictions, pd.Series):
                 predictions_copy = predictions.copy()
                 predictions_copy.index = predictions_copy.index.astype(str)
-                result, truncated_note = _cap_prediction_rows(predictions_copy.to_dict())
+                result, truncated_note = _cap_prediction_rows(
+                    predictions_copy.to_dict(), prediction_handle
+                )
             elif isinstance(predictions, pd.DataFrame):
                 predictions_copy = predictions.copy()
                 predictions_copy.index = predictions_copy.index.astype(str)
@@ -842,7 +916,7 @@ class Executor:
                 # variance values map to time points, consistent with predict
                 # (NB-21). orient="list" dropped the index entirely.
                 result, truncated_note = _cap_prediction_rows(
-                    predictions_copy.to_dict(orient="index")
+                    predictions_copy.to_dict(orient="index"), prediction_handle
                 )
             else:
                 result = sanitize_for_json(predictions)
@@ -851,11 +925,10 @@ class Executor:
                 "success": True,
                 "mode": mode,
             }
-            # horizon is only meaningful for forecasters; echoing it for
-            # classifiers/regressors/transformers implied a truncation that
-            # didn't happen (N-01).
-            if not (is_classifier_or_regressor or is_transformer):
-                out["horizon"] = len(fh) if hasattr(fh, "__len__") else fh
+            if is_forecast:
+                out["horizon"] = horizon
+            if prediction_handle:
+                out["prediction_handle"] = prediction_handle
             if mode == "predict":
                 out["predictions"] = result
             elif mode == "predict_interval":
