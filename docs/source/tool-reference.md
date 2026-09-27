@@ -166,6 +166,12 @@ Generate predictions from a fitted estimator.
 | `run_async` | boolean | — | `false` | Run in the background, return a `job_id`. |
 
 Interval and quantile forecasts are **modes of this tool**, not separate tools.
+`predict_proba` returns a numeric summary of the forecast distribution rather
+than the distribution object: `{"distribution": "Normal", "mean": {<period>:
+value}, "var": {<period>: value}, "quantiles": {<period>: {"0.05": v, "0.5": v,
+"0.95": v}}}`. A forecaster without probabilistic support (tag
+`capability:pred_int` false) gets a structured error for every probabilistic
+mode instead of a raw `NotImplementedError`.
 
 The full result is also registered as a **data handle** and returned as
 `prediction_handle` (metadata `source: "prediction"`, plus `estimator_handle`,
@@ -174,7 +180,8 @@ to the train/test handles, `save_data` it to a file, `inspect_data` it, or score
 it with `call_method` on a metric, e.g.
 `{"y_true_data_handle": "<test handle>", "y_pred_data_handle": "<prediction_handle>"}`.
 Interval/quantile handles hold the flattened columns of the JSON response
-(e.g. `Coverage_0.9_lower`). When the JSON is truncated (over 500 rows) the
+(e.g. `Coverage_0.9_lower`); a `predict_proba` handle holds `<var>_mean`,
+`<var>_var` and `<var>_0.05` / `<var>_0.5` / `<var>_0.95`. When the JSON is truncated (over 500 rows) the
 handle still holds the complete forecast. For `run_async`, the handle is in the
 job result.
 
