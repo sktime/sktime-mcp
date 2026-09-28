@@ -37,10 +37,11 @@ def test_update_without_data_is_rejected(fitted_handle):
 
 def test_failed_update_rolls_back_fitted_state(fitted_handle):
     executor = get_executor()
-    # airline is PeriodIndex; the fitted series is DatetimeIndex — sktime
-    # rejects the update deep inside, after mutating the instance
-    result = update_tool(estimator_handle=fitted_handle, y_dataset="airline")
+    idx = pd.date_range("2022-01-01", periods=3, freq="MS")
+    executor._data_handles["upd_bad"] = {"y": pd.Series(["a", "b", "c"], index=idx)}
+    result = update_tool(estimator_handle=fitted_handle, y_handle="upd_bad")
     assert result["success"] is False
+    executor._data_handles.pop("upd_bad", None)
 
     # the estimator must still predict from its original fitted state
     predict_res = executor.predict(fitted_handle, fh=[1, 2])

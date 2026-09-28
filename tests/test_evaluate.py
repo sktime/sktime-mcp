@@ -109,19 +109,21 @@ def test_evaluate_handle_not_found():
 def test_evaluate_per_fold_error_surfaces_as_failure():
     """Per-fold exceptions must fail the evaluation, not report success with NaN.
 
-    ThetaForecaster coerces to PeriodIndex internally and errors on a
-    DatetimeIndex with a MonthBegin freq — with sktime's default
-    error_score=np.nan every fold error was swallowed and evaluate
-    returned success: true with all-NaN metrics.
+    ThetaForecaster has capability:missing_values=False, so every fold's fit
+    raises on the NaN in y — with sktime's default error_score=np.nan every
+    fold error was swallowed and evaluate returned success: true with
+    all-NaN metrics.
     """
     import math
 
+    import numpy as np
     import pandas as pd
     from sktime.forecasting.theta import ThetaForecaster
 
     executor = get_executor()
     idx = pd.date_range("2000-01-01", periods=48, freq="MS")
     y = pd.Series([100.0 + i + 10 * (i % 12) for i in range(48)], index=idx)
+    y.iloc[5] = np.nan
     executor._data_handles["test_nan_dh"] = {"y": y}
     handle = executor._handle_manager.create_handle("ThetaForecaster", ThetaForecaster(sp=12), {})
 
