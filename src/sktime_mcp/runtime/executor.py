@@ -13,6 +13,7 @@ from collections import deque
 from typing import Any
 
 import pandas as pd
+from pandas.tseries.frequencies import to_offset
 
 from sktime_mcp.registry.interface import get_registry
 from sktime_mcp.runtime.handles import get_handle_manager
@@ -81,10 +82,94 @@ def _to_period_index_if_possible(obj: Any) -> Any:
                 return obj
             idx = pd.DatetimeIndex(idx, freq=inferred)
         converted = obj.copy()
-        converted.index = idx.to_period()
+        months = _anchored_months(idx.freq)
+        if months is not None:
+            # Monthly data anchored mid-month (e.g. the 15th) carries a plain
+            # DateOffset(months=n) which has no period alias; map it to "M".
+            converted.index = idx.to_period("M" if months == 1 else f"{months}M")
+        else:
+            converted.index = idx.to_period()
         return converted
     except (ValueError, TypeError):
         return obj
+
+
+def _anchored_months(freq: Any) -> int | None:
+    """Number of months in a plain ``pd.DateOffset(months=n)``; None for any other offset."""
+    if type(freq) is pd.DateOffset and set(freq.kwds) == {"months"}:
+        return int(freq.kwds["months"]) * int(freq.n)
+    return None
+
+
+def _infer_freq_from_regular_window(index: pd.DatetimeIndex, max_windows: int = 50) -> str | None:
+    """``pd.infer_freq`` over sliding 3-point windows; first recognised alias wins.
+
+    ``pd.infer_freq`` needs the whole index to be regular, so a single gap
+    defeats it. A 3-point window of consecutive timestamps is enough for pandas
+    to name anchored aliases such as ``W-MON``, ``30min``, ``QS-OCT`` or ``B``.
+    The caller still verifies the alias against the full index.
+    """
+    for start in range(0, min(max_windows, len(index) - 2)):
+        try:
+            inferred = pd.infer_freq(index[start : start + 3])
+        except (ValueError, TypeError):
+            inferred = None
+        if inferred is not None:
+            return inferred
+    return None
+
+
+def _step_matches_interval(index: pd.DatetimeIndex, freq: Any, interval: pd.Timedelta) -> bool:
+    """True if one *freq* step from the first timestamp is within 15% of *interval*.
+
+    Guards the window-inferred alias: three points one minute apart inside
+    30-minute data would otherwise suggest "min", and every timestamp *is* on a
+    minute boundary, so the subset check alone would let the series be blown
+    up 30-fold. Anchored offsets vary a little (28-31 days per month, 90-92 per
+    quarter), hence the tolerance.
+    """
+    try:
+        step = (index.min() + to_offset(freq)) - index.min()
+    except (ValueError, TypeError, OverflowError):
+        return False
+    return abs(step - interval) <= 0.15 * interval
+
+
+def _candidate_frequencies(index: pd.DatetimeIndex, most_common_diff: pd.Timedelta) -> list[Any]:
+    """Frequencies worth trying for *index*, most specific first.
+
+    Every candidate is later checked with ``index.isin(pd.date_range(...))``;
+    nothing here is trusted on its own.
+    """
+    candidates: list[Any] = []
+    inferred = _infer_freq_from_regular_window(index)
+    if inferred is not None and _step_matches_interval(index, inferred, most_common_diff):
+        candidates.append(inferred)
+    days = most_common_diff.days
+    if most_common_diff == pd.Timedelta(days=7):
+        # Weekly anchored on the weekday of the first timestamp, not "W" (= W-SUN).
+        candidates.append(f"W-{index.min().strftime('%a').upper()}")
+    elif 28 <= days <= 31 and most_common_diff == pd.Timedelta(days=days):
+        # Monthly on an arbitrary day of the month (e.g. the 15th): pandas has
+        # no alias, but a DateOffset anchored on the first timestamp walks it.
+        candidates.append(pd.DateOffset(months=1))
+    elif most_common_diff > pd.Timedelta(0):
+        candidates.append(to_offset(most_common_diff))
+    return candidates
+
+
+def _missing_values_report(y: Any, X: Any) -> dict[str, int]:
+    """Per-column NaN counts of the stored data, as plain ints (load-response shape)."""
+    report: dict[str, int] = {}
+    for obj in (y, X):
+        if obj is None:
+            continue
+        if isinstance(obj, pd.DataFrame):
+            report.update({str(col): int(n) for col, n in obj.isna().sum().items()})
+        else:
+            name = obj.name if getattr(obj, "name", None) is not None else "target"
+            report[str(name)] = int(obj.isna().sum())
+    return report
 
 
 # Max forecast rows returned inline before truncation (NB-22). Normal horizons
@@ -1416,7 +1501,7 @@ class Executor:
 
         # 1. Remove duplicates
         if remove_duplicates and y.index.duplicated().any():
-            n_duplicates = y.index.duplicated().sum()
+            n_duplicates = int(y.index.duplicated().sum())
             y = y[~y.index.duplicated(keep="first")]
             if X is not None:
                 X = X[~X.index.duplicated(keep="first")]
@@ -1429,65 +1514,82 @@ class Executor:
         if X is not None:
             X = X.sort_index()
 
-        # 3. Infer and set frequency
-        if auto_infer_freq:
-            freq = getattr(y.index, "freq", None)
+        # 3. Infer and set frequency. Only a DatetimeIndex without a freq needs
+        # this (a PeriodIndex always carries one). Every candidate frequency is
+        # verified against the observed timestamps before reindexing: reindexing
+        # onto a mis-anchored range (monthly data on the 15th -> "MS", weekly
+        # Mondays -> "W" = W-SUN) used to replace every value with NaN (#556).
+        freq_to_set: Any = None
+        if (
+            auto_infer_freq
+            and isinstance(y.index, pd.DatetimeIndex)
+            and y.index.freq is None
+            and len(y) > 1
+        ):
+            most_common_diff = y.index.to_series().diff().dropna().mode()[0]
+            full_range = None
+            rejected: Any = None
+            for candidate in _candidate_frequencies(y.index, most_common_diff):
+                try:
+                    candidate_range = pd.date_range(
+                        start=y.index.min(), end=y.index.max(), freq=candidate
+                    )
+                except (ValueError, TypeError):
+                    continue
+                if y.index.isin(candidate_range).all():
+                    freq_to_set = candidate
+                    full_range = candidate_range
+                    break
+                if rejected is None:
+                    rejected = candidate
 
-            if freq is None and isinstance(y.index, (pd.DatetimeIndex, pd.PeriodIndex)):
-                # Try to infer
-                freq = pd.infer_freq(y.index)
-
-                if freq is None:
-                    # Manual inference
-                    time_diffs = y.index.to_series().diff().dropna()
-                    if len(time_diffs) > 0:
-                        most_common_diff = time_diffs.mode()[0]
-
-                        if most_common_diff == pd.Timedelta(days=1):
-                            freq = "D"
-                        elif most_common_diff == pd.Timedelta(hours=1):
-                            freq = "h"
-                        elif most_common_diff == pd.Timedelta(minutes=1):
-                            freq = "min"
-                        elif most_common_diff == pd.Timedelta(seconds=1):
-                            freq = "s"
-                        elif most_common_diff == pd.Timedelta(days=7):
-                            freq = "W"
-                        elif most_common_diff.days >= 28 and most_common_diff.days <= 31:
-                            freq = "MS"
-                        else:
-                            changes_made["frequency_warning"] = (
-                                f"Could not determine frequency from most common interval "
-                                f"({most_common_diff}). Reindexing skipped."
-                            )
-
-                # Create complete date range
-                if freq:
-                    full_range = pd.date_range(start=y.index.min(), end=y.index.max(), freq=freq)
-
-                    n_gaps = len(full_range) - len(y)
-
-                    y = y.reindex(full_range)
-                    if X is not None:
-                        X = X.reindex(full_range)
-
-                    changes_made["gaps_filled"] = n_gaps
-                    changes_made["frequency_set"] = True
-                    changes_made["frequency"] = freq
+            if full_range is not None:
+                # index is a subset of full_range, so this never drops a value
+                # and n_gaps is never negative.
+                n_gaps = int(len(full_range) - len(y))
+                y = y.reindex(full_range)
+                if X is not None:
+                    X = X.reindex(full_range)
+                changes_made["gaps_filled"] = n_gaps
+                changes_made["frequency_set"] = True
+                months = _anchored_months(freq_to_set)
+                if months is not None:
+                    changes_made["frequency"] = "M" if months == 1 else f"{months}M"
+                    changes_made["frequency_warning"] = (
+                        f"Monthly timestamps fall on day {y.index.min().day} of the month, "
+                        f"which pandas cannot express as a frequency; the index was aligned "
+                        f"to monthly periods ('{changes_made['frequency']}'). "
+                        f"Values were kept; {n_gaps} gap(s) filled."
+                    )
+                else:
+                    changes_made["frequency"] = getattr(freq_to_set, "freqstr", freq_to_set)
+            elif rejected is not None:
+                changes_made["frequency_warning"] = (
+                    f"Inferred frequency '{getattr(rejected, 'freqstr', rejected)}' "
+                    f"(most common interval {most_common_diff}) does not align with the "
+                    f"observed timestamps. Reindexing skipped; the series was left unchanged."
+                )
+            else:
+                changes_made["frequency_warning"] = (
+                    f"Could not determine frequency from most common interval "
+                    f"({most_common_diff}). Reindexing skipped."
+                )
 
         # 4. Fill missing values
-        if fill_missing and y.isna().any():
-            n_missing = y.isna().sum()
+        if fill_missing and y.isna().any(axis=None):
+            n_missing = (
+                int(y.isna().sum().sum()) if isinstance(y, pd.DataFrame) else int(y.isna().sum())
+            )
             y = y.ffill().bfill()
             if X is not None:
                 X = X.ffill().bfill()
             changes_made["missing_filled"] = n_missing
 
-        # 5. Set frequency explicitly on index
-        if hasattr(y.index, "freq") and changes_made.get("frequency"):
-            y.index.freq = changes_made["frequency"]
+        # 5. Set frequency explicitly on index (reindex already did; ffill/bfill keep it)
+        if freq_to_set is not None and isinstance(y.index, pd.DatetimeIndex):
+            y.index.freq = freq_to_set
             if X is not None:
-                X.index.freq = changes_made["frequency"]
+                X.index.freq = freq_to_set
 
         # 6. Normalise a regular DatetimeIndex to PeriodIndex so seasonal
         # forecasters can predict on handle-loaded data (#531).
@@ -1511,6 +1613,7 @@ class Executor:
                 "rows": len(y),
                 "start_date": str(y.index.min()),
                 "end_date": str(y.index.max()),
+                "missing_values": _missing_values_report(y, X),
             },
             "validation": data_info.get("validation", {}),
             "config": data_info.get("config", {}),
