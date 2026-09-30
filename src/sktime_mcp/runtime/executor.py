@@ -166,6 +166,42 @@ def _resolve_metric_scoring(metric_name: str) -> Any | None:
         return None
 
 
+def _normalize_fh(fh: Any) -> list[int]:
+    """Normalize an evaluate ``fh`` argument to a list of positive int steps.
+
+    ``None`` or int ``n`` -> ``[1, ..., n]``; a non-empty list of positive ints
+    is returned as-is (deduplicated, sorted). Raises ValueError otherwise.
+    """
+    if fh is None:
+        return [1]
+    if isinstance(fh, bool):
+        raise ValueError(
+            f"fh must be a positive integer or a list of positive integers, got {fh!r}"
+        )
+    if isinstance(fh, int):
+        if fh < 1:
+            raise ValueError(f"fh must be a positive integer, got {fh}")
+        return list(range(1, fh + 1))
+    if isinstance(fh, (list, tuple)):
+        if not fh:
+            raise ValueError("fh must not be an empty list")
+        for step in fh:
+            if isinstance(step, bool) or not isinstance(step, int) or step < 1:
+                raise ValueError(
+                    f"fh must be a positive integer or a list of positive integers, "
+                    f"got {list(fh)!r}"
+                )
+        return sorted(set(fh))
+    raise ValueError(f"fh must be a positive integer or a list of positive integers, got {fh!r}")
+
+
+def _check_step_length(step_length: Any) -> int:
+    """Validate an evaluate ``step_length`` argument (int >= 1)."""
+    if isinstance(step_length, bool) or not isinstance(step_length, int) or step_length < 1:
+        raise ValueError(f"step_length must be a positive integer, got {step_length!r}")
+    return step_length
+
+
 def _run_evaluate(
     instance: Any,
     y: Any,
@@ -173,9 +209,16 @@ def _run_evaluate(
     cv_folds: int,
     scoring: Any | None,
     initial_window: int | None,
-) -> tuple[list[dict[str, Any]], dict[str, float], dict[str, dict[str, float]]]:
+    fh: Any = None,
+    step_length: int = 1,
+) -> tuple[list[dict[str, Any]], dict[str, float], dict[str, dict[str, float]], dict[str, Any]]:
     """
     Run sktime.evaluate with an expanding-window splitter and summarize results.
+
+    Each fold trains on an expanding window and scores the ``fh`` steps after
+    its cutoff; cutoffs advance by ``step_length``. Without ``initial_window``,
+    the initial window is chosen so that exactly ``cv_folds`` folds fit, the
+    last one ending at the final observation.
 
     Returns
     -------
@@ -185,6 +228,9 @@ def _run_evaluate(
         Mean value per ``test_*`` metric column.
     summary : dict
         Mean, std, min, max per ``test_*`` metric column.
+    cv_info : dict
+        The splitter configuration actually used: ``initial_window``, ``fh``
+        (list of steps) and ``step_length``.
     """
     from sktime.forecasting.model_evaluation import evaluate
 
@@ -193,23 +239,41 @@ def _run_evaluate(
     except ImportError:  # pragma: no cover - sktime < 0.29
         from sktime.forecasting.model_selection import ExpandingWindowSplitter
 
+    fh_steps = _normalize_fh(fh)
+    step = _check_step_length(step_length)
+    horizon = max(fh_steps)
+
     n = len(y)
     if initial_window is not None:
-        if not 1 <= initial_window < n:
+        # every fold needs max(fh) points after its cutoff
+        if not 1 <= initial_window <= n - horizon:
             raise ValueError(
-                f"initial_window must be between 1 and n-1={n - 1} "
-                f"(series has {n} observations), got {initial_window}"
+                f"initial_window must be between 1 and n-max(fh)={n - horizon} "
+                f"(series has {n} observations, max(fh)={horizon}), got {initial_window}"
             )
         win = initial_window
     else:
         folds = int(cv_folds)
-        if not 1 <= folds <= n - 1:
-            raise ValueError(
-                f"cv_folds must be between 1 and n-1={n - 1} "
-                f"(series has {n} observations), got {folds}"
+        if folds < 1:
+            raise ValueError(f"cv_folds must be a positive integer, got {folds}")
+        # cutoffs at win-1, win-1+step, ...; the last must leave `horizon` points
+        min_len = horizon + (folds - 1) * step + 1
+        if n < min_len:
+            max_folds = (n - horizon - 1) // step + 1
+            hint = (
+                f"cv_folds must be between 1 and {max_folds} for this series"
+                if max_folds >= 1
+                else f"even a single fold needs {horizon + 1} observations"
             )
-        win = n - folds
-    cv = ExpandingWindowSplitter(initial_window=win, step_length=1, fh=[1])
+            raise ValueError(
+                f"series too short for cv_folds={folds}, fh={fh_steps}, "
+                f"step_length={step}: needs at least {min_len} observations "
+                f"(max(fh) + (cv_folds - 1) * step_length + 1), but the series has {n}; "
+                f"{hint}"
+            )
+        win = n - horizon - (folds - 1) * step
+    cv = ExpandingWindowSplitter(initial_window=win, step_length=step, fh=fh_steps)
+    cv_info = {"initial_window": win, "fh": fh_steps, "step_length": step}
 
     # error_score="raise" — sktime's default (np.nan) swallows per-fold
     # exceptions and reports success with all-NaN metrics
@@ -231,7 +295,36 @@ def _run_evaluate(
         }
         for c in metric_cols
     }
-    return fold_results, metrics, summary
+    return fold_results, metrics, summary, cv_info
+
+
+def _build_evaluate_result(
+    fold_results: list[dict[str, Any]],
+    metrics: dict[str, float],
+    summary: dict[str, dict[str, float]],
+    cv_info: dict[str, Any],
+    cv_folds: int,
+    initial_window: int | None,
+) -> dict[str, Any]:
+    """Assemble the evaluate response shared by the sync and async paths.
+
+    ``cv_folds_requested`` is echoed only when ``cv_folds`` actually drove the
+    fold count; with an explicit ``initial_window`` it is ignored, so echoing
+    it would be misleading (#556 / F-53).
+    """
+    result: dict[str, Any] = {
+        "success": True,
+        "metrics": metrics,
+        "fold_results": fold_results,
+        "summary": summary,
+        "cv_folds_run": len(fold_results),
+        "initial_window": cv_info["initial_window"],
+        "fh": cv_info["fh"],
+        "step_length": cv_info["step_length"],
+    }
+    if initial_window is None:
+        result["cv_folds_requested"] = cv_folds
+    return result
 
 
 def _merge_adapter_validation_warnings(
@@ -1057,6 +1150,8 @@ class Executor:
         cv_folds: int = 3,
         metric: str | None = None,
         initial_window: int | None = None,
+        fh: int | list[int] | None = None,
+        step_length: int = 1,
         job_id: str | None = None,
     ) -> dict[str, Any]:
         """Async version of evaluate with job tracking."""
@@ -1100,9 +1195,11 @@ class Executor:
             await asyncio.sleep(0.01)
 
             loop = asyncio.get_running_loop()
-            fold_results, metrics, summary = await loop.run_in_executor(
+            fold_results, metrics, summary, cv_info = await loop.run_in_executor(
                 None,
-                lambda: _run_evaluate(instance, _y, _X, cv_folds, scoring, initial_window),
+                lambda: _run_evaluate(
+                    instance, _y, _X, cv_folds, scoring, initial_window, fh, step_length
+                ),
             )
 
             # Step 3: Summarize results
@@ -1111,14 +1208,9 @@ class Executor:
             )
             await asyncio.sleep(0.01)
 
-            result = {
-                "success": True,
-                "metrics": metrics,
-                "fold_results": fold_results,
-                "summary": summary,
-                "cv_folds_run": len(fold_results),
-                "cv_folds_requested": cv_folds,
-            }
+            result = _build_evaluate_result(
+                fold_results, metrics, summary, cv_info, cv_folds, initial_window
+            )
             self._job_manager.update_job(
                 job_id,
                 status=JobStatus.COMPLETED,
