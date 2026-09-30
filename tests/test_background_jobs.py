@@ -2,6 +2,8 @@
 Test background job management.
 """
 
+from datetime import datetime, timedelta
+
 from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 
 
@@ -258,14 +260,17 @@ def test_cancelled_job_ignores_late_updates():
 
 
 def test_cleanup_old_jobs():
-    """Test cleaning up old jobs."""
+    """Test cleaning up old finished jobs."""
     job_manager = get_job_manager()
 
-    # Create a job
+    # Create a job that finished two days ago
     job_id = job_manager.create_job("fit_predict", "handle", "ARIMA")
+    job_manager.update_job(job_id, status=JobStatus.COMPLETED)
+    job_manager.jobs[job_id].end_time = datetime.now() - timedelta(hours=48)
 
-    # Cleanup jobs older than 0 hours (should remove all)
-    count = job_manager.cleanup_old_jobs(max_age_hours=0)
+    # Cleanup finished jobs older than 24 hours
+    count = job_manager.cleanup_old_jobs(max_age_hours=24)
+    assert count >= 1
 
     print(f"✓ Cleaned up {count} old job(s)")
 

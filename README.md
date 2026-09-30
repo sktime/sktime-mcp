@@ -179,7 +179,7 @@ You can configure the server's behavior at runtime using environment variables:
 - `SKTIME_MCP_MAX_RESPONSE_TOKENS`: Maximum tokens allowed per tool response (e.g., `10000`). If a response exceeds this limit, it is truncated and appended with a notice. Set to `0` (default) for unlimited.
 - `SKTIME_MCP_LOG_LEVEL`: Server logging verbosity level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Defaults to `WARNING`.
 - `SKTIME_MCP_AUTO_FORMAT`: Enables or disables automatic time-series formatting during data loading.
-- `SKTIME_MCP_JOB_MAX_AGE_HOURS`: Maximum hours before completed background jobs are automatically pruned. Defaults to `24`.
+- `SKTIME_MCP_JOB_MAX_AGE_HOURS`: Hours a finished background job is kept before it is automatically pruned (minimum `1`; running jobs are never pruned). Defaults to `24`.
 
 ### Connecting from an LLM Client
 
@@ -237,8 +237,12 @@ The server can be configured via environment variables:
 | `SKTIME_MCP_LOG_LEVEL` | Logging verbosity (e.g. `INFO`, `DEBUG`, `WARNING`) | `"WARNING"` |
 | `SKTIME_MCP_LOG_PATH` | Optional file path to output logs to in addition to stderr | (None) |
 | `SKTIME_MCP_AUTO_FORMAT` | Automatically format time series data on load (`true`/`false`) | `"true"` |
-| `SKTIME_MCP_JOB_MAX_AGE_HOURS` | Maximum age in hours before background jobs are cleared | `24` |
-| `SKTIME_MCP_JOB_CLEANUP_INTERVAL` | Interval in seconds for periodic job cleanup checks | `3600` |
+| `SKTIME_MCP_JOB_MAX_AGE_HOURS` | Hours a finished background job is kept before the periodic cleanup removes it (running/pending jobs are never removed); minimum `1` | `24` |
+| `SKTIME_MCP_JOB_CLEANUP_INTERVAL` | Interval in seconds between periodic job cleanup runs; minimum `1` | `3600` |
+| `SKTIME_MCP_MAX_DATA_HANDLES` | Maximum number of data handles kept in memory before the oldest are evicted; minimum `1` | `50` |
+| `SKTIME_MCP_MAX_RESPONSE_TOKENS` | Token budget per tool response; `0` means unlimited | `0` |
+
+Integer settings are validated on every read: a value that is not an integer or is below the minimum is ignored with a logged warning and the default is used instead.
 
 ## 📚 Available Tools
 
