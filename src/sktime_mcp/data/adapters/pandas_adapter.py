@@ -10,7 +10,7 @@ from typing import Any
 
 import pandas as pd
 
-from ..base import DataSourceAdapter
+from ..base import DataSourceAdapter, check_frequency_alignment, coerce_time_index
 
 
 def _safe_infer_freq(index: pd.Index) -> str | None:
@@ -68,21 +68,13 @@ class PandasAdapter(DataSourceAdapter):
                     raise ValueError(f"Time columns {missing} not found in data")
             elif time_col not in df.columns:
                 raise ValueError(f"Time column '{time_col}' not found in data")
-            df = df.set_index(time_col)
         elif not isinstance(df.index, (pd.DatetimeIndex, pd.RangeIndex, pd.Index)):
             # Try to detect time column
             time_col = self._detect_time_column(df)
-            if time_col:
-                df = df.set_index(time_col)
 
-        # Only ensure datetime index if it's already specified or looks like one
-        if not isinstance(df.index, (pd.DatetimeIndex, pd.MultiIndex)) and time_col:
-            try:
-                df.index = pd.to_datetime(df.index)
-            except Exception as e:
-                raise ValueError(
-                    f"Could not convert time column '{time_col}' to datetime: {e}"
-                ) from e
+        # Integer columns become an integer index; only date-like values are
+        # parsed to datetime (shared with the file and SQL adapters, F-13/F-35)
+        df, index_warnings = coerce_time_index(df, time_col)
 
         # Sort by index
         df = df.sort_index()
@@ -90,6 +82,9 @@ class PandasAdapter(DataSourceAdapter):
         # Infer or set frequency
         freq = self.config.get("frequency")
         if freq:
+            # Refuse a freq whose anchor misses the timestamps: asfreq would
+            # silently replace every row with NaN (F-15)
+            check_frequency_alignment(df.index, freq)
             with contextlib.suppress(Exception):
                 df = df.asfreq(freq)
         elif isinstance(df.index, pd.DatetimeIndex) and df.index.freq is None:
@@ -115,6 +110,8 @@ class PandasAdapter(DataSourceAdapter):
             "end_date": str(df.index.max()),
             "missing_values": df.isnull().sum().to_dict(),
         }
+        if index_warnings:
+            self._metadata["validation"] = {"valid": True, "errors": [], "warnings": index_warnings}
 
         return df
 
