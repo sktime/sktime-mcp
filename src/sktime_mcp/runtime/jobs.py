@@ -4,9 +4,11 @@ Job management for long-running operations in sktime MCP.
 Handles background training jobs with progress tracking and status updates.
 """
 
+import asyncio
 import logging
 import threading
 import uuid
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
@@ -402,6 +404,58 @@ class JobManager:
                 self._tasks.pop(job_id, None)
                 return True
             return False
+
+
+NO_EVENT_LOOP_ERROR = (
+    "run_async=true needs the MCP server's running asyncio event loop, but this call "
+    "was made from synchronous code with no event loop, so no background job was "
+    "created. Call the tool with run_async=false, or invoke it through the server."
+)
+
+
+def start_background_job(
+    job_manager: "JobManager",
+    make_coro: Callable[[str], Coroutine[Any, Any, Any]],
+    *,
+    job_type: str,
+    estimator_handle: str,
+    estimator_name: str | None = None,
+    dataset_name: str | None = None,
+    horizon: int | None = None,
+    total_steps: int = 3,
+) -> dict[str, Any]:
+    """Create a job and schedule ``make_coro(job_id)`` on the running event loop.
+
+    This is the single scheduling path for every ``run_async=True`` tool. When
+    no event loop is running (plain synchronous callers), it returns a
+    structured error *before* creating a job or a coroutine, so nothing runs
+    synchronously under the guise of a job and no coroutine is left un-awaited.
+
+    Returns ``{"success": True, "job_id": ..., "status": "running"}`` on
+    success, or ``{"success": False, "error": ...}``.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return {"success": False, "error": NO_EVENT_LOOP_ERROR}
+
+    job_id = job_manager.create_job(
+        job_type=job_type,
+        estimator_handle=estimator_handle,
+        estimator_name=estimator_name,
+        dataset_name=dataset_name,
+        horizon=horizon,
+        total_steps=total_steps,
+    )
+    coro = make_coro(job_id)
+    try:
+        task = loop.create_task(coro)
+    except Exception as exc:
+        coro.close()
+        job_manager.delete_job(job_id)
+        return {"success": False, "error": f"Could not schedule background job: {exc}"}
+    job_manager.register_task(job_id, task)
+    return {"success": True, "job_id": job_id, "status": "running"}
 
 
 # Singleton instance

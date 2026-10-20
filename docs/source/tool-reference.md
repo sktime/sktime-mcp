@@ -49,7 +49,10 @@ Behaviour:
 | `true` | `{"success": true, "job_id": "..."}` immediately | Training or loading is slow |
 
 When you pass `run_async: true`, the work is scheduled on the server's event loop
-and you get a `job_id` back straight away. Track it with the job tools:
+and you get a `job_id` back straight away. A missing estimator handle is rejected
+before any job is created, and calling a tool function with `run_async=True` from
+plain synchronous Python (no running event loop) returns a structured error instead
+of a job; use `run_async=False` there. Track a job with the job tools:
 
 ```text
 fit(run_async=true)  ->  job_id
