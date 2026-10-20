@@ -6,6 +6,7 @@ and running fit/predict operations.
 """
 
 import asyncio
+import contextlib
 import inspect
 import logging
 import uuid
@@ -523,7 +524,16 @@ class Executor:
                 else:
                     instance.fit(X)
             else:
-                # Assume forecaster or similar default
+                # Assume forecaster or similar default.
+                # sktime 1.3 flips the ``remember_data`` config default to
+                # False, after which ``update`` on forecasters without a
+                # native update no longer refits on the accumulated data.
+                # Pin the current semantics so the ``update`` tool keeps
+                # behaving the same across sktime versions.
+                _set_config = getattr(instance, "set_config", None)
+                if callable(_set_config):
+                    with contextlib.suppress(Exception):  # older sktime lacks the key
+                        _set_config(remember_data=True)
                 if fh is not None:
                     instance.fit(y, X=X, fh=fh)
                 elif X is not None:

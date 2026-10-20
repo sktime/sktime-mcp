@@ -109,28 +109,32 @@ def test_evaluate_handle_not_found():
 def test_evaluate_per_fold_error_surfaces_as_failure():
     """Per-fold exceptions must fail the evaluation, not report success with NaN.
 
-    ThetaForecaster coerces to PeriodIndex internally and errors on a
-    DatetimeIndex with a MonthBegin freq — with sktime's default
-    error_score=np.nan every fold error was swallowed and evaluate
-    returned success: true with all-NaN metrics.
+    sktime's default ``error_score=np.nan`` swallows per-fold errors and
+    ``evaluate`` used to return ``success: true`` with all-NaN metrics.
+    The trigger is a forecaster whose ``_predict`` always raises, so the
+    test does not depend on which inputs a given sktime version rejects.
     """
     import math
 
     import pandas as pd
-    from sktime.forecasting.theta import ThetaForecaster
+    from sktime.forecasting.naive import NaiveForecaster
+
+    class _FailingForecaster(NaiveForecaster):
+        def _predict(self, fh, X=None):
+            raise RuntimeError("deliberate per-fold failure")
 
     executor = get_executor()
     idx = pd.date_range("2000-01-01", periods=48, freq="MS")
     y = pd.Series([100.0 + i + 10 * (i % 12) for i in range(48)], index=idx)
     executor._data_handles["test_nan_dh"] = {"y": y}
-    handle = executor._handle_manager.create_handle("ThetaForecaster", ThetaForecaster(sp=12), {})
+    handle = executor._handle_manager.create_handle("_FailingForecaster", _FailingForecaster(), {})
 
     try:
         result = evaluate_tool(estimator_handle=handle, y="test_nan_dh", cv_folds=3)
         assert not result["success"], (
             f"Expected per-fold errors to fail the evaluation, got: {result.get('metrics')}"
         )
-        assert result["error"]
+        assert "deliberate per-fold failure" in result["error"]
         # And in no case may a NaN metric masquerade as a result
         for value in (result.get("metrics") or {}).values():
             assert not (isinstance(value, float) and math.isnan(value))
