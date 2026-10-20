@@ -8,7 +8,12 @@ import asyncio
 import logging
 from typing import Any
 
-from sktime_mcp.runtime.executor import _resolve_metric_scoring, _run_evaluate, get_executor
+from sktime_mcp.runtime.executor import (
+    _resolve_metric_scoring,
+    _run_evaluate,
+    _unknown_metric_error,
+    get_executor,
+)
 from sktime_mcp.runtime.jobs import get_job_manager
 
 logger = logging.getLogger(__name__)
@@ -172,13 +177,7 @@ def evaluate_tool(
     if metric:
         scoring = _resolve_metric_scoring(metric)
         if scoring is None:
-            return {
-                "success": False,
-                "error": (
-                    f"Unknown metric: {metric}. "
-                    "Check available metrics with query_registry(task='metric')."
-                ),
-            }
+            return {"success": False, "error": _unknown_metric_error(metric)}
 
     try:
         fold_results, metrics, summary = _run_evaluate(

@@ -61,31 +61,3 @@ def format_time_series_tool(
             "error": str(e),
             "error_type": type(e).__name__,
         }
-
-
-def auto_format_on_load_tool(enabled: bool = True) -> dict[str, Any]:
-    """
-    Enable/disable automatic formatting when loading data.
-
-    When enabled, all data loaded via load_data_source will be
-    automatically formatted to be sktime-compatible.
-
-    Args:
-        enabled: Whether to enable auto-formatting (default: True)
-
-    Returns:
-        Dictionary with success status and current setting
-    """
-    executor = get_executor()
-
-    # Store setting in executor
-    if not hasattr(executor, "_auto_format_enabled"):
-        executor._auto_format_enabled = True
-
-    executor._auto_format_enabled = enabled
-
-    return {
-        "success": True,
-        "auto_format_enabled": enabled,
-        "message": f"Auto-formatting {'enabled' if enabled else 'disabled'}",
-    }

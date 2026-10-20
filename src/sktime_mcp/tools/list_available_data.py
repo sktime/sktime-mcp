@@ -12,33 +12,24 @@ def list_available_data_tool(is_demo: bool | None = None) -> dict[str, Any]:
 
     Args:
         is_demo: Optional boolean filter.
-            - True  -> return only system demo datasets
-            - False -> return only active (user-loaded) data handles
+            - True  -> return only system demo datasets (no active_handles key)
+            - False -> return only active (user-loaded) data handles (no system_demos key)
             - None  -> return both (default)
 
     Returns:
         Dictionary with:
         - success: bool
-        - system_demos: dict of demo dataset task -> list of names, or {} if is_demo=False
-        - active_handles: list of dicts with handle id and metadata
+        - system_demos: dict of demo dataset task -> list of names (omitted if is_demo=False)
+        - active_handles: list of dicts with handle id and metadata (omitted if is_demo=True)
         - total: int — combined count of items returned
     """
     executor = get_executor()
 
-    system_demos_raw = []
-    active_handles = []
+    result: dict[str, Any] = {"success": True}
+    total = 0
 
     if is_demo is None or is_demo is True:
         system_demos_raw = executor.list_datasets()
-
-    if is_demo is None or is_demo is False:
-        handles_result = executor.list_data_handles()
-        active_handles = handles_result.get("handles", [])
-
-    if is_demo is False:
-        system_demos = {}
-        total_demos = 0
-    else:
         # Categorize system demo datasets
         demos_dict = {
             "forecasting": [],
@@ -56,12 +47,14 @@ def list_available_data_tool(is_demo: bool | None = None) -> dict[str, Any]:
             else:
                 demos_dict["forecasting"].append(name)
 
-        system_demos = demos_dict
-        total_demos = len(system_demos_raw)
+        result["system_demos"] = demos_dict
+        total += len(system_demos_raw)
 
-    return {
-        "success": True,
-        "system_demos": system_demos,
-        "active_handles": active_handles,
-        "total": total_demos + len(active_handles),
-    }
+    if is_demo is None or is_demo is False:
+        handles_result = executor.list_data_handles()
+        active_handles = handles_result.get("handles", [])
+        result["active_handles"] = active_handles
+        total += len(active_handles)
+
+    result["total"] = total
+    return result

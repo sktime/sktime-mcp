@@ -122,39 +122,6 @@ def load_data_source_tool(
         return executor.load_data_source(config)
 
 
-def list_data_sources_tool() -> dict[str, Any]:
-    """List all available data source types.
-
-    Returns
-    -------
-    dict
-        Dictionary containing available data sources:
-
-        - ``"success"`` (bool) -- True if the list was retrieved successfully.
-        - ``"sources"`` (list of str) -- List of supported source type names.
-        - ``"descriptions"`` (dict) -- A mapping of source type names to their class and
-          descriptions.
-    """
-    from sktime_mcp.data import DataSourceRegistry
-
-    sources = DataSourceRegistry.list_adapters()
-
-    # Get descriptions for each source
-    descriptions = {}
-    for source_type in sources:
-        info = DataSourceRegistry.get_adapter_info(source_type)
-        descriptions[source_type] = {
-            "class": info["class"],
-            "description": info["docstring"].split("\n")[0] if info["docstring"] else "",
-        }
-
-    return {
-        "success": True,
-        "sources": sources,
-        "descriptions": descriptions,
-    }
-
-
 def release_data_handle_tool(data_handle: str) -> dict[str, Any]:
     """Release a data handle and free memory.
 

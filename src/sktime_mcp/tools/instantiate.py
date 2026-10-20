@@ -59,10 +59,17 @@ def release_handle_tool(handle: str) -> dict[str, Any]:
     if released:
         return {"success": True, "handle": handle, "message": "Handle released"}
     # Failure carries an "error" key like every other tool (NB-02).
+    if get_executor().is_data_handle(handle):
+        error = (
+            f"'{handle}' is a data handle, not an estimator handle; "
+            "use release_data_handle to release it."
+        )
+    else:
+        error = handle_manager.describe_missing(handle)
     return {
         "success": False,
         "handle": handle,
-        "error": handle_manager.describe_missing(handle),
+        "error": error,
     }
 
 

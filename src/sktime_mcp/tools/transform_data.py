@@ -48,8 +48,10 @@ def transform_data_tool(
     remove_duplicates : bool, default=True
         (Format mode only) Remove duplicate timestamps.
     to_mtype : str or None, default=None
-        (Convert mode only) Target machine type string, e.g. "pd.DataFrame",
-        "pd.Series", "np.ndarray".
+        (Convert mode only) Target sktime mtype string: "pd.Series" or
+        "pd.DataFrame" (Series), "pd-multiindex", "nested_univ" or "df-list"
+        (Panel), "pd_multiindex_hier" (Hierarchical). Index-less numpy mtypes
+        are rejected because they drop the time index.
 
     Returns
     -------
