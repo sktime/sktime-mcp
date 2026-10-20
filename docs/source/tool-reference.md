@@ -77,7 +77,7 @@ Discover sktime estimators, metrics, or capability tags.
 
 | Argument | Type | Required | Default | Description |
 | :--- | :--- | :---: | :--- | :--- |
-| `task` | string | — | — | Filter by scitype: `forecaster`, `classifier`, `regressor`, `transformer`, `clusterer`, `detector`, `splitter`, `metric`, `param_est`, `aligner`, `network`. Set to `tag`/`tags` to list available tags instead. |
+| `task` | string | — | — | Filter by scitype: `forecaster`, `classifier`, `regressor`, `transformer`, `clusterer`, `detector`, `splitter`, `metric`, `param_est`, `aligner`, `network`. Set to `tag`/`tags` to list available tags instead. The schema enforces the valid values. |
 | `tags` | object | — | — | Filter by capability tags, e.g. `{"capability:pred_int": true}`. Ignored when `task="tag"`. |
 | `query` | string | — | — | Case-insensitive substring search over name and description. Combines with `task` and `tags`. |
 | `limit` | integer | — | `50` | Maximum results. |
@@ -202,7 +202,7 @@ Cross-validate an estimator.
 | `estimator_handle` | string | ✅ | — | Handle from `instantiate`. |
 | `y` | string | ✅ | — | Target series: a data handle ID **or** a demo dataset name. |
 | `X` | string | — | — | Exogenous series: data handle ID or demo dataset name. |
-| `cv_folds` | integer | — | `3` | Number of folds. Ignored when `initial_window` is set. |
+| `cv_folds` | integer | — | `3` | Number of folds (minimum `1`). Ignored when `initial_window` is set. |
 | `metric` | string | — | — | Metric name, e.g. `MeanAbsolutePercentageError`. |
 | `initial_window` | integer | — | — | Initial training window for expanding-window CV. |
 | `run_async` | boolean | — | `false` | Run in the background, return a `job_id`. |

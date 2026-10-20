@@ -245,6 +245,38 @@ def get_tools() -> list[Tool]:
                             "param_est, aligner, network. "
                             "Set to 'tag' or 'tags' to retrieve capability tags."
                         ),
+                        # Matches the scitypes accepted by the runtime check in
+                        # query_registry.py (registry.get_available_tasks()),
+                        # plus the 'tag'/'tags' special case handled there.
+                        "enum": [
+                            "aligner",
+                            "catalogue",
+                            "classifier",
+                            "clusterer",
+                            "dataset",
+                            "dataset_classification",
+                            "dataset_forecasting",
+                            "dataset_regression",
+                            "detector",
+                            "early_classifier",
+                            "estimator",
+                            "forecaster",
+                            "metric",
+                            "metric_detection",
+                            "metric_forecasting",
+                            "metric_forecasting_proba",
+                            "network",
+                            "object",
+                            "param_est",
+                            "reconciler",
+                            "regressor",
+                            "splitter",
+                            "transformer",
+                            "transformer-pairwise",
+                            "transformer-pairwise-panel",
+                            "tag",
+                            "tags",
+                        ],
                     },
                     "tags": {
                         "type": "object",
@@ -527,6 +559,7 @@ def get_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Number of cross-validation folds (default: 3). Ignored if initial_window is set.",
                         "default": 3,
+                        "minimum": 1,
                     },
                     "metric": {
                         "type": "string",
