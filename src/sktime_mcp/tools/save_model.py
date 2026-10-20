@@ -7,6 +7,7 @@ Saves estimator instances via sktime's MLflow integration.
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 from sktime_mcp.runtime.handles import get_handle_manager
 
@@ -17,12 +18,22 @@ _MLFLOW_URI_PREFIXES = ("runs:/", "models:/", "mlflow-artifacts:/")
 def resolve_model_path(path: str) -> str:
     """Expand ~ and resolve local filesystem paths to absolute form.
 
+    ``file://`` URIs are converted to the local path they name; other
     MLflow URIs (runs:/, models:/, mlflow-artifacts:/, scheme://...) are
     returned unchanged. Without this, "~/model" creates a literal "~"
-    directory in the server cwd, and relative paths land in the server's
-    working directory with no way for the caller to learn where.
+    directory in the server cwd, "file:///tmp/model" a literal "file:"
+    directory (F-29), and relative paths land in the server's working
+    directory with no way for the caller to learn where.
     """
-    if path.startswith(_MLFLOW_URI_PREFIXES) or "://" in path:
+    if path.startswith("file://"):
+        parsed = urlparse(path)
+        local = unquote(parsed.path)
+        if parsed.netloc not in ("", "localhost"):
+            # "file://~/model" or "file://relative/model": the first segment
+            # parses as a host but is really the start of the path.
+            local = parsed.netloc + local
+        path = local
+    elif path.startswith(_MLFLOW_URI_PREFIXES) or "://" in path:
         return path
     return str(Path(path).expanduser().resolve())
 
@@ -49,7 +60,8 @@ def save_model_tool(
 
     Args:
         estimator_handle: Handle ID from instantiate
-        path: Local directory or URI where the model should be saved
+        path: Local directory (a ``file://`` URI is accepted) or MLflow URI
+            where the model should be saved
         mlflow_params: Optional extra keyword arguments for sktime MLflow save_model
 
     Returns:
