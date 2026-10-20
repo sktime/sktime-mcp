@@ -56,7 +56,9 @@ class DataSourceAdapter(ABC):
         """
         import asyncio
 
-        loop = asyncio.get_event_loop()
+        # Inside a coroutine there is always a running loop; get_running_loop
+        # is the supported way to fetch it (get_event_loop is deprecated).
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self.load)
 
     @abstractmethod
