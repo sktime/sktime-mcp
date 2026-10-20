@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 
 import pandas as pd
 
+from ...redaction import redact_url
 from ..base import DataSourceAdapter
 from .file_adapter import FileAdapter
 
@@ -61,7 +62,9 @@ class UrlAdapter(DataSourceAdapter):
 
             async with aiohttp.ClientSession() as session, session.get(url) as response:
                 if response.status != 200:
-                    raise ValueError(f"Error downloading from URL {url}: HTTP {response.status}")
+                    raise ValueError(
+                        f"Error downloading from URL {redact_url(url)}: HTTP {response.status}"
+                    )
 
                 total_size = int(response.headers.get("Content-Length", 0))
                 downloaded = 0
@@ -97,7 +100,7 @@ class UrlAdapter(DataSourceAdapter):
             self._data = df
             self._metadata = file_adapter.get_metadata()
             self._metadata["source"] = "url"
-            self._metadata["url"] = url
+            self._metadata["url"] = redact_url(url)
 
             if "path" in self._metadata:
                 del self._metadata["path"]
@@ -105,7 +108,9 @@ class UrlAdapter(DataSourceAdapter):
             return df
 
         except Exception as e:
-            raise ValueError(f"Error downloading or loading data from URL {url}: {e}") from e
+            raise ValueError(
+                f"Error downloading or loading data from URL {redact_url(url)}: {e}"
+            ) from e
 
         finally:
             temp_dir.cleanup()
@@ -143,7 +148,7 @@ class UrlAdapter(DataSourceAdapter):
             self._data = df
             self._metadata = file_adapter.get_metadata()
             self._metadata["source"] = "url"
-            self._metadata["url"] = url
+            self._metadata["url"] = redact_url(url)
 
             # Remove the temporary local path set by FileAdapter
             if "path" in self._metadata:
@@ -152,7 +157,9 @@ class UrlAdapter(DataSourceAdapter):
             return df
 
         except Exception as e:
-            raise ValueError(f"Error downloading or loading data from URL {url}: {e}") from e
+            raise ValueError(
+                f"Error downloading or loading data from URL {redact_url(url)}: {e}"
+            ) from e
 
         finally:
             # Clean up the temporary directory
