@@ -139,12 +139,12 @@ async def test_stray_stdout_output_does_not_corrupt_stdio_protocol(tmp_path: Pat
     stderr_path = tmp_path / "server-stderr.txt"
 
     with stderr_path.open("w") as errlog:
-        async with stdio_client(params, errlog=errlog) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(
-                    "query_registry", {"task": "forecaster", "limit": 1}
-                )
+        async with (
+            stdio_client(params, errlog=errlog) as (read, write),
+            ClientSession(read, write) as session,
+        ):
+            await session.initialize()
+            result = await session.call_tool("query_registry", {"task": "forecaster", "limit": 1})
 
     assert result.is_error is False
     assert _body(result)["success"] is True
@@ -203,13 +203,15 @@ async def test_sse_app_completes_initialize_and_serves_tools(tmp_path: Path):
         try:
             _wait_for_http(f"http://127.0.0.1:{port}/", proc)
             with anyio.fail_after(60):
-                async with sse_client(f"http://127.0.0.1:{port}/sse") as (read, write):
-                    async with ClientSession(read, write) as session:
-                        init = await session.initialize()
-                        listed = await session.list_tools()
-                        result = await session.call_tool(
-                            "query_registry", {"task": "forecaster", "limit": 1}
-                        )
+                async with (
+                    sse_client(f"http://127.0.0.1:{port}/sse") as (read, write),
+                    ClientSession(read, write) as session,
+                ):
+                    init = await session.initialize()
+                    listed = await session.list_tools()
+                    result = await session.call_tool(
+                        "query_registry", {"task": "forecaster", "limit": 1}
+                    )
         finally:
             proc.terminate()
             proc.wait(timeout=15)
