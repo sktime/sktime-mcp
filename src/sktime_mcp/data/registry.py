@@ -6,6 +6,7 @@ Manages registration and creation of data source adapters.
 
 from .adapters import FileAdapter, PandasAdapter, SQLAdapter, UrlAdapter
 from .base import DataSourceAdapter
+from .schemas import get_config_schema, validate_config
 
 
 class DataSourceRegistry:
@@ -81,6 +82,15 @@ class DataSourceRegistry:
         if not source_type:
             raise ValueError("Config must specify 'type' key")
 
+        problems = validate_config(source_type, config)
+        if problems:
+            detail = " ".join(problems)
+            raise ValueError(
+                f"Invalid config for source type '{source_type}': {detail} "
+                "See the per-type config schema from list_data_sources "
+                "(config_schemas) for the full contract."
+            )
+
         adapter_class = cls.get_adapter(source_type)
         return adapter_class(config)
 
@@ -93,6 +103,22 @@ class DataSourceRegistry:
             List of adapter type names
         """
         return list(cls._adapters.keys())
+
+    @classmethod
+    def get_config_schema(cls, source_type: str) -> dict:
+        """
+        Get the config schema for a source type.
+
+        Args:
+            source_type: Type of data source (e.g., "pandas", "sql", "file")
+
+        Returns:
+            Dictionary with the JSON-Schema-style config contract
+
+        Raises:
+            ValueError: If source type is not registered
+        """
+        return get_config_schema(source_type)
 
     @classmethod
     def get_adapter_info(cls, source_type: str) -> dict:

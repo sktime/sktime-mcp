@@ -29,12 +29,16 @@ Usage::
 from .adapters import FileAdapter, PandasAdapter, SQLAdapter, UrlAdapter
 from .base import DataSourceAdapter
 from .registry import DataSourceRegistry
+from .schemas import CONFIG_SCHEMAS, get_config_schema, validate_config
 
 __all__ = [
+    "CONFIG_SCHEMAS",
     "DataSourceAdapter",
     "DataSourceRegistry",
     "PandasAdapter",
     "SQLAdapter",
     "FileAdapter",
     "UrlAdapter",
+    "get_config_schema",
+    "validate_config",
 ]

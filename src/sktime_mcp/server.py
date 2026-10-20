@@ -590,7 +590,10 @@ def get_tools() -> list[Tool]:
                         "type": "object",
                         "description": (
                             "Data source configuration. Must include 'type' "
-                            "(pandas, sql, file, url)."
+                            "(pandas, sql, file, url). The exact key contract "
+                            "for each type (required keys, key types, allowed "
+                            "values) is published by the list_data_sources "
+                            "tool under 'config_schemas'."
                         ),
                     },
                     "run_async": {

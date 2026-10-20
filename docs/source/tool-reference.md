@@ -220,14 +220,16 @@ Load data into a `data_…` handle. The `config` object must carry a `type` key.
 | `config` | object | ✅ | — | Source configuration; must include `type`. |
 | `run_async` | boolean | — | `false` | Load in the background, return a `job_id`. |
 
-Supported `config.type` values:
+Supported `config.type` values (required keys marked ✅; the full
+machine-readable contract per type is published by `list_data_sources`
+under `config_schemas`):
 
-| `type` | Additional keys |
-| :--- | :--- |
-| `pandas` | `data`, `time_column`, `target_column` |
-| `file` | `path` (CSV / `.xlsx` / Parquet), `time_column`, `target_column` |
-| `sql` | connection and query keys, `time_column`, `target_column` |
-| `url` | `path`/URL, `time_column`, `target_column` |
+| `type` | Required keys | Optional keys |
+| :--- | :--- | :--- |
+| `pandas` | `data` ✅ (dict of columns or DataFrame) | `time_column`, `target_column`, `exog_columns`, `frequency` |
+| `file` | `path` ✅ | `format` (csv, excel, parquet, json), `time_column`, `target_column`, `exog_columns`, `csv_options`, `excel_options`, `json_options`, `parse_dates`, `frequency` |
+| `sql` | `connection_string` or `dialect` ✅, plus `query` or `table` ✅ | `host`, `port`, `database`, `username`, `password`, `query_params`, `filters`, `time_column`, `target_column`, `exog_columns`, `parse_dates`, `frequency` |
+| `url` | `url` ✅ | `format` (csv, excel, parquet), `time_column`, `target_column`, `exog_columns`, `csv_options`, `parse_dates`, `frequency` |
 
 ```json
 {

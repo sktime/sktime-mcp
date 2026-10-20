@@ -134,6 +134,9 @@ def list_data_sources_tool() -> dict[str, Any]:
         - ``"sources"`` (list of str) -- List of supported source type names.
         - ``"descriptions"`` (dict) -- A mapping of source type names to their class and
           descriptions.
+        - ``"config_schemas"`` (dict) -- A mapping of source type names to the
+          structured config contract each type expects for ``load_data_source``
+          (required keys, key types, allowed values).
     """
     from sktime_mcp.data import DataSourceRegistry
 
@@ -141,17 +144,20 @@ def list_data_sources_tool() -> dict[str, Any]:
 
     # Get descriptions for each source
     descriptions = {}
+    config_schemas = {}
     for source_type in sources:
         info = DataSourceRegistry.get_adapter_info(source_type)
         descriptions[source_type] = {
             "class": info["class"],
             "description": info["docstring"].split("\n")[0] if info["docstring"] else "",
         }
+        config_schemas[source_type] = DataSourceRegistry.get_config_schema(source_type)
 
     return {
         "success": True,
         "sources": sources,
         "descriptions": descriptions,
+        "config_schemas": config_schemas,
     }
 
 
