@@ -195,16 +195,24 @@ scitypes that do not fit the `fit`/`predict` shape — splitters, metrics, align
 
 ### `evaluate`
 
-Cross-validate an estimator.
+Cross-validate a forecaster with expanding-window CV. Each fold trains on an
+expanding window and scores the `fh` steps after its cutoff; cutoffs advance by
+`step_length`. Without `initial_window`, exactly `cv_folds` folds are run, the
+last one ending at the final observation. The response reports `cv_folds_run`,
+the `initial_window`, `fh` and `step_length` actually used, and
+`cv_folds_requested` only when `cv_folds` drove the fold count (i.e. when
+`initial_window` was not set).
 
 | Argument | Type | Required | Default | Description |
 | :--- | :--- | :---: | :--- | :--- |
 | `estimator_handle` | string | ✅ | — | Handle from `instantiate`. |
 | `y` | string | ✅ | — | Target series: a data handle ID **or** a demo dataset name. |
 | `X` | string | — | — | Exogenous series: data handle ID or demo dataset name. |
-| `cv_folds` | integer | — | `3` | Number of folds. Ignored when `initial_window` is set. |
+| `cv_folds` | integer | — | `3` | Number of folds. Needs `len(y) >= max(fh) + (cv_folds - 1) * step_length + 1`. Ignored when `initial_window` is set. |
 | `metric` | string | — | — | Metric name, e.g. `MeanAbsolutePercentageError`. |
-| `initial_window` | integer | — | — | Initial training window for expanding-window CV. |
+| `initial_window` | integer | — | — | Initial training window; folds run from here to the end of the series. Must be `<= len(y) - max(fh)`. |
+| `fh` | integer \| int[] | — | `1` | Forecast horizon scored per fold, relative to the cutoff. Integer `n` = steps `1..n` (e.g. `12` for 12-step-ahead); list = exactly those steps (e.g. `[1, 6, 12]`). |
+| `step_length` | integer | — | `1` | Steps the cutoff advances between folds; larger values mean fewer refits. |
 | `run_async` | boolean | — | `false` | Run in the background, return a `job_id`. |
 
 ---
