@@ -162,10 +162,15 @@ class TestRunCommandBackgroundChild:
 
         # The background sleep must not outlive the tool call.
         pid = int(res["output"].split()[1])
-        status = Path(f"/proc/{pid}/status")
-        if status.exists():
-            state = re.search(r"^State:\s+(\S)", status.read_text(), re.M)
-            assert state and state.group(1) == "Z", f"pid {pid} still alive"
+        # The pid may be reaped between any check and the read (the kernel then
+        # reports ENOENT or ESRCH), so that counts as "gone"; only a live
+        # non-zombie state fails.
+        try:
+            text = Path(f"/proc/{pid}/status").read_text()
+        except (FileNotFoundError, ProcessLookupError):
+            return
+        state = re.search(r"^State:\s+(\S)", text, re.M)
+        assert state and state.group(1) == "Z", f"pid {pid} still alive"
 
     def test_fast_command_is_not_marked_timed_out(self):
         res = run_command_tool("echo hello")
