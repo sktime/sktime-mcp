@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI
 from mcp.server.sse import SseServerTransport
 from starlette.requests import Request
+from starlette.responses import Response
 
 from sktime_mcp.server import _periodic_job_cleanup, server
 
@@ -56,19 +57,14 @@ async def handle_sse(request: Request):
             streams[1],
             server.create_initialization_options(),
         )
+    # The SSE transport has already written the whole HTTP response; return an
+    # empty one so the route does not try to send a second (None) response.
+    return Response()
 
 
-@app.post("/messages/")
-async def handle_messages(request: Request):
-    """
-    Endpoint for the client to POST JSON-RPC messages.
-    The client must include the ?session_id=... query parameter.
-    """
-    await sse.handle_post_message(
-        request.scope,
-        request.receive,
-        request._send,
-    )
+# The transport answers the POST itself (202 Accepted / 4xx), so it is mounted
+# as a raw ASGI app; wrapping it in a route would send a second response.
+app.mount("/messages/", app=sse.handle_post_message)
 
 
 @app.get("/")
