@@ -78,22 +78,48 @@ class RegistryInterface:
         except ImportError as e:
             logger.error(f"Failed to import sktime registry: {e}")
             raise RuntimeError("sktime must be installed to use sktime-mcp") from e
+        self._scitype_bases: dict[str, type] | None = None
+        self._tag_value_types: dict[str, Any] | None = None
 
-    @staticmethod
-    def _create_node(name: str, cls: type) -> EstimatorNode:
-        """Create an EstimatorNode from sktime estimator."""
-        # Scitype from the class tag (may be a str or list of str)
-        scitype = "estimator"
+    def _get_scitype_bases(self) -> dict[str, type]:
+        """Map each valid scitype to its sktime base class (cached)."""
+        if self._scitype_bases is None:
+            from sktime.registry import get_base_class_register
+
+            self._scitype_bases = {row[0]: row[1] for row in get_base_class_register()}
+        return self._scitype_bases
+
+    def _resolve_task(self, cls: type) -> str:
+        """Pick the most specific *valid* scitype for ``cls``.
+
+        Candidates are the class's ``object_type`` tag values (str or list)
+        that are registered scitypes; if none is valid (e.g. skchange's
+        ``"interval_scorer"``), the registered base classes ``cls`` inherits
+        from are used instead.  Among candidates the most specific one wins
+        (deepest base-class MRO), e.g. ``"metric_forecasting"`` over
+        ``"metric"``.  The raw ``object_type`` stays available in ``tags``.
+        """
+        bases = self._get_scitype_bases()
+        candidates = self._valid_object_types(cls)
+        if not candidates:
+            candidates = [s for s, base in bases.items() if issubclass(cls, base)]
+        if not candidates:
+            return "object"
+        return max(candidates, key=lambda s: len(bases[s].__mro__))
+
+    def _valid_object_types(self, cls: type) -> list[str]:
+        """Values of the ``object_type`` tag that are registered scitypes."""
+        bases = self._get_scitype_bases()
         try:
-            raw = cls.get_class_tag("object_type", "estimator")
-            if isinstance(raw, list):  # noqa: SIM108
-                # Prefer the shortest / most general type, e.g. "metric" over
-                # "metric_forecasting".  Fallback to first element.
-                scitype = min(raw, key=len) if raw else "estimator"
-            else:
-                scitype = raw
+            raw = cls.get_class_tag("object_type", None)
         except Exception:
-            pass
+            raw = None
+        raw_list = raw if isinstance(raw, list) else [raw]
+        return [c for c in raw_list if isinstance(c, str) and c in bases]
+
+    def _create_node(self, name: str, cls: type) -> EstimatorNode:
+        """Create an EstimatorNode from sktime estimator."""
+        scitype = self._resolve_task(cls)
 
         tags: dict[str, Any] = {}
         try:
@@ -137,7 +163,16 @@ class RegistryInterface:
         """
         Get all estimators, optionally filtered by scitype and tags.
 
-        Delegates filtering to ``sktime.registry.all_estimators``.
+        Scitype filtering is delegated to ``sktime.registry.all_estimators``
+        (scitype hierarchy: ``task="estimator"`` includes forecasters).  Objects
+        whose ``object_type`` tag is not a registered scitype (e.g. skchange's
+        ``"interval_scorer"``) are invisible to sktime's filter, so they are
+        added by base-class inheritance under the task they resolve to.
+        Tag filtering uses the same semantics as sktime's ``filter_tags`` --
+        a scalar value must equal the estimator's tag, a list value matches
+        any of its elements -- but is applied here so that list-valued
+        estimator tags (``python_dependencies``, ``y_inner_mtype``, ...) are
+        matched by membership instead of raising ``unhashable type: 'list'``.
 
         Args:
             task: Filter by scitype (e.g., "forecaster", "classifier").
@@ -147,10 +182,24 @@ class RegistryInterface:
 
         estimators = all_estimators(
             estimator_types=task,
-            filter_tags=tags,
             return_names=True,
             as_dataframe=False,
         )
+        if task is not None:
+            bases = self._get_scitype_bases()
+            seen = {name for name, _ in estimators}
+            for name, cls in all_estimators(return_names=True, as_dataframe=False):
+                if name in seen or self._valid_object_types(cls):
+                    continue
+                if issubclass(bases[self._resolve_task(cls)], bases[task]):
+                    estimators.append((name, cls))
+            estimators.sort(key=lambda item: item[0])
+        if tags:
+            estimators = [
+                (name, cls)
+                for name, cls in estimators
+                if all(self._tag_matches(cls, key, wanted) for key, wanted in tags.items())
+            ]
 
         results = []
         for name, cls in estimators:
@@ -222,14 +271,125 @@ class RegistryInterface:
         result.sort(key=lambda x: x["tag"])
         return result
 
-    def search_estimators(self, query: str) -> list[EstimatorNode]:
+    @staticmethod
+    def _tag_matches(cls: type, key: str, wanted: Any) -> bool:
+        """True if the class tag ``key`` equals / contains any of ``wanted``."""
+        try:
+            actual = cls.get_class_tag(key, None)
+        except Exception:
+            return False
+        wanted_list = wanted if isinstance(wanted, list) else [wanted]
+        actual_list = actual if isinstance(actual, list) else [actual]
+        return any(a == w for a in actual_list for w in wanted_list)
+
+    def _get_tag_value_types(self) -> dict[str, Any]:
+        """Map tag name -> raw sktime value type spec (cached).
+
+        The spec is ``"bool"``, ``"int"``, ``"str"``, ``"list"``, ``"type"``,
+        ``("list", "str")``, ``("str", [allowed...])`` or ``("list", [allowed...])``.
+        """
+        if self._tag_value_types is None:
+            from sktime.registry import all_tags
+
+            try:
+                self._tag_value_types = {row[0]: row[2] for row in all_tags(as_dataframe=False)}
+            except Exception:
+                self._tag_value_types = {}
+        return self._tag_value_types
+
+    def coerce_tag_filters(
+        self, tags: dict[str, Any]
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """Coerce tag filter values to the tag's declared value type.
+
+        ``"true"``/``"false"``/``"1"``/``"0"`` (and 0/1) become bools for bool
+        tags, numeric strings become ints for int tags, and values for tags
+        with an allowed-values list are checked against it.  A list of values
+        is coerced element-wise (any-of semantics).  Tags with an unknown or
+        unconstrained type are passed through unchanged.
+
+        Returns:
+            ``(coerced_tags, errors)`` where each error is a dict with
+            ``tag``, ``value`` and ``expected`` keys.
+        """
+        types = self._get_tag_value_types()
+        coerced: dict[str, Any] = {}
+        errors: list[dict[str, Any]] = []
+        for key, value in tags.items():
+            spec = types.get(key)
+            values = value if isinstance(value, list) else [value]
+            out = []
+            for v in values:
+                ok, cv, expected = self._coerce_tag_value(v, spec)
+                if not ok:
+                    errors.append({"tag": key, "value": v, "expected": expected})
+                    break
+                out.append(cv)
+            else:
+                coerced[key] = out if isinstance(value, list) else out[0]
+        return coerced, errors
+
+    @staticmethod
+    def _coerce_tag_value(value: Any, spec: Any) -> tuple[bool, Any, str]:
+        """Coerce one value against a sktime tag type spec.
+
+        Returns ``(ok, coerced_value, expected_description)``.
+        """
+        base, allowed = spec, None
+        if isinstance(spec, tuple) and len(spec) == 2:
+            base, allowed = spec
+        if allowed == "str":
+            allowed = None
+
+        if base == "bool":
+            if isinstance(value, bool):
+                return True, value, "bool"
+            if isinstance(value, int) and value in (0, 1):
+                return True, bool(value), "bool"
+            if isinstance(value, str):
+                lowered = value.strip().lower()
+                if lowered in ("true", "1"):
+                    return True, True, "bool"
+                if lowered in ("false", "0"):
+                    return True, False, "bool"
+            return False, value, "bool (true/false)"
+        if base == "int":
+            if isinstance(value, bool):
+                return False, value, "int"
+            if isinstance(value, int):
+                return True, value, "int"
+            if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+                return True, int(value.strip()), "int"
+            return False, value, "int"
+        if base in ("str", "list"):
+            if isinstance(allowed, list):
+                if value in allowed:
+                    return True, value, f"one of {allowed}"
+                return False, value, f"one of {allowed}"
+            if base == "str" and not isinstance(value, str):
+                return False, value, "str"
+            return True, value, "str"
+        return True, value, str(spec)
+
+    def search_estimators(
+        self,
+        query: str,
+        task: str | None = None,
+        tags: dict[str, Any] | None = None,
+    ) -> list[EstimatorNode]:
         """
         Search estimators by name, module, or docstring.
 
+        ``task`` and ``tags`` are applied first through
+        :meth:`get_all_estimators` (the same filter path used without a
+        query); the substring match then narrows that list and ranks it.
+
         Args:
             query: Search string (case-insensitive).
+            task: Optional scitype filter.
+            tags: Optional capability tag filter.
         """
-        all_ests = self.get_all_estimators()
+        all_ests = self.get_all_estimators(task=task, tags=tags)
         query_lower = query.strip().lower()
 
         results = []

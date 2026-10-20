@@ -20,8 +20,8 @@ def query_registry_tool(
     """
     Query the sktime registry for estimators,or capability tags.
 
-    All filters are combined: query narrows by name/docstring, then task and tags
-    are applied on top.
+    All filters are combined: task and tags are applied by the registry (same
+    semantics with or without a query), then query narrows by name/description.
 
     To retrieve capability tags instead of estimators, set task="tag" (or "tags").
 
@@ -114,14 +114,23 @@ def query_registry_tool(
                     "suggestions": {k: v[0] if v else None for k, v in suggestions.items()},
                 }
 
+            tags, tag_errors = registry.coerce_tag_filters(tags)
+            if tag_errors:
+                details = "; ".join(
+                    f"'{e['tag']}': {e['value']!r} (expected {e['expected']})" for e in tag_errors
+                )
+                return {
+                    "success": False,
+                    "error": f"Invalid tag filter value(s): {details}. "
+                    "Use task='tag' to see each tag's value_type.",
+                    "invalid_tag_values": tag_errors,
+                }
+
+        # One filter path: task/tags are applied by the registry (sktime scitype
+        # hierarchy, any-of lists, membership on list-valued tags) and the query
+        # then narrows and ranks that list.
         if query:
-            estimators = registry.search_estimators(query)
-            if task:
-                estimators = [e for e in estimators if e.task == task]
-            if tags:
-                estimators = [
-                    e for e in estimators if all(e.tags.get(k) == v for k, v in tags.items())
-                ]
+            estimators = registry.search_estimators(query, task=task, tags=tags)
         else:
             estimators = registry.get_all_estimators(task=task, tags=tags)
 
