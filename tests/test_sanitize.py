@@ -75,6 +75,11 @@ class TestPandasTypes:
         result = sanitize_for_json(df)
         json.dumps(result)
 
+    def test_index(self):
+        result = sanitize_for_json(pd.period_range("1949-01", periods=3, freq="M"))
+        assert isinstance(result, list) and len(result) == 3
+        json.dumps(result)
+
 
 class TestNestedToolOutput:
     """Realistic nested dicts like actual tool responses."""
