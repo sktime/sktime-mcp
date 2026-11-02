@@ -196,7 +196,7 @@ async def test_sse_app_completes_initialize_and_serves_tools(tmp_path: Path):
                 "--port",
                 str(port),
             ],
-            env={**os.environ, "PYTHONPATH": src_dir},
+            env={**os.environ, "PYTHONPATH": src_dir, "SKTIME_MCP_HTTP_TOKEN": "wire-test"},
             stdout=log,
             stderr=subprocess.STDOUT,
         )
@@ -204,7 +204,10 @@ async def test_sse_app_completes_initialize_and_serves_tools(tmp_path: Path):
             _wait_for_http(f"http://127.0.0.1:{port}/", proc)
             with anyio.fail_after(60):
                 async with (
-                    sse_client(f"http://127.0.0.1:{port}/sse") as (read, write),
+                    sse_client(
+                        f"http://127.0.0.1:{port}/sse",
+                        headers={"Authorization": "Bearer wire-test"},
+                    ) as (read, write),
                     ClientSession(read, write) as session,
                 ):
                     init = await session.initialize()

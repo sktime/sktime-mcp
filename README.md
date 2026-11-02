@@ -162,15 +162,18 @@ sktime-mcp
 #### HTTP/SSE Mode via FastAPI (for Web Browsers or ChatGPT)
 To expose the MCP server as a REST API over SSE (Server-Sent Events) for direct consumption:
 ```bash
+export SKTIME_MCP_HTTP_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
 PYTHONPATH=src .venv/bin/uvicorn sktime_mcp.app:app --host 127.0.0.1 --port 8001
 ```
-This exposes standard SSE on `/sse` and message passing on `/messages/`.
+This exposes standard SSE on `/sse` and message passing on `/messages/`. Every request except the `/` health check must send `Authorization: Bearer <token>`. The server refuses to start without `SKTIME_MCP_HTTP_TOKEN` unless you set `SKTIME_MCP_HTTP_INSECURE=true`, which is only meant for local testing.
+
+> **Warning:** the server includes `run_command`, which runs arbitrary shell commands on the host. Anyone holding the token has full control of the machine. Do not expose it publicly without a token, and keep the token secret.
 
 > **Note for ChatGPT Web Users:** ChatGPT runs in the cloud and cannot connect to `http://127.0.0.1` (you will get an "Unsafe URL" error). You must expose your local server to the internet using a secure tunnel like [ngrok](https://ngrok.com/):
 > ```bash
 > ngrok http 8001
 > ```
-> Then use the provided `https://<your-ngrok-id>.ngrok-free.app/sse` URL in ChatGPT.
+> Requests through ngrok arrive with the ngrok hostname, so add it to the allowed hosts before starting the server, e.g. `SKTIME_MCP_HTTP_ALLOWED_HOSTS="<your-ngrok-id>.ngrok-free.app"`. Then use the provided `https://<your-ngrok-id>.ngrok-free.app/sse` URL in ChatGPT.
 
 ### Configuration (Environment Variables)
 
@@ -239,6 +242,10 @@ The server can be configured via environment variables:
 | `SKTIME_MCP_AUTO_FORMAT` | Automatically format time series data on load (`true`/`false`) | `"true"` |
 | `SKTIME_MCP_JOB_MAX_AGE_HOURS` | Maximum age in hours before background jobs are cleared | `24` |
 | `SKTIME_MCP_JOB_CLEANUP_INTERVAL` | Interval in seconds for periodic job cleanup checks | `3600` |
+| `SKTIME_MCP_HTTP_TOKEN` | Bearer token required by the HTTP/SSE app | (None, app refuses to start) |
+| `SKTIME_MCP_HTTP_INSECURE` | Allow the HTTP/SSE app to start without a token (`true`/`false`) | `"false"` |
+| `SKTIME_MCP_HTTP_ALLOWED_HOSTS` | Comma-separated `Host` header values the HTTP/SSE app accepts (DNS-rebinding protection) | `"127.0.0.1,127.0.0.1:*,localhost,localhost:*"` |
+| `SKTIME_MCP_HTTP_ALLOWED_ORIGINS` | Comma-separated `Origin` values the HTTP/SSE app accepts, also used as the CORS allow-list | (None) |
 
 ## 📚 Available Tools
 
