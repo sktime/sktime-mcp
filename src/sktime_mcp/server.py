@@ -665,7 +665,8 @@ def get_tools() -> list[Tool]:
                         "type": "number",
                         "description": (
                             "Fraction of observations to hold out for the test set, "
-                            "exclusive range (0.0, 1.0). Mutually exclusive with fh."
+                            "exclusive range (0.0, 1.0), rounded up to a whole observation. "
+                            "Must leave at least one training observation. Mutually exclusive with fh."
                         ),
                     },
                     "fh": {
