@@ -8,7 +8,10 @@ from sktime_mcp.runtime.executor import Executor
 from sktime_mcp.tools.split_data import split_data_tool
 
 
-def _register_series(monkeypatch, n_rows, with_exog):
+def _register_series(
+    monkeypatch: pytest.MonkeyPatch, n_rows: int, with_exog: bool
+) -> tuple[Executor, pd.Series, pd.DataFrame | None]:
+    """Register synthetic monthly data in an isolated executor."""
     executor = Executor()
     y = pd.Series(
         range(n_rows), index=pd.period_range("2026-01", periods=n_rows, freq="M"), name="sales"
@@ -21,7 +24,10 @@ def _register_series(monkeypatch, n_rows, with_exog):
 
 @pytest.mark.parametrize("with_exog", [False, True])
 @pytest.mark.parametrize("n_rows,test_size", [(11, 0.2), (11, 0.5), (10, 0.2), (11, 0.01)])
-def test_fractional_split_matches_sktime(monkeypatch, n_rows, test_size, with_exog):
+def test_fractional_split_matches_sktime(
+    monkeypatch: pytest.MonkeyPatch, n_rows: int, test_size: float, with_exog: bool
+) -> None:
+    """Match sktime's split rows and preserve aligned exogenous data."""
     executor, y, X = _register_series(monkeypatch, n_rows, with_exog)
     expected = temporal_train_test_split(y, X, test_size=test_size)
 
@@ -47,7 +53,8 @@ def test_fractional_split_matches_sktime(monkeypatch, n_rows, test_size, with_ex
         assert test["X"] is None
 
 
-def test_fractional_split_rejects_empty_training_set(monkeypatch):
+def test_fractional_split_rejects_empty_training_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reject a rounded holdout that consumes the series without adding handles."""
     executor, _, _ = _register_series(monkeypatch, n_rows=11, with_exog=False)
 
     result = split_data_tool("source", test_size=0.99)
