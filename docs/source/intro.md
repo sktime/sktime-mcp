@@ -79,6 +79,31 @@ Add this to your `claude_desktop_config.json`:
 ```
 
 **With pip-installed package:**
+
+If installed in a virtual environment, supply the absolute path to that environment's Python binary:
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "/absolute/path/to/.venv/bin/python",
+      "args": ["-m", "sktime_mcp.server"]
+    }
+  }
+}
+```
+On Windows:
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "C:\\path\\to\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "sktime_mcp.server"]
+    }
+  }
+}
+```
+
+If the console script is on your system `PATH`:
 ```json
 {
   "mcpServers": {
