@@ -69,6 +69,21 @@ class Settings:
         return int(os.environ.get("SKTIME_MCP_MAX_DATA_HANDLES", "50"))
 
     @property
+    def max_horizon(self) -> int:
+        """
+        Maximum forecast horizon (steps) a predict / split_data call may request.
+        Larger horizons are rejected before any work starts (F-24).
+        Env Var: SKTIME_MCP_MAX_HORIZON
+        Default: 10000 (minimum 1; invalid values fall back to the default)
+        """
+        raw = os.environ.get("SKTIME_MCP_MAX_HORIZON", "10000")
+        try:
+            value = int(raw)
+        except ValueError:
+            return 10000
+        return value if value >= 1 else 10000
+
+    @property
     def max_response_tokens(self) -> int:
         """
         Maximum tokens allowed per tool response.
