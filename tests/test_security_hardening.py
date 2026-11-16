@@ -7,6 +7,7 @@ intentionally out of scope — the server already exposes run_command.
 """
 
 import contextlib
+import sys
 
 import pytest
 
@@ -68,7 +69,9 @@ class TestInstantiateTypeCheck:
 
 class TestRunCommandCap:
     def test_large_output_truncated(self):
-        res = run_command_tool("seq 1 100000")
+        # generate the output with python rather than `seq`, which is not on Windows
+        code = "print(chr(10).join(map(str, range(100000))))"
+        res = run_command_tool(f'"{sys.executable}" -c "{code}"')
         assert res["success"]
         assert res["truncated"] is True
         assert len(res["output"]) < 25_000
