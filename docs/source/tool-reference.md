@@ -84,7 +84,7 @@ Discover sktime estimators, metrics, or capability tags.
 | `offset` | integer | — | `0` | Skip this many results (pagination). |
 
 Commonly useful tags: `capability:pred_int` (prediction intervals),
-`capability:multivariate`, `handles-missing-data`, `scitype:y`.
+`capability:multivariate`, `capability:missing_values`, `requires-fh-in-fit`.
 
 ### `describe_component`
 
@@ -267,7 +267,7 @@ Split a series into temporal train/test handles. Provide **exactly one** of
 | Argument | Type | Required | Description |
 | :--- | :--- | :---: | :--- |
 | `data_handle` | string | ✅ | Handle to split. |
-| `test_size` | number | — | Hold-out fraction, exclusive range `(0.0, 1.0)`. Mutually exclusive with `fh`. |
+| `test_size` | number | — | Hold-out fraction, exclusive range `(0.0, 1.0)`. The test count is rounded up, as in sktime, and must leave at least one training observation. Mutually exclusive with `fh`. |
 | `fh` | int or list | — | Integer: hold out that many final steps. List: holds out `max(fh)` steps — `fh=[1,5,10]` reserves 10. Mutually exclusive with `test_size`. |
 
 Returns `train_handle` and `test_handle`.
