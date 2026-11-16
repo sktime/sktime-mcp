@@ -6,6 +6,7 @@ registering both halves as new data handles.
 """
 
 import logging
+import math
 import uuid
 from typing import Any
 
@@ -31,6 +32,8 @@ def split_data_tool(
         Handle ID of the loaded data to split (from load_data_source).
     test_size : float or None, default=None
         Fraction of the data to hold out for testing (0.0–1.0).
+        The number of test observations is rounded up, as in sktime.
+        The split must leave at least one training observation.
         Mutually exclusive with `fh`.
     fh : int, list of int, or None, default=None
         Forecast horizon — the number of final time steps to reserve
@@ -107,7 +110,7 @@ def split_data_tool(
         n = len(y)
 
         if test_size is not None:
-            n_test = max(1, int(n * test_size))
+            n_test = max(1, math.ceil(n * test_size))
         elif isinstance(fh, int):
             n_test = fh
         else:
