@@ -8,6 +8,7 @@ sktime/pandas errors after a successful fit.
 """
 
 import contextlib
+import json
 
 import numpy as np
 import pandas as pd
@@ -111,7 +112,9 @@ class TestDetector:
     def test_native_methods_via_call_method(self, executor, fitted):
         res = executor.call_method(fitted, "predict_points", {"X_data_handle": "sp_det"})
         assert res["success"], res
-        assert res["result"]["ilocs"] == {0: 24}
+        # Assert the JSON contract, where object keys are strings. This also
+        # works when call_method sanitizes the result before transport.
+        assert json.loads(json.dumps(res["result"]))["ilocs"] == {"0": 24}
         res = executor.call_method(fitted, "transform", {"X_data_handle": "sp_det"})
         assert res["success"], res
         assert len(res["result"]["labels"]) == 50
