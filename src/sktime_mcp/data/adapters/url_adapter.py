@@ -91,7 +91,7 @@ class UrlAdapter(DataSourceAdapter):
 
             import asyncio
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             df = await loop.run_in_executor(None, file_adapter.load)
 
             self._data = df
