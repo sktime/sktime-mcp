@@ -125,6 +125,10 @@ def predict_tool(
     """
     Generate predictions from a fitted estimator.
 
+    The result is also registered as a data handle and returned as
+    ``prediction_handle`` so it can be plotted (plot_series), written to a
+    file (save_data) or scored against a test split (call_method on a metric
+    with ``y_true_data_handle``/``y_pred_data_handle``).
     A forecaster fitted with X needs *future* X here: pass X_handle (the
     handle's exogenous columns) or X_dataset explicitly.
     Set run_async=True to run as a background job and return a job_id.
