@@ -81,5 +81,46 @@ class Settings:
         except ValueError:
             return 0
 
+    # -- HTTP Transport Security --
+    @property
+    def http_token(self) -> str | None:
+        """
+        Bearer token required by the HTTP/SSE app.
+        Env Var: SKTIME_MCP_HTTP_TOKEN
+        Default: None (the HTTP app refuses to start unless insecure mode is on)
+        """
+        return os.environ.get("SKTIME_MCP_HTTP_TOKEN") or None
+
+    @property
+    def http_insecure(self) -> bool:
+        """
+        Allow the HTTP/SSE app to start without a token.
+        Env Var: SKTIME_MCP_HTTP_INSECURE
+        Default: False
+        """
+        return os.environ.get("SKTIME_MCP_HTTP_INSECURE", "false").lower() == "true"
+
+    @property
+    def http_allowed_hosts(self) -> list[str]:
+        """
+        Comma-separated Host header values accepted by the HTTP/SSE app.
+        Env Var: SKTIME_MCP_HTTP_ALLOWED_HOSTS
+        Default: "127.0.0.1,127.0.0.1:*,localhost,localhost:*"
+        """
+        raw = os.environ.get(
+            "SKTIME_MCP_HTTP_ALLOWED_HOSTS", "127.0.0.1,127.0.0.1:*,localhost,localhost:*"
+        )
+        return [host.strip() for host in raw.split(",") if host.strip()]
+
+    @property
+    def http_allowed_origins(self) -> list[str]:
+        """
+        Comma-separated Origin values accepted by the HTTP/SSE app (also the CORS allow-list).
+        Env Var: SKTIME_MCP_HTTP_ALLOWED_ORIGINS
+        Default: "" (no cross-origin browser access)
+        """
+        raw = os.environ.get("SKTIME_MCP_HTTP_ALLOWED_ORIGINS", "")
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
 
 settings = Settings()
