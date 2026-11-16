@@ -48,41 +48,19 @@ def fit_tool(
 ) -> dict[str, Any]:
     """
     Fit an estimator on data.
+
+    X_handle resolves to a data handle's exogenous columns; when only
+    y_handle is given and that handle carries X, it is used automatically.
     """
     executor = get_executor()
 
-    # We must resolve y and X from the provided handles/datasets
-    X = None
-    y = None
-
-    if X_handle:
-        if X_handle not in executor._data_handles:
-            return {"success": False, "error": f"Unknown X data handle: {X_handle}"}
-        X = executor._data_handles[X_handle]["y"]  # 'y' stores the primary object
-
-    if y_handle:
-        if y_handle not in executor._data_handles:
-            return {"success": False, "error": f"Unknown y data handle: {y_handle}"}
-        y = executor._data_handles[y_handle]["y"]
-
-    if X_dataset and X_dataset == y_dataset:
-        data_res = executor.load_dataset(X_dataset)
-        if not data_res["success"]:
-            return data_res
-        y = data_res["y"]
-        X = data_res["X"]
-    else:
-        if X_dataset:
-            data_res = executor.load_dataset(X_dataset)
-            if not data_res["success"]:
-                return data_res
-            X = data_res["X"] if data_res["X"] is not None else data_res["y"]
-
-        if y_dataset:
-            data_res = executor.load_dataset(y_dataset)
-            if not data_res["success"]:
-                return data_res
-            y = data_res["y"]
+    # Resolve up front so bad inputs fail synchronously even with run_async.
+    resolved = executor._resolve_xy_inputs(
+        X_dataset=X_dataset, y_dataset=y_dataset, X_handle=X_handle, y_handle=y_handle
+    )
+    if not resolved["success"]:
+        return resolved
+    X, y = resolved["X"], resolved["y"]
 
     if run_async:
         import asyncio
@@ -126,6 +104,9 @@ def fit_tool(
         except Exception as e:
             logger.warning(f"Could not record training dataset: {e}")
 
+    if fit_result.get("success") and resolved["exogenous"]:
+        fit_result["exogenous"] = resolved["exogenous"]
+
     return fit_result
 
 
@@ -144,6 +125,8 @@ def predict_tool(
     """
     Generate predictions from a fitted estimator.
 
+    A forecaster fitted with X needs *future* X here: pass X_handle (the
+    handle's exogenous columns) or X_dataset explicitly.
     Set run_async=True to run as a background job and return a job_id.
     """
     validation = _validate_horizon(horizon)
@@ -154,6 +137,18 @@ def predict_tool(
         }
 
     executor = get_executor()
+
+    # Resolve up front so bad inputs fail synchronously even with run_async.
+    resolved = executor._resolve_xy_inputs(
+        X_dataset=X_dataset,
+        y_dataset=y_dataset,
+        X_handle=X_handle,
+        y_handle=y_handle,
+        auto_X=False,
+    )
+    if not resolved["success"]:
+        return resolved
+    X, y = resolved["X"], resolved["y"]
 
     if run_async:
         import asyncio
@@ -192,38 +187,6 @@ def predict_tool(
         job_manager.register_task(job_id, task)
         return {"success": True, "job_id": job_id, "status": "running"}
 
-    X = None
-    y = None
-
-    if X_handle:
-        if X_handle not in executor._data_handles:
-            return {"success": False, "error": f"Unknown X data handle: {X_handle}"}
-        X = executor._data_handles[X_handle]["y"]
-
-    if y_handle:
-        if y_handle not in executor._data_handles:
-            return {"success": False, "error": f"Unknown y data handle: {y_handle}"}
-        y = executor._data_handles[y_handle]["y"]
-
-    if X_dataset and X_dataset == y_dataset:
-        data_res = executor.load_dataset(X_dataset)
-        if not data_res["success"]:
-            return data_res
-        y = data_res["y"]
-        X = data_res["X"]
-    else:
-        if X_dataset:
-            data_res = executor.load_dataset(X_dataset)
-            if not data_res["success"]:
-                return data_res
-            X = data_res["X"] if data_res["X"] is not None else data_res["y"]
-
-        if y_dataset:
-            data_res = executor.load_dataset(y_dataset)
-            if not data_res["success"]:
-                return data_res
-            y = data_res["y"]
-
     fh = list(range(1, horizon + 1))
 
     # We must patch executor.predict to accept y as well, to support annotators
@@ -258,39 +221,17 @@ def update_tool(
 ) -> dict[str, Any]:
     executor = get_executor()
 
-    X = None
-    y = None
+    resolved = executor._resolve_xy_inputs(
+        X_dataset=X_dataset, y_dataset=y_dataset, X_handle=X_handle, y_handle=y_handle
+    )
+    if not resolved["success"]:
+        return resolved
+    X, y = resolved["X"], resolved["y"]
 
-    if X_handle:
-        if X_handle not in executor._data_handles:
-            return {"success": False, "error": f"Unknown X data handle: {X_handle}"}
-        X = executor._data_handles[X_handle]["y"]
-
-    if y_handle:
-        if y_handle not in executor._data_handles:
-            return {"success": False, "error": f"Unknown y data handle: {y_handle}"}
-        y = executor._data_handles[y_handle]["y"]
-
-    if X_dataset and X_dataset == y_dataset:
-        data_res = executor.load_dataset(X_dataset)
-        if not data_res["success"]:
-            return data_res
-        y = data_res["y"]
-        X = data_res["X"]
-    else:
-        if X_dataset:
-            data_res = executor.load_dataset(X_dataset)
-            if not data_res["success"]:
-                return data_res
-            X = data_res["X"] if data_res["X"] is not None else data_res["y"]
-
-        if y_dataset:
-            data_res = executor.load_dataset(y_dataset)
-            if not data_res["success"]:
-                return data_res
-            y = data_res["y"]
-
-    return executor.update(estimator_handle, y=y, X=X)
+    result = executor.update(estimator_handle, y=y, X=X)
+    if result.get("success") and resolved["exogenous"]:
+        result["exogenous"] = resolved["exogenous"]
+    return result
 
 
 def get_fitted_params_tool(estimator_handle: str) -> dict[str, Any]:
