@@ -2,12 +2,6 @@
 Test background job management.
 """
 
-import asyncio
-import time
-
-import pytest
-
-from sktime_mcp.runtime.executor import get_executor
 from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 
 
@@ -121,51 +115,57 @@ def test_list_jobs():
     job_manager.delete_job(job3)
 
 
-@pytest.mark.asyncio
-async def test_async_fit_predict():
-    """Test async fit_predict."""
-    executor = get_executor()
+def test_list_jobs_offset_slicing():
+    """JobManager.list_jobs offset/limit returns the correct newest-first slice."""
     job_manager = get_job_manager()
+    ids = [job_manager.create_job("fit", f"off{i}", "ARIMA") for i in range(4)]
 
-    # Instantiate a simple forecaster
-    result = executor.instantiate("NaiveForecaster")
-    assert result["success"]
-    handle = result["handle"]
+    try:
+        newest_first = job_manager.list_jobs()
+        first_two = job_manager.list_jobs(limit=2, offset=0)
+        next_two = job_manager.list_jobs(limit=2, offset=2)
 
-    print(f"✓ Instantiated NaiveForecaster: {handle}")
+        assert [j.job_id for j in first_two] == [j.job_id for j in newest_first[:2]]
+        assert [j.job_id for j in next_two] == [j.job_id for j in newest_first[2:4]]
+        # first and second page must not overlap
+        assert {j.job_id for j in first_two}.isdisjoint({j.job_id for j in next_two})
+    finally:
+        for jid in ids:
+            job_manager.delete_job(jid)
 
-    # Create job
-    job_id = job_manager.create_job(
-        job_type="fit_predict",
-        estimator_handle=handle,
-        estimator_name="NaiveForecaster",
-        dataset_name="airline",
-        horizon=12,
-        total_steps=3,
-    )
 
-    print(f"✓ Created job: {job_id}")
+def test_list_jobs_tool_pagination_metadata():
+    """list_jobs_tool reports total/offset/limit/has_more and paginates disjointly."""
+    from sktime_mcp.tools.job_tools import list_jobs_tool
 
-    # Run async fit_predict
-    result = await executor.fit_predict_async(handle, "airline", 12, job_id)
+    job_manager = get_job_manager()
+    ids = [job_manager.create_job("fit", f"pg{i}", "ARIMA") for i in range(5)]
 
-    # Check result
-    assert result["success"]
-    assert "predictions" in result
+    try:
+        page1 = list_jobs_tool(limit=2, offset=0)
+        assert page1["success"]
+        assert page1["limit"] == 2
+        assert page1["offset"] == 0
+        assert page1["count"] == 2
+        assert page1["total"] >= 5
+        assert page1["has_more"] is True
 
-    # Check job status
-    job = job_manager.get_job(job_id)
-    assert job.status == JobStatus.COMPLETED
-    assert job.result is not None
+        page2 = list_jobs_tool(limit=2, offset=2)
+        assert page2["offset"] == 2
+        assert page2["count"] == 2
+        assert {j["job_id"] for j in page1["jobs"]}.isdisjoint({j["job_id"] for j in page2["jobs"]})
 
-    print("✓ Async fit_predict completed")
-    print(f"  Status: {job.status.value}")
-    print(f"  Progress: {job.progress_percentage}%")
-    print(f"  Elapsed time: {job.elapsed_time}s")
-    print(f"  Predictions: {len(result['predictions'])} steps")
+        # Offset beyond the end yields an empty page with has_more False
+        beyond = list_jobs_tool(limit=2, offset=page1["total"] + 10)
+        assert beyond["count"] == 0
+        assert beyond["has_more"] is False
 
-    # Cleanup
-    job_manager.delete_job(job_id)
+        # Negative offset is rejected
+        bad = list_jobs_tool(offset=-1)
+        assert not bad["success"]
+    finally:
+        for jid in ids:
+            job_manager.delete_job(jid)
 
 
 def test_cancel_job():
@@ -187,6 +187,76 @@ def test_cancel_job():
     job_manager.delete_job(job_id)
 
 
+def test_list_jobs_tool_rejects_non_string_status():
+    """Non-string status values should return validation errors, not crash."""
+    from sktime_mcp.tools.job_tools import list_jobs_tool
+
+    for bad_status in (True, 1, ["running"], {"status": "running"}):
+        result = list_jobs_tool(status=bad_status)
+        assert result["success"] is False
+        assert "Invalid status type" in result["error"]
+
+
+def test_list_jobs_tool_accepts_case_insensitive_status():
+    """Valid status strings should still work regardless of case."""
+    from sktime_mcp.tools.job_tools import list_jobs_tool
+
+    job_manager = get_job_manager()
+    job_id = job_manager.create_job("fit_predict", "handle", "ARIMA")
+    job_manager.update_job(job_id, status=JobStatus.RUNNING)
+
+    result = list_jobs_tool(status="RUNNING")
+
+    assert result["success"] is True
+    assert any(job["job_id"] == job_id for job in result["jobs"])
+
+    job_manager.delete_job(job_id)
+
+
+def test_cancel_job_delete_keeps_running_job_record():
+    """delete=True should not remove a running job record immediately."""
+    from sktime_mcp.tools.job_tools import cancel_job_tool
+
+    job_manager = get_job_manager()
+    job_id = job_manager.create_job("fit_predict", "handle", "ARIMA")
+    job_manager.update_job(job_id, status=JobStatus.RUNNING)
+
+    result = cancel_job_tool(job_id, delete=True)
+
+    assert result["success"]
+    assert "retained" in result["message"]
+
+    job = job_manager.get_job(job_id)
+    assert job is not None
+    assert job.status == JobStatus.CANCELLED
+
+    job_manager.delete_job(job_id)
+
+
+def test_cancelled_job_ignores_late_updates():
+    """Cancelled jobs should stay cancelled even if background work reports later."""
+    job_manager = get_job_manager()
+    job_id = job_manager.create_job("fit_predict", "handle", "ARIMA", total_steps=3)
+    job_manager.update_job(job_id, status=JobStatus.RUNNING)
+    job_manager.cancel_job(job_id)
+
+    job_manager.update_job(
+        job_id,
+        status=JobStatus.COMPLETED,
+        completed_steps=3,
+        current_step="Finished",
+        result={"predictions": {1: 100}},
+    )
+
+    job = job_manager.get_job(job_id)
+    assert job is not None
+    assert job.status == JobStatus.CANCELLED
+    assert job.completed_steps == 0
+    assert job.result is None
+
+    job_manager.delete_job(job_id)
+
+
 def test_cleanup_old_jobs():
     """Test cleaning up old jobs."""
     job_manager = get_job_manager()
@@ -202,36 +272,3 @@ def test_cleanup_old_jobs():
     # Job should be gone
     job = job_manager.get_job(job_id)
     assert job is None
-
-
-def run_all_tests():
-    """Run all tests."""
-    print("=" * 60)
-    print("Testing Background Job Management")
-    print("=" * 60)
-
-    print("\n1. Testing job creation...")
-    test_job_creation()
-
-    print("\n2. Testing job updates...")
-    test_job_updates()
-
-    print("\n3. Testing list jobs...")
-    test_list_jobs()
-
-    print("\n4. Testing async fit_predict...")
-    asyncio.run(test_async_fit_predict())
-
-    print("\n5. Testing cancel job...")
-    test_cancel_job()
-
-    print("\n6. Testing cleanup old jobs...")
-    test_cleanup_old_jobs()
-
-    print("\n" + "=" * 60)
-    print("✅ All tests passed!")
-    print("=" * 60)
-
-
-if __name__ == "__main__":
-    run_all_tests()

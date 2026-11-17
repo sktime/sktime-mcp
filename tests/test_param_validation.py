@@ -1,7 +1,7 @@
 """
-Tests for parameter validation in instantiate_estimator tool.
+Tests for parameter validation in instantiate tool.
 
-Covers Issue #3: [ENH] Add type validation for params in instantiate_estimator.
+Covers Issue #3: [ENH] Add type validation for params in instantiate.
 """
 
 import sys
@@ -10,125 +10,67 @@ import pytest
 
 sys.path.insert(0, "src")
 
-from sktime_mcp.tools.instantiate import (
-    _validate_params,
-    instantiate_estimator_tool,
-    instantiate_pipeline_tool,
-)
-
-
-class TestValidateParams:
-    """Tests for the _validate_params helper function."""
-
-    def test_params_none_is_valid(self):
-        """None params should be valid (use estimator defaults)."""
-        result = _validate_params(None)
-        assert result["valid"] is True
-        assert result["warnings"] == []
-
-    def test_params_empty_dict_valid(self):
-        """Empty dict params should be valid."""
-        result = _validate_params({})
-        assert result["valid"] is True
-
-    def test_params_valid_dict(self):
-        """A normal dict with primitive values should be valid."""
-        result = _validate_params({"order": [1, 1, 1], "suppress_warnings": True})
-        assert result["valid"] is True
-
-    def test_params_string_rejected(self):
-        """String passed as params should be rejected."""
-        result = _validate_params("invalid")
-        assert result["valid"] is False
-        assert "must be a dictionary" in result["error"]
-
-    def test_params_list_rejected(self):
-        """List passed as params should be rejected."""
-        result = _validate_params([1, 2, 3])
-        assert result["valid"] is False
-        assert "must be a dictionary" in result["error"]
-
-    def test_params_int_rejected(self):
-        """Integer passed as params should be rejected."""
-        result = _validate_params(42)
-        assert result["valid"] is False
-        assert "must be a dictionary" in result["error"]
-
-    def test_params_callable_value_rejected(self):
-        """Dict with callable value should be rejected."""
-        result = _validate_params({"fn": lambda: None})
-        assert result["valid"] is False
-        assert "Unsupported type" in result["error"]
-        assert "fn" in result["error"]
-
-    def test_params_class_value_rejected(self):
-        """Dict with class/type value should be rejected."""
-        result = _validate_params({"cls": object})
-        assert result["valid"] is False
-        assert "Unsupported type" in result["error"]
-
-    def test_params_nested_unsafe_value_rejected(self):
-        """Nested callable inside a list should be rejected."""
-        result = _validate_params({"items": [1, 2, lambda: None]})
-        assert result["valid"] is False
-        assert "Unsupported type" in result["error"]
-
-    def test_unknown_key_produces_warning(self):
-        """Unknown param key should pass validation but produce a warning."""
-        result = _validate_params(
-            {"nonexistent_param_xyz": 1},
-            estimator_name="NaiveForecaster",
-        )
-        assert result["valid"] is True
-        assert len(result["warnings"]) > 0
-        assert "nonexistent_param_xyz" in result["warnings"][0]
+from sktime_mcp.tools.fit_predict import predict_tool
+from sktime_mcp.tools.instantiate import instantiate_tool
 
 
 class TestInstantiateEstimatorValidation:
-    """Tests for validation in the instantiate_estimator_tool."""
+    """Tests for validation in the instantiate_tool."""
 
-    def test_valid_params_succeed(self):
-        """Valid params with a real estimator should succeed."""
-        result = instantiate_estimator_tool("NaiveForecaster", {"strategy": "last"})
+    def test_valid_spec_succeeds(self):
+        """Valid spec with a real estimator should succeed."""
+        result = instantiate_tool(spec="NaiveForecaster(strategy='last')")
         assert result["success"] is True
         assert "handle" in result
 
     def test_invalid_type_returns_error(self):
-        """Non-dict params should return success=False with error."""
-        result = instantiate_estimator_tool("NaiveForecaster", "invalid")
+        """Non-string spec should return success=False with error."""
+        result = instantiate_tool(spec=123)
         assert result["success"] is False
-        assert "must be a dictionary" in result["error"]
+        assert "valid 'spec' string" in result["error"]
 
     def test_unsafe_value_returns_error(self):
-        """Callable param value should return success=False with error."""
-        result = instantiate_estimator_tool("NaiveForecaster", {"fn": print})
+        """Invalid spec string should return success=False with error from craft."""
+        result = instantiate_tool(spec="NotARealEstimator()")
         assert result["success"] is False
-        assert "Unsupported type" in result["error"]
+        assert "error" in result
+
+    def test_requires_spec(self):
+        """Must provide a spec."""
+        result = instantiate_tool(spec=None)
+        assert result["success"] is False
+        assert "required" in result["error"].lower()
 
 
 class TestPipelineParamsValidation:
-    """Tests for validation in the instantiate_pipeline_tool."""
+    """Tests for pipeline validation via the unified instantiate_tool."""
 
-    def test_pipeline_invalid_params_list_type(self):
-        """Non-list params_list should return error."""
-        result = instantiate_pipeline_tool(["NaiveForecaster"], "not_a_list")
+    def test_pipeline_composition_check(self):
+        """Invalid pipeline composition (e.g. chaining forecasters) should fail validation."""
+        result = instantiate_tool(spec="NaiveForecaster() * ExponentialSmoothing()")
         assert result["success"] is False
-        assert "params_list" in result["error"]
+        assert "error" in result
 
-    def test_pipeline_invalid_param_dict_in_list(self):
-        """Non-dict entry in params_list should return error."""
-        result = instantiate_pipeline_tool(["NaiveForecaster"], ["not_a_dict"])
-        assert result["success"] is False
-        assert "must be a dictionary" in result["error"]
 
-    def test_pipeline_unsafe_value_in_params_list(self):
-        """Callable value in pipeline params should return error."""
-        result = instantiate_pipeline_tool(
-            ["NaiveForecaster"],
-            [{"fn": lambda: None}],
-        )
+class TestFitPredictValidation:
+    """Tests for parameter validation in fit_predict tools."""
+
+    @pytest.mark.parametrize(
+        "invalid_horizon, expected_error",
+        [
+            ("five", "must be an integer"),
+            (0, "greater than 0"),
+            (-3, "greater than 0"),
+            (None, "must be an integer"),
+            (3.14, "must be an integer"),
+            ([1, 2], "must be an integer"),
+        ],
+    )
+    def test_predict_tool_horizon_string(self, invalid_horizon, expected_error):
+        """Invalid horizons should be rejected with the correct error"""
+        result = predict_tool("fake_handle", horizon=invalid_horizon)
         assert result["success"] is False
-        assert "Unsupported type" in result["error"]
+        assert expected_error in result["error"]
 
 
 if __name__ == "__main__":

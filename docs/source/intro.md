@@ -1,18 +1,18 @@
 
 # sktime-mcp
 
-**[Read the Official Documentation](http://sktime.github.io/sktime-mcp/)** | **[PyPI Package](https://pypi.org/project/sktime-mcp/0.1.0/)**
+**[Read the Official Documentation](http://sktime.github.io/sktime-mcp/)** | **[PyPI Package](https://pypi.org/project/sktime-mcp/)**
 
 <div class="hero-text">
   <h1>The Semantic Engine for Time-Series</h1>
   <p style="font-size: 1.2rem; margin-bottom: 2rem;">
-    Empower Large Language Models to discover, reason about, and execute 
+    Enables Large Language Models to discover, reason about, and execute 
     sktime's advanced forecasting algorithms on real-world data.
   </p>
 </div>
 
 > **Why sktime-mcp?**
-> Bridging the gap between **LLM reasoning** and **time-series precision**. 
+> Combines **LLM reasoning** with **time-series precision**. 
 > Instead of hallucinating Python code, your agent interacts with a strictly typed, 
 > safe, and stateful API to perform complex forecasting tasks.
 
@@ -32,10 +32,10 @@ If you are new to MCP‑based workflows, start with the **Quick Start** below, t
 
 ## 🔥 Key Features
 
-- **Semantic Discovery:** Find the perfect estimator using semantic similarity and capability tags (e.g., "probabilistic forecaster that handles missing data").
-- **Safe Composition:** Build complex pipelines (Transformer → Forecaster) with built-in validation to ensure components are compatible before execution.
-- **Universal Data Loading:** Seamlessly ingest data from SQL, Pandas, Parquet, Excel, and CSV files.
-- **Execution Runtime:** Stateful engine that manages object lifecycles, fitting, and predicting, all via simple JSON-RPC tools.
+- **Registry-Driven Discovery:** Find estimators by capability tag and name search against the live `sktime` registry (e.g., "probabilistic forecaster that handles missing data") — reading installed metadata, never recalling it from memory.
+- **Composition via `craft()`:** Build pipelines (Transformer → Forecaster) from a single spec string, validated by sktime itself, so incompatible components fail before execution.
+- **Universal Data Loading:** Ingest data from Pandas, SQL, URLs, and files — CSV, Excel, and Parquet.
+- **Execution Runtime:** Stateful engine that manages object lifecycles, fitting, predicting, and background jobs, all via MCP tool calls.
 
 ---
 
@@ -46,12 +46,14 @@ Get up and running in seconds. Use with **Claude Desktop**, **Cursor**, or any M
 
 ### 1. Install
 
+**Zero-install via uvx (recommended):** if you have [uv](https://github.com/astral-sh/uv) installed, skip this step — uvx fetches and runs the package automatically when your MCP client starts.
+
 ```bash
-# Install directly from PyPI (https://pypi.org/project/sktime-mcp/0.1.0/)
+# Or install explicitly with pip
 pip install sktime-mcp
 ```
 
-Alternatively, when contributing, use GitHub to install from source:
+When contributing, install from source:
 
 ```bash
 git clone https://github.com/sktime/sktime-mcp.git
@@ -61,13 +63,47 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-### 2. Run
-```bash
-sktime-mcp
+### 2. Connect (Claude Desktop / Claude Code Config)
+Add this to your `claude_desktop_config.json`:
+
+**With uvx (no prior install needed):**
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "uvx",
+      "args": ["sktime-mcp"]
+    }
+  }
+}
 ```
 
-### 3. Connect (Claude Desktop Config)
-Add this to your `claude_desktop_config.json`:
+**With pip-installed package:**
+
+If installed in a virtual environment, supply the absolute path to that environment's Python binary:
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "/absolute/path/to/.venv/bin/python",
+      "args": ["-m", "sktime_mcp.server"]
+    }
+  }
+}
+```
+On Windows:
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "C:\\path\\to\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "sktime_mcp.server"]
+    }
+  }
+}
+```
+
+If the console script is on your system `PATH`:
 ```json
 {
   "mcpServers": {
@@ -85,20 +121,19 @@ Add this to your `claude_desktop_config.json`:
 
 | Section | Description |
 | :--- | :--- |
-| [**Use Cases**](use-cases.md) | Step-by-step workflows for coders and business users. |
-| [**User Guide**](user-guide.md) | Comprehensive manual on using tools, workflows, and best practices. |
-| [**Usage Examples**](usage-examples.md) | Example scripts and advanced usage patterns. |
-| [**Data Sources**](data-sources.md) | Deep dive into loading data from SQL, Files, and Pandas. |
-| [**Architecture**](architecture.md) | High-level system design, data flow, and limitations. |
-| [**Implementation**](implementation.md) | Detailed code walkthrough and file breakdown. |
-| [**Developer Guide**](dev-guide.md) | Contributing guidelines, testing, and extending the server. |
+| [**Installation**](installation.md) | Install methods, optional extras, and verification. |
+| [**Quickstart**](quickstart.md) | Fastest route to running the sktime-mcp server and connecting it to a client. |
+| [**Concepts**](concepts.md) | Core concepts, handles, and asynchronous operations. |
+| [**User Guide**](user-guide.md) | Hands-on walkthrough with four worked end-to-end workflows. |
+| [**Tool Reference**](tool-reference.md) | Every MCP tool, its arguments, and what it returns. |
+| [**Architecture**](developer/architecture.md) | High-level system design, data flow, and the trust boundary. |
+| [**Contributing**](developer/contributing.md) | Contributing guidelines, testing, and extending the server. |
 
 ---
 
 
 ## 🚀 Get Started
 
-- See [Use Cases](use-cases.md) for step-by-step workflows.
-- See [User Guide](user-guide.md) for detailed instructions and advanced features.
-
-[Get Started Now](use-cases.md){ .md-button .md-button--primary }
+- See [Quickstart](quickstart.md) to start the server.
+- See the [User Guide](user-guide.md) for worked end-to-end workflows.
+- See the [Tool Reference](tool-reference.md) for what the assistant can actually call.

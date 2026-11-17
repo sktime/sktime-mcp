@@ -4,12 +4,15 @@ Job management for long-running operations in sktime MCP.
 Handles background training jobs with progress tracking and status updates.
 """
 
+import logging
 import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class JobStatus(Enum):
@@ -27,12 +30,12 @@ class JobInfo:
     """Information about a background job."""
 
     job_id: str
-    job_type: str  # "fit", "fit_predict", "transform", etc.
+    job_type: str  # "fit", "predict", "evaluate", "transform", etc.
     estimator_handle: str
     status: JobStatus = JobStatus.PENDING
     created_at: datetime = field(default_factory=datetime.now)
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
 
     # Progress tracking
     total_steps: int = 0
@@ -40,13 +43,13 @@ class JobInfo:
     current_step: str = ""
 
     # Results
-    result: Optional[dict[str, Any]] = None
+    result: dict[str, Any] | None = None
     errors: list[str] = field(default_factory=list)
 
     # Metadata
-    dataset_name: Optional[str] = None
-    horizon: Optional[int] = None
-    estimator_name: Optional[str] = None
+    dataset_name: str | None = None
+    horizon: int | None = None
+    estimator_name: str | None = None
 
     @property
     def progress_percentage(self) -> float:
@@ -56,7 +59,7 @@ class JobInfo:
         return (self.completed_steps / self.total_steps) * 100
 
     @property
-    def elapsed_time(self) -> Optional[float]:
+    def elapsed_time(self) -> float | None:
         """Calculate elapsed time in seconds."""
         if self.start_time is None:
             return None
@@ -64,9 +67,17 @@ class JobInfo:
         return (end - self.start_time).total_seconds()
 
     @property
-    def estimated_time_remaining(self) -> Optional[float]:
-        """Estimate remaining time in seconds."""
+    def estimated_time_remaining(self) -> float | None:
+        """Estimate remaining time in seconds.
+
+        Only meaningful when progress is fine-grained. Jobs here have a handful
+        of coarse steps (load / run / summarize), so extrapolating from them
+        gave wildly wrong estimates (e.g. 15s remaining when the job finished in
+        under a second). Return None unless the job reports many steps.
+        """
         if self.status != JobStatus.RUNNING or self.completed_steps == 0:
+            return None
+        if self.total_steps < 10:
             return None
 
         elapsed = self.elapsed_time
@@ -78,7 +89,7 @@ class JobInfo:
         return remaining_steps * avg_time_per_step
 
     @property
-    def estimated_time_remaining_human(self) -> Optional[str]:
+    def estimated_time_remaining_human(self) -> str | None:
         """Human-readable estimated time remaining."""
         remaining = self.estimated_time_remaining
         if remaining is None:
@@ -127,22 +138,26 @@ class JobManager:
 
     def __init__(self):
         self.jobs: dict[str, JobInfo] = {}
+        # Retained references to the background asyncio tasks running each job,
+        # so cancel_job can actually cancel the running coroutine (not just flip
+        # the status). Keyed by job_id.
+        self._tasks: dict[str, Any] = {}
         self.lock = threading.Lock()
 
     def create_job(
         self,
         job_type: str,
         estimator_handle: str,
-        estimator_name: Optional[str] = None,
-        dataset_name: Optional[str] = None,
-        horizon: Optional[int] = None,
+        estimator_name: str | None = None,
+        dataset_name: str | None = None,
+        horizon: int | None = None,
         total_steps: int = 3,  # Default: load data, fit, predict
     ) -> str:
         """
         Create a new job and return its ID.
 
         Args:
-            job_type: Type of job (fit, fit_predict, etc.)
+            job_type: Type of job (fit, predict, evaluate, etc.)
             estimator_handle: Handle of the estimator
             estimator_name: Name of the estimator
             dataset_name: Name of the dataset (if applicable)
@@ -167,14 +182,37 @@ class JobManager:
 
         return job_id
 
+    def register_task(self, job_id: str, task: Any) -> None:
+        """Associate a background asyncio task with a job.
+
+        Retaining the task reference lets ``cancel_job`` cancel the running
+        coroutine, and prevents the event loop from garbage-collecting a
+        still-pending task. A done callback clears the reference and surfaces
+        any exception that would otherwise be swallowed by fire-and-forget.
+        """
+        with self.lock:
+            self._tasks[job_id] = task
+        task.add_done_callback(lambda t: self._on_task_done(job_id, t))
+
+    def _on_task_done(self, job_id: str, task: Any) -> None:
+        """Done callback: drop the task reference and log unhandled errors."""
+        with self.lock:
+            self._tasks.pop(job_id, None)
+        # A cancelled task raises on .exception(); nothing to report there.
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("Background job %s failed with an unhandled exception: %r", job_id, exc)
+
     def update_job(
         self,
         job_id: str,
-        status: Optional[JobStatus] = None,
-        completed_steps: Optional[int] = None,
-        current_step: Optional[str] = None,
-        result: Optional[dict[str, Any]] = None,
-        errors: Optional[list[str]] = None,
+        status: JobStatus | None = None,
+        completed_steps: int | None = None,
+        current_step: str | None = None,
+        result: dict[str, Any] | None = None,
+        errors: list[str] | None = None,
     ) -> bool:
         """
         Update job status and progress.
@@ -195,6 +233,11 @@ class JobManager:
                 return False
 
             job = self.jobs[job_id]
+
+            # Cancelled jobs are terminal from the client's perspective.
+            # Ignore late updates from background work that may still be winding down.
+            if job.status == JobStatus.CANCELLED:
+                return True
 
             # Update status
             if status is not None:
@@ -224,7 +267,7 @@ class JobManager:
 
             return True
 
-    def get_job(self, job_id: str) -> Optional[JobInfo]:
+    def get_job(self, job_id: str) -> JobInfo | None:
         """
         Get job information.
 
@@ -239,18 +282,23 @@ class JobManager:
 
     def list_jobs(
         self,
-        status: Optional[JobStatus] = None,
-        limit: Optional[int] = None,
+        status: JobStatus | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[JobInfo]:
         """
-        List all jobs, optionally filtered by status.
+        List jobs, optionally filtered by status, with offset/limit pagination.
+
+        Jobs are ordered newest-first, then ``offset`` items are skipped and up
+        to ``limit`` are returned. Use ``count_jobs`` for the total page count.
 
         Args:
             status: Filter by status (None = all jobs)
-            limit: Maximum number of jobs to return
+            limit: Maximum number of jobs to return (None = no limit)
+            offset: Number of jobs to skip from the start of the ordered list
 
         Returns:
-            List of JobInfo objects
+            List of JobInfo objects for the requested page
         """
         with self.lock:
             jobs = list(self.jobs.values())
@@ -262,11 +310,20 @@ class JobManager:
             # Sort by creation time (newest first)
             jobs.sort(key=lambda j: j.created_at, reverse=True)
 
-            # Apply limit
+            # Apply pagination: skip `offset`, then take up to `limit`
+            if offset:
+                jobs = jobs[offset:]
             if limit is not None:
                 jobs = jobs[:limit]
 
             return jobs
+
+    def count_jobs(self, status: JobStatus | None = None) -> int:
+        """Return the total number of jobs matching an optional status filter."""
+        with self.lock:
+            if status is None:
+                return len(self.jobs)
+            return sum(1 for j in self.jobs.values() if j.status == status)
 
     def cancel_job(self, job_id: str) -> bool:
         """
@@ -277,6 +334,13 @@ class JobManager:
 
         Returns:
             True if job was cancelled, False if not found or already completed
+
+        Notes:
+            Cancellation is cooperative. The background task is cancelled at its
+            next await point, which stops any remaining job steps. Work already
+            running inside a thread-pool executor (e.g. a single fit call) cannot
+            be force-killed and runs to completion, but its result is discarded
+            because update_job ignores late updates on a CANCELLED job.
         """
         with self.lock:
             if job_id not in self.jobs:
@@ -285,12 +349,21 @@ class JobManager:
             job = self.jobs[job_id]
 
             # Can only cancel pending or running jobs
-            if job.status in (JobStatus.PENDING, JobStatus.RUNNING):
-                job.status = JobStatus.CANCELLED
-                job.end_time = datetime.now()
-                return True
+            if job.status not in (JobStatus.PENDING, JobStatus.RUNNING):
+                return False
 
-            return False
+            job.status = JobStatus.CANCELLED
+            job.end_time = datetime.now()
+            # Terminal step label, so status doesn't stay frozen on the last
+            # in-flight message (e.g. "Running cross-validation...").
+            job.current_step = "Cancelled"
+            task = self._tasks.get(job_id)
+
+        # Cancel outside the lock: the task's done callback also takes the lock.
+        if task is not None and not task.done():
+            task.cancel()
+
+        return True
 
     def cleanup_old_jobs(self, max_age_hours: int = 24) -> int:
         """
@@ -305,10 +378,11 @@ class JobManager:
         cutoff = datetime.now() - timedelta(hours=max_age_hours)
 
         with self.lock:
-            old_job_ids = [job_id for job_id, job in self.jobs.items() if job.created_at < cutoff]
+            old_job_ids = [job_id for job_id, job in self.jobs.items() if job.created_at <= cutoff]
 
             for job_id in old_job_ids:
                 del self.jobs[job_id]
+                self._tasks.pop(job_id, None)
 
             return len(old_job_ids)
 
@@ -325,12 +399,13 @@ class JobManager:
         with self.lock:
             if job_id in self.jobs:
                 del self.jobs[job_id]
+                self._tasks.pop(job_id, None)
                 return True
             return False
 
 
 # Singleton instance
-_job_manager_instance: Optional[JobManager] = None
+_job_manager_instance: JobManager | None = None
 
 
 def get_job_manager() -> JobManager:

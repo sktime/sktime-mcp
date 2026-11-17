@@ -4,3 +4,6 @@ __pycache__/
 .venv
 TODO.md
 dist/
+docs/_build/
+docs/build/
+.ignore/

@@ -10,41 +10,42 @@ from typing import Any
 
 import pandas as pd
 
-from ..base import DataSourceAdapter
+from ..base import DataSourceAdapter, check_frequency_alignment, coerce_time_index
 
 
 class FileAdapter(DataSourceAdapter):
     """
     Adapter for file-based data sources.
 
-    Config example:
-    {
-        "type": "file",
-        "path": "/path/to/data.csv",
-        "format": "csv",  # csv, excel, parquet (auto-detected if not specified)
+    Config example::
 
-        # Column mapping
-        "time_column": "date",
-        "target_column": "value",
-        "exog_columns": ["feature1", "feature2"],
+        {
+            "type": "file",
+            "path": "/path/to/data.csv",
+            "format": "csv",  # csv, excel, parquet (auto-detected if not specified)
 
-        # CSV-specific options
-        "csv_options": {
-            "sep": ",",
-            "header": 0,
-            "encoding": "utf-8"
-        },
+            # Column mapping
+            "time_column": "date",
+            "target_column": "value",
+            "exog_columns": ["feature1", "feature2"],
 
-        # Excel-specific options
-        "excel_options": {
-            "sheet_name": 0,
-            "header": 0
-        },
+            # CSV-specific options
+            "csv_options": {
+                "sep": ",",
+                "header": 0,
+                "encoding": "utf-8"
+            },
 
-        # Common options
-        "parse_dates": True,
-        "frequency": "D"
-    }
+            # Excel-specific options
+            "excel_options": {
+                "sheet_name": 0,
+                "header": 0
+            },
+
+            # Common options
+            "parse_dates": True,
+            "frequency": "D"
+        }
     """
 
     def load(self) -> pd.DataFrame:
@@ -70,29 +71,24 @@ class FileAdapter(DataSourceAdapter):
             df = self._load_excel(path)
         elif file_format == "parquet":
             df = self._load_parquet(path)
+        elif file_format == "json":
+            df = self._load_json(path)
         else:
             raise ValueError(
-                f"Unsupported format: {file_format}. Supported formats: csv, excel, parquet"
+                f"Unsupported format: {file_format}. Supported formats: csv, excel, parquet, json"
             )
 
         # Set time index
         time_col = self.config.get("time_column")
-        if time_col and time_col in df.columns:
-            if self.config.get("parse_dates", True):
-                with contextlib.suppress(Exception):
-                    df[time_col] = pd.to_datetime(df[time_col])
-            df = df.set_index(time_col)
-
-        # Only ensure datetime index if it looks like it should be one
-        # or if we have a time_column. For RangeIndex, keep it as is.
-        if not isinstance(df.index, pd.DatetimeIndex) and time_col:
-            try:
-                df.index = pd.to_datetime(df.index)
-            except Exception as e:
-                # If we explicitly asked for a time_column but can't convert, that's an error
-                raise ValueError(
-                    f"Could not convert time column '{time_col}' to datetime: {e}"
-                ) from e
+        if time_col is not None and time_col not in df.columns:
+            available = ", ".join(repr(c) for c in df.columns)
+            raise ValueError(
+                f"Time column {time_col!r} not found in data. Available columns: [{available}]"
+            )
+        # Integer columns become an integer index; only date-like values are
+        # parsed to datetime (shared with the pandas and SQL adapters, F-13/F-35).
+        # For RangeIndex (no time_column), keep it as is.
+        df, index_warnings = coerce_time_index(df, time_col)
 
         # Sort by time
         df = df.sort_index()
@@ -100,6 +96,9 @@ class FileAdapter(DataSourceAdapter):
         # Set frequency if specified
         freq = self.config.get("frequency")
         if freq:
+            # Refuse a freq whose anchor misses the timestamps: asfreq would
+            # silently replace every row with NaN (F-15)
+            check_frequency_alignment(df.index, freq)
             with contextlib.suppress(Exception):
                 df = df.asfreq(freq)
 
@@ -107,7 +106,9 @@ class FileAdapter(DataSourceAdapter):
 
         # Determine frequency for metadata
         if isinstance(df.index, pd.DatetimeIndex):
-            freq_str = str(df.index.freq) if df.index.freq else pd.infer_freq(df.index)
+            from .pandas_adapter import _safe_infer_freq
+
+            freq_str = str(df.index.freq) if df.index.freq else _safe_infer_freq(df.index)
         else:
             freq_str = "Integer"
 
@@ -122,6 +123,8 @@ class FileAdapter(DataSourceAdapter):
             "start_date": str(df.index.min()),
             "end_date": str(df.index.max()),
         }
+        if index_warnings:
+            self._metadata["validation"] = {"valid": True, "errors": [], "warnings": index_warnings}
 
         return df
 
@@ -137,6 +140,7 @@ class FileAdapter(DataSourceAdapter):
             ".xls": "excel",
             ".parquet": "parquet",
             ".pq": "parquet",
+            ".json": "json",
         }
 
         file_format = format_map.get(suffix)
@@ -160,11 +164,10 @@ class FileAdapter(DataSourceAdapter):
         if path.suffix.lower() == ".tsv":
             csv_options["sep"] = "\t"
 
-        # Parse dates if specified
-        parse_dates = self.config.get("parse_dates", True)
-        if parse_dates and self.config.get("time_column"):
-            csv_options["parse_dates"] = [self.config["time_column"]]
-
+        # Note: the time column is parsed to datetime in load() after we've
+        # confirmed it exists — passing parse_dates=[col] here for a missing
+        # column leaks a raw pandas "Missing column provided to 'parse_dates'"
+        # error (#533 / NB-11).
         try:
             df = pd.read_csv(path, **csv_options)
         except Exception as e:
@@ -210,10 +213,27 @@ class FileAdapter(DataSourceAdapter):
 
         return df
 
+    def _load_json(self, path: Path) -> pd.DataFrame:
+        """Load a JSON file written by save_data (records orient)."""
+        json_options = self.config.get("json_options", {})
+        json_options.setdefault("orient", "records")
+        try:
+            df = pd.read_json(path, **json_options)
+        except Exception as e:
+            raise ValueError(f"Error reading JSON file: {e}") from e
+        return df
+
     def validate(self, data: pd.DataFrame) -> tuple[bool, dict[str, Any]]:
         """Validate file data using pandas adapter validation."""
         from .pandas_adapter import PandasAdapter
 
-        # Reuse pandas validation logic
-        pandas_adapter = PandasAdapter({"data": data})
+        # Reuse pandas validation logic, forwarding the column config so the
+        # target-dtype check applies to file sources too.
+        pandas_adapter = PandasAdapter(
+            {
+                "data": data,
+                "target_column": self.config.get("target_column"),
+                "exog_columns": self.config.get("exog_columns", []),
+            }
+        )
         return pandas_adapter.validate(data)

@@ -13,13 +13,11 @@ sys.path.insert(0, "src")
 
 from sktime_mcp.tools.codegen import (
     _format_value,
-    _generate_pipeline_code,
-    _generate_single_estimator_code,
+    _is_valid_var_name,
     export_code_tool,
 )
 from sktime_mcp.tools.instantiate import (
-    instantiate_estimator_tool,
-    instantiate_pipeline_tool,
+    instantiate_tool,
 )
 
 
@@ -75,98 +73,49 @@ class TestFormatValue:
         result = _format_value([[1, 2], [3, 4]])
         assert result == "[[1, 2], [3, 4]]"
 
+    def test_string_with_embedded_double_quotes(self):
+        """Embedded double quotes must be escaped to stay valid Python."""
+        result = _format_value('NaiveForecaster(strategy="mean", sp=12)')
+        assert result == '"NaiveForecaster(strategy=\\"mean\\", sp=12)"'
+        assert eval(result) == 'NaiveForecaster(strategy="mean", sp=12)'
 
-class TestSingleEstimatorCodeGen:
-    """Tests for _generate_single_estimator_code."""
+    def test_string_with_backslash(self):
+        """Backslashes must be escaped to stay valid Python."""
+        result = _format_value("a\\b")
+        assert eval(result) == "a\\b"
 
-    def test_generates_correct_import(self):
-        """Should produce the right import path for NaiveForecaster."""
-        result = _generate_single_estimator_code("NaiveForecaster", {})
-        assert result["success"]
-        assert "from sktime" in result["code"]
-        assert "import NaiveForecaster" in result["code"]
-
-    def test_instantiation_with_params(self):
-        """Params should appear in the generated code."""
-        result = _generate_single_estimator_code("NaiveForecaster", {"strategy": "last"})
-        assert result["success"]
-        assert 'strategy="last"' in result["code"]
-
-    def test_instantiation_without_params(self):
-        """Empty params should produce empty parentheses."""
-        result = _generate_single_estimator_code("NaiveForecaster", {})
-        assert result["success"]
-        assert "NaiveForecaster()" in result["code"]
-
-    def test_custom_var_name(self):
-        """Custom var_name should be used in the output."""
-        result = _generate_single_estimator_code("NaiveForecaster", {}, var_name="forecaster")
-        assert result["success"]
-        assert "forecaster = NaiveForecaster()" in result["code"]
-
-    def test_unknown_estimator_fails(self):
-        """Unknown estimator should return success=False."""
-        result = _generate_single_estimator_code("NotARealEstimator99999", {})
-        assert not result["success"]
-        assert "error" in result
+    def test_dict_key_with_embedded_quotes(self):
+        """Dict keys must be escaped like any other string."""
+        result = _format_value({'say "hi"': 1})
+        assert eval(result) == {'say "hi"': 1}
 
 
-class TestPipelineCodeGen:
-    """Tests for _generate_pipeline_code."""
+class TestVarNameValidation:
+    """Tests for Python variable name validation in code export."""
 
-    def test_transformer_forecaster_pipeline(self):
-        """Transformer + Forecaster should use TransformedTargetForecaster."""
-        result = _generate_pipeline_code(
-            ["Deseasonalizer", "NaiveForecaster"],
-            [{}, {}],
-        )
-        assert result["success"]
-        assert "TransformedTargetForecaster" in result["code"]
+    def test_valid_var_name(self):
+        """A normal identifier should be accepted."""
+        assert _is_valid_var_name("my_forecaster") is True
 
-    def test_all_transformers_pipeline(self):
-        """All transformers should use TransformerPipeline."""
-        result = _generate_pipeline_code(
-            ["Deseasonalizer", "Detrender"],
-            [{}, {}],
-        )
-        assert result["success"]
-        assert "TransformerPipeline" in result["code"]
+    def test_space_in_var_name_invalid(self):
+        """Names with spaces should be rejected."""
+        assert _is_valid_var_name("my forecaster") is False
 
-    def test_unknown_component_fails(self):
-        """Unknown component in pipeline should fail."""
-        result = _generate_pipeline_code(
-            ["NotRealEstimator12345", "NaiveForecaster"],
-            [{}, {}],
-        )
-        assert not result["success"]
-        assert "error" in result
+    def test_leading_digit_invalid(self):
+        """Names starting with digits should be rejected."""
+        assert _is_valid_var_name("123model") is False
 
-    def test_step_ordering(self):
-        """Steps should be numbered correctly (step_0, step_1)."""
-        result = _generate_pipeline_code(
-            ["Deseasonalizer", "NaiveForecaster"],
-            [{}, {}],
-        )
-        assert result["success"]
-        assert "step_0" in result["code"]
-        assert "step_1" in result["code"]
-
-    def test_pipeline_with_params(self):
-        """Pipeline components should include their params."""
-        result = _generate_pipeline_code(
-            ["NaiveForecaster"],
-            [{"strategy": "mean"}],
-        )
-        assert result["success"]
-        assert 'strategy="mean"' in result["code"]
+    def test_keyword_invalid(self):
+        """Python keywords should be rejected."""
+        assert _is_valid_var_name("class") is False
 
 
 class TestExportCodeTool:
     """Tests for the main export_code_tool function."""
 
-    def _create_handle(self, name="NaiveForecaster", params=None):
+    def _create_handle(self, spec="NaiveForecaster()"):
         """Helper to create an estimator handle."""
-        result = instantiate_estimator_tool(name, params)
+        result = instantiate_tool(spec=spec)
         assert result["success"], f"Failed to create handle: {result}"
         return result["handle"]
 
@@ -221,29 +170,56 @@ class TestExportCodeTool:
         finally:
             self._cleanup_handle(handle)
 
+    def test_spec_with_double_quoted_arg_is_valid_python(self):
+        """Specs with double-quoted string args must export syntactically valid code."""
+        handle = self._create_handle('NaiveForecaster(strategy="mean", sp=12)')
+        try:
+            result = export_code_tool(handle)
+            assert result["success"]
+            compile(result["code"], "<export_code>", "exec")
+            namespace: dict = {}
+            exec(result["code"], namespace)
+            assert namespace["model"].get_params()["strategy"] == "mean"
+            assert namespace["model"].get_params()["sp"] == 12
+        finally:
+            self._cleanup_handle(handle)
+
     def test_custom_var_name(self):
         """Custom var_name should appear in the generated code."""
         handle = self._create_handle()
         try:
             result = export_code_tool(handle, var_name="my_forecaster")
             assert result["success"]
-            assert "my_forecaster" in result["code"]
+            assert "my_forecaster = craft(" in result["code"]
+        finally:
+            self._cleanup_handle(handle)
+
+    @pytest.mark.parametrize("var_name", ["my model", "123model", "class"])
+    def test_invalid_var_name_fails(self, var_name):
+        """Invalid Python identifiers should fail fast."""
+        handle = self._create_handle()
+        try:
+            result = export_code_tool(handle, var_name=var_name)
+            assert result["success"] is False
+            assert (
+                result["error"] == "var_name must be a valid Python identifier and not a keyword."
+            )
         finally:
             self._cleanup_handle(handle)
 
     def test_export_with_params(self):
         """Params should appear in exported code."""
-        handle = self._create_handle("NaiveForecaster", {"strategy": "mean"})
+        handle = self._create_handle("NaiveForecaster(strategy='mean')")
         try:
             result = export_code_tool(handle)
             assert result["success"]
-            assert 'strategy="mean"' in result["code"]
+            assert "strategy='mean'" in result["code"] or 'strategy="mean"' in result["code"]
         finally:
             self._cleanup_handle(handle)
 
     def test_pipeline_handle(self):
         """Pipeline handle should return is_pipeline=True."""
-        result = instantiate_pipeline_tool(["Deseasonalizer", "NaiveForecaster"])
+        result = instantiate_tool(spec="Deseasonalizer() * NaiveForecaster()")
         if not result["success"]:
             pytest.skip("Pipeline instantiation not available")
 
