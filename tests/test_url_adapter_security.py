@@ -3,6 +3,9 @@
 Covers:
 - Scheme enforcement (http/https only; blocks file://, ftp://, etc.)
 - Opt-in private-IP / SSRF blocking
+- Connection-level pinning to prevent DNS-rebinding attacks
+- Strict redirect validation (blocks redirects to private IPs and non-http/https schemes)
+- Redirect control (allow_redirects, max_redirects)
 - Download timeout enforcement
 - Max-bytes download cap
 - Integration tests against a local ``http.server``
@@ -17,6 +20,7 @@ import time
 from functools import partial
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import urlparse
 
 import pytest
 
@@ -56,6 +60,43 @@ class _SlowHandler(_QuietHandler):
         # Wait longer than the test timeout before sending anything
         time.sleep(self.delay_seconds)
         super().do_GET()
+
+
+class _RedirectHandler(_QuietHandler):
+    """Server providing redirect scenarios for SSRF regression testing."""
+
+    def do_GET(self):  # noqa: N802
+        port = self.server.server_port
+        if self.path == "/redirect-to-private":
+            self.send_response(302)
+            self.send_header("Location", f"http://127.0.0.1:{port}/data.csv")
+            self.end_headers()
+        elif self.path == "/redirect-to-10":
+            self.send_response(302)
+            self.send_header("Location", "http://10.0.0.1/data.csv")
+            self.end_headers()
+        elif self.path == "/redirect-to-metadata":
+            self.send_response(302)
+            self.send_header("Location", "http://169.254.169.254/latest/meta-data/")
+            self.end_headers()
+        elif self.path == "/redirect-to-file":
+            self.send_response(302)
+            self.send_header("Location", "file:///etc/passwd")
+            self.end_headers()
+        elif self.path == "/redirect-to-ftp":
+            self.send_response(302)
+            self.send_header("Location", "ftp://example.com/data.csv")
+            self.end_headers()
+        elif self.path == "/redirect-relative":
+            self.send_response(302)
+            self.send_header("Location", "/data.csv")
+            self.end_headers()
+        elif self.path == "/redirect-loop":
+            self.send_response(302)
+            self.send_header("Location", f"http://127.0.0.1:{port}/redirect-loop")
+            self.end_headers()
+        else:
+            super().do_GET()
 
 
 @pytest.fixture()
@@ -99,6 +140,28 @@ def slow_server():
     thread.start()
 
     yield f"http://127.0.0.1:{port}", "data.csv", tmp
+
+    httpd.shutdown()
+    tmp.cleanup()
+
+
+@pytest.fixture()
+def redirect_server():
+    """Spin up a server capable of issuing various redirects for security tests.
+
+    Yields ``(base_url, csv_filename, temp_dir)``.
+    """
+    tmp = tempfile.TemporaryDirectory()
+    csv_path = _write_csv(tmp.name)
+    port = _find_free_port()
+
+    handler_factory = partial(_RedirectHandler, directory=tmp.name)
+
+    httpd = http.server.HTTPServer(("127.0.0.1", port), handler_factory)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    yield f"http://127.0.0.1:{port}", csv_path.name, tmp
 
     httpd.shutdown()
     tmp.cleanup()
@@ -331,3 +394,264 @@ class TestConfigValidation:
         )
         df = adapter.load()
         assert len(df) == 20
+
+
+class TestRedirectSecurity:
+    """Redirect validation and SSRF boundary enforcement."""
+
+    def test_redirect_to_loopback_blocked_sync(self, redirect_server):
+        """Redirecting to loopback must be rejected when block_private_ips=True."""
+        base_url, _, _ = redirect_server
+        adapter = UrlAdapter(
+            {
+                "url": f"{base_url}/redirect-to-private",
+                "block_private_ips": True,
+            }
+        )
+        with pytest.raises(ValueError, match="private/internal"):
+            adapter.load()
+
+    @pytest.mark.asyncio
+    async def test_redirect_to_loopback_blocked_async(self, redirect_server):
+        """Async load redirecting to loopback must be rejected when block_private_ips=True."""
+        base_url, _, _ = redirect_server
+        adapter = UrlAdapter(
+            {
+                "url": f"{base_url}/redirect-to-private",
+                "block_private_ips": True,
+            }
+        )
+        with pytest.raises(ValueError, match="private/internal"):
+            await adapter.load_async()
+
+    def test_redirect_to_10_range_blocked_sync(self, redirect_server):
+        """Redirecting to private 10.0.0.0/8 must be rejected when block_private_ips=True."""
+        base_url, _, _ = redirect_server
+        adapter = UrlAdapter(
+            {
+                "url": f"{base_url}/redirect-to-10",
+                "block_private_ips": True,
+            }
+        )
+        with pytest.raises(ValueError, match="private/internal"):
+            adapter.load()
+
+    @pytest.mark.asyncio
+    async def test_redirect_to_10_range_blocked_async(self, redirect_server):
+        """Async redirecting to 10.0.0.0/8 must be rejected when block_private_ips=True."""
+        base_url, _, _ = redirect_server
+        adapter = UrlAdapter(
+            {
+                "url": f"{base_url}/redirect-to-10",
+                "block_private_ips": True,
+            }
+        )
+        with pytest.raises(ValueError, match="private/internal"):
+            await adapter.load_async()
+
+    def test_redirect_to_metadata_endpoint_blocked_sync(self, redirect_server):
+        """Redirecting to cloud metadata 169.254.169.254 must be blocked."""
+        base_url, _, _ = redirect_server
+        adapter = UrlAdapter(
+            {
+                "url": f"{base_url}/redirect-to-metadata",
+                "block_private_ips": True,
+            }
+        )
+        with pytest.raises(ValueError, match="private/internal"):
+            adapter.load()
+
+    @pytest.mark.asyncio
+    async def test_redirect_to_metadata_endpoint_blocked_async(self, redirect_server):
+        """Async redirecting to cloud metadata 169.254.169.254 must be blocked."""
+        base_url, _, _ = redirect_server
+        adapter = UrlAdapter(
+            {
+                "url": f"{base_url}/redirect-to-metadata",
+                "block_private_ips": True,
+            }
+        )
+        with pytest.raises(ValueError, match="private/internal"):
+            await adapter.load_async()
+
+    def test_redirect_to_file_scheme_blocked_sync(self, redirect_server):
+        """Redirecting to file:/// must be rejected regardless of block_private_ips."""
+        base_url, _, _ = redirect_server
+        adapter = UrlAdapter(
+            {
+                "url": f"{base_url}/redirect-to-file",
+                "block_private_ips": False,
+            }
+        )
+        with pytest.raises(ValueError, match="not allowed"):
+            adapter.load()
+
+    @pytest.mark.asyncio
+    async def test_redirect_to_file_scheme_blocked_async(self, redirect_server):
+        """Async redirecting to file:/// must be rejected."""
+        base_url, _, _ = redirect_server
+        adapter = UrlAdapter(
+            {
+                "url": f"{base_url}/redirect-to-file",
+                "block_private_ips": False,
+            }
+        )
+        with pytest.raises(ValueError, match="not allowed"):
+            await adapter.load_async()
+
+    def test_redirect_to_ftp_scheme_blocked_sync(self, redirect_server):
+        """Redirecting to ftp:// must be rejected regardless of block_private_ips."""
+        base_url, _, _ = redirect_server
+        adapter = UrlAdapter(
+            {
+                "url": f"{base_url}/redirect-to-ftp",
+                "block_private_ips": False,
+            }
+        )
+        with pytest.raises(ValueError, match="not allowed"):
+            adapter.load()
+
+    @pytest.mark.asyncio
+    async def test_redirect_to_ftp_scheme_blocked_async(self, redirect_server):
+        """Async redirecting to ftp:// must be rejected."""
+        base_url, _, _ = redirect_server
+        adapter = UrlAdapter(
+            {
+                "url": f"{base_url}/redirect-to-ftp",
+                "block_private_ips": False,
+            }
+        )
+        with pytest.raises(ValueError, match="not allowed"):
+            await adapter.load_async()
+
+    def test_allow_redirects_false_blocks_redirect_sync(self, redirect_server):
+        """allow_redirects=False must reject any redirect attempt."""
+        base_url, _, _ = redirect_server
+        adapter = UrlAdapter(
+            {
+                "url": f"{base_url}/redirect-relative",
+                "allow_redirects": False,
+            }
+        )
+        with pytest.raises(ValueError, match="redirect"):
+            adapter.load()
+
+    @pytest.mark.asyncio
+    async def test_allow_redirects_false_blocks_redirect_async(self, redirect_server):
+        """Async allow_redirects=False must reject any redirect attempt."""
+        base_url, _, _ = redirect_server
+        adapter = UrlAdapter(
+            {
+                "url": f"{base_url}/redirect-relative",
+                "allow_redirects": False,
+            }
+        )
+        with pytest.raises(ValueError, match="redirect"):
+            await adapter.load_async()
+
+    def test_redirect_loop_blocked_sync(self, redirect_server):
+        """Redirect loop exceeding max_redirects must abort."""
+        base_url, _, _ = redirect_server
+        adapter = UrlAdapter(
+            {
+                "url": f"{base_url}/redirect-loop",
+                "max_redirects": 3,
+            }
+        )
+        with pytest.raises(ValueError, match="Too many redirects"):
+            adapter.load()
+
+    @pytest.mark.asyncio
+    async def test_redirect_loop_blocked_async(self, redirect_server):
+        """Async redirect loop exceeding max_redirects must abort."""
+        base_url, _, _ = redirect_server
+        adapter = UrlAdapter(
+            {
+                "url": f"{base_url}/redirect-loop",
+                "max_redirects": 3,
+            }
+        )
+        with pytest.raises(ValueError, match="Too many redirects"):
+            await adapter.load_async()
+
+    def test_safe_redirect_allowed_by_default_sync(self, redirect_server):
+        """Safe redirect on loopback succeeds when block_private_ips is False."""
+        base_url, _, _ = redirect_server
+        adapter = UrlAdapter(
+            {
+                "url": f"{base_url}/redirect-relative",
+                "block_private_ips": False,
+            }
+        )
+        df = adapter.load()
+        assert len(df) == 20
+
+    @pytest.mark.asyncio
+    async def test_safe_redirect_allowed_by_default_async(self, redirect_server):
+        """Async safe redirect on loopback succeeds when block_private_ips is False."""
+        base_url, _, _ = redirect_server
+        adapter = UrlAdapter(
+            {
+                "url": f"{base_url}/redirect-relative",
+                "block_private_ips": False,
+            }
+        )
+        df = await adapter.load_async()
+        assert len(df) == 20
+
+
+class TestDnsRebindingPrevention:
+    """Verify that socket-level peer IP validation catches DNS-rebinding bypasses."""
+
+    def test_dns_rebinding_blocked_sync(self, local_csv_server):
+        """Pre-flight DNS passes (public IP), but socket connects to private IP."""
+        base_url, filename, _ = local_csv_server
+        port = int(urlparse(base_url).port)
+        real_getaddrinfo = socket.getaddrinfo
+
+        call_count = 0
+
+        def rebinding_getaddrinfo(host, p, *args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Pre-flight check simulates resolving to a public IP
+                return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", p or 0))]
+            # Socket connection time resolves to local loopback (127.0.0.1)
+            return real_getaddrinfo("127.0.0.1", port, *args, **kwargs)
+
+        with patch("socket.getaddrinfo", side_effect=rebinding_getaddrinfo):
+            adapter = UrlAdapter(
+                {
+                    "url": f"http://rebind-test.invalid:{port}/{filename}",
+                    "block_private_ips": True,
+                }
+            )
+            with pytest.raises(ValueError, match="private/internal"):
+                adapter.load()
+
+    @pytest.mark.asyncio
+    async def test_dns_rebinding_blocked_async(self, local_csv_server):
+        """Async pre-flight DNS passes (public IP), but socket connects to private IP."""
+        base_url, filename, _ = local_csv_server
+        port = int(urlparse(base_url).port)
+        real_getaddrinfo = socket.getaddrinfo
+
+        call_count = 0
+
+        def rebinding_getaddrinfo(host, p, *args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", p or 0))]
+            return real_getaddrinfo("127.0.0.1", port, *args, **kwargs)
+
+        with patch("socket.getaddrinfo", side_effect=rebinding_getaddrinfo):
+            adapter = UrlAdapter(
+                {
+                    "url": f"http://rebind-test.invalid:{port}/{filename}",
+                    "block_private_ips": True,
+                }
+            )
+            with pytest.raises(ValueError, match="private/internal"):
+                await adapter.load_async()
