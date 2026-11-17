@@ -319,15 +319,16 @@ Writing to `out.parquet` with the default `format` produces a CSV.
 
 ### `plot_series`
 
-Plot one or more series. Saves a file when `path` is given, otherwise returns
-the image as a base64 string.
+Plot one or more series. Saves a file when `path` is given. Otherwise PNG and
+WebP plots are returned as an MCP image content block next to the JSON metadata,
+and SVG plots as a base64 string in `image_base64`.
 
 | Argument | Type | Required | Default | Description |
 | :--- | :--- | :---: | :--- | :--- |
 | `data_handles` | array of string | ✅ | — | Handles to plot, e.g. the train/test handles from `split_data` and the `prediction_handle` from `predict`. |
 | `labels` | array of string | — | — | Legend label per handle. |
 | `title` | string | — | — | Plot title. |
-| `path` | string | — | — | Save location, e.g. `/tmp/plot.png`. Omit to get base64 back. |
+| `path` | string | — | — | Save location, e.g. `/tmp/plot.png`. Omit to get the plot back inline. |
 | `figsize` | array | — | `[12, 6]` | `[width, height]` in inches. |
 | `dpi` | integer | — | `150` | Resolution. |
 | `markers` | string or array | — | — | Marker style(s), e.g. `"o"` or `[".", "x"]`. |
