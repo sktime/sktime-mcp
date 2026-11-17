@@ -6,11 +6,9 @@ invisible to unit tests that call the tool functions directly — it only
 appears over the wire — so we lint the schemas instead.
 """
 
-import asyncio
-
 import pytest
 
-from sktime_mcp.server import list_tools
+from sktime_mcp.server import get_tools
 
 # A property is considered typed if it has any of these constraint keywords.
 _TYPE_KEYWORDS = {"type", "enum", "anyOf", "oneOf", "allOf", "const"}
@@ -29,9 +27,8 @@ def _iter_properties(schema, path):
 
 
 def _all_tool_properties():
-    tools = asyncio.run(list_tools())
-    for tool in tools:
-        yield from _iter_properties(tool.inputSchema, tool.name)
+    for tool in get_tools():
+        yield from _iter_properties(tool.input_schema, tool.name)
 
 
 def test_every_schema_property_declares_a_type():
@@ -57,6 +54,6 @@ def test_every_schema_property_declares_a_type():
     ],
 )
 def test_previously_untyped_properties_are_typed(tool_name, prop, expected_types):
-    tools = {t.name: t for t in asyncio.run(list_tools())}
-    prop_schema = tools[tool_name].inputSchema["properties"][prop]
+    tools = {t.name: t for t in get_tools()}
+    prop_schema = tools[tool_name].input_schema["properties"][prop]
     assert prop_schema["type"] == expected_types

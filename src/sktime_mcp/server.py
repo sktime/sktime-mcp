@@ -7,14 +7,13 @@ that exposes sktime's registry and execution capabilities to LLMs.
 
 import argparse
 import asyncio
+import functools
 import json
 import logging
 import os
 import sys
-from io import TextIOWrapper
-from typing import Any
 
-import anyio
+import jsonschema
 
 from sktime_mcp import __version__
 
@@ -32,9 +31,16 @@ try:
 except ImportError:
     _PANDAS_AVAILABLE = False
 
-from mcp.server import Server
+from mcp.server import Server, ServerRequestContext
 from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.types import (
+    CallToolRequestParams,
+    CallToolResult,
+    ListToolsResult,
+    PaginatedRequestParams,
+    TextContent,
+    Tool,
+)
 
 from sktime_mcp.config import settings
 from sktime_mcp.tools.codegen import export_code_tool
@@ -111,8 +117,6 @@ logging.basicConfig(
     handlers=_handlers,
 )
 logger = logging.getLogger(__name__)
-# Create MCP server instance
-server = Server("sktime-mcp")
 
 _CHARS_PER_TOKEN = 4
 
@@ -152,7 +156,7 @@ def sanitize_for_json(obj, _seen=None):
     Handles:
     - Standard Python scalars and containers (dict, list, tuple)
     - NumPy integer/float scalars and ndarrays
-    - Pandas Timestamp, NaT, NA, and Series/DataFrame
+    - Pandas Timestamp, NaT, NA, Series/DataFrame, Index
     - Arbitrary objects (fallback to str repr)
     - Circular references (returns a placeholder instead of recursing forever)
     """
@@ -196,6 +200,8 @@ def sanitize_for_json(obj, _seen=None):
             return sanitize_for_json(obj.tolist(), _seen)
         if isinstance(obj, pd.DataFrame):
             return sanitize_for_json(obj.to_dict(orient="records"), _seen)
+        if isinstance(obj, pd.Index):
+            return [sanitize_for_json(item, _seen) for item in obj.tolist()]
 
     # --- Standard Python containers ---
     if isinstance(obj, dict):
@@ -215,9 +221,8 @@ def sanitize_for_json(obj, _seen=None):
     return str(obj)
 
 
-@server.list_tools()
-async def list_tools() -> list[Tool]:
-    """List all available MCP tools."""
+def get_tools() -> list[Tool]:
+    """Return the definitions of all MCP tools exposed by this server."""
     return [
         # -- Discovery -------------------------------------------------------
         Tool(
@@ -324,7 +329,10 @@ async def list_tools() -> list[Tool]:
             name="fit",
             description=(
                 "Fit an estimator on data. "
-                "Provide explicit X_handle and/y_handle (or datasets) depending on the estimator's scitype."
+                "Provide explicit X_handle and/or y_handle (or datasets) depending on the estimator's scitype; "
+                "each handle/dataset pair (y_handle vs y_dataset, X_handle vs X_dataset) is mutually exclusive. "
+                "A data handle loaded with exog_columns carries X alongside its target: "
+                "fit(y_handle=h) uses that X automatically (reported under 'exogenous')."
             ),
             inputSchema={
                 "type": "object",
@@ -335,19 +343,29 @@ async def list_tools() -> list[Tool]:
                     },
                     "X_handle": {
                         "type": "string",
-                        "description": "Optional: Handle from load_data_source for X data (features, panel, etc.)",
+                        "description": (
+                            "Optional: data handle whose exogenous columns (exog_columns) are used as X. "
+                            "Errors if the handle has no exogenous columns. Do not pass the same handle as y_handle. "
+                            "Mutually exclusive with X_dataset."
+                        ),
                     },
                     "y_handle": {
                         "type": "string",
-                        "description": "Optional: Handle from load_data_source for y data (target, labels, etc.)",
+                        "description": (
+                            "Optional: data handle whose target series is y. Mutually exclusive with y_dataset. "
+                            "If it carries exogenous columns and X_handle/X_dataset are omitted, they are used as X."
+                        ),
                     },
                     "X_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset name for X data",
+                        "description": (
+                            "Optional: Demo dataset name for X data; it must ship exogenous data "
+                            "(a target-only dataset such as 'airline' is refused). Mutually exclusive with X_handle."
+                        ),
                     },
                     "y_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset name for y data",
+                        "description": "Optional: Demo dataset name for y data. Mutually exclusive with y_handle.",
                     },
                     "fh": {
                         "description": "Optional: Forecast horizon (e.g. 12 or [1,2,3]) to pass to fit",
@@ -366,7 +384,13 @@ async def list_tools() -> list[Tool]:
             name="predict",
             description=(
                 "Generate predictions from a fitted estimator. "
-                "Supports different modes like predict, predict_interval, predict_quantiles."
+                "Supports different modes like predict, predict_interval, predict_quantiles. "
+                "The full result is also registered as a data handle, returned as "
+                "`prediction_handle`: pass it to plot_series (with the train/test handles), "
+                "save_data, or call_method on a metric (y_pred_data_handle) to score it "
+                "against a test split. "
+                "A forecaster fitted with exogenous data needs FUTURE X covering the horizon: "
+                "pass X_handle (e.g. the test half from split_data) or X_dataset."
             ),
             inputSchema={
                 "type": "object",
@@ -377,7 +401,10 @@ async def list_tools() -> list[Tool]:
                     },
                     "horizon": {
                         "type": "integer",
-                        "description": "Forecast horizon (default: 12)",
+                        "description": (
+                            "Forecast horizon (default: 12). Capped by the server's "
+                            "SKTIME_MCP_MAX_HORIZON (default 10000); larger requests are rejected."
+                        ),
                         "default": 12,
                     },
                     "mode": {
@@ -405,19 +432,30 @@ async def list_tools() -> list[Tool]:
                     },
                     "X_handle": {
                         "type": "string",
-                        "description": "Optional: Handle from load_data_source for X data",
+                        "description": (
+                            "Optional: data handle whose exogenous columns are the future X for the horizon "
+                            "(required if the forecaster was fitted with X). Errors if the handle has none. "
+                            "Mutually exclusive with X_dataset."
+                        ),
                     },
                     "y_handle": {
                         "type": "string",
-                        "description": "Optional: Handle from load_data_source for y data (needed for annotators)",
+                        "description": (
+                            "Optional: data handle whose target series is y: the series a detector "
+                            "annotates or a transformer transforms (as in fit). Forecasters ignore it. "
+                            "Mutually exclusive with y_dataset."
+                        ),
                     },
                     "X_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset name for X data",
+                        "description": (
+                            "Optional: Demo dataset name for X data; it must ship exogenous data "
+                            "(a target-only dataset such as 'airline' is refused). Mutually exclusive with X_handle."
+                        ),
                     },
                     "y_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset name for y data",
+                        "description": "Optional: Demo dataset name for y data. Mutually exclusive with y_handle.",
                     },
                     "run_async": {
                         "type": "boolean",
@@ -429,7 +467,11 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="update",
-            description=("Update a fitted estimator with new data."),
+            description=(
+                "Update a fitted estimator with new data. "
+                "If y_handle carries exogenous columns and X_handle/X_dataset are omitted, "
+                "they are used as X automatically."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -439,19 +481,28 @@ async def list_tools() -> list[Tool]:
                     },
                     "X_handle": {
                         "type": "string",
-                        "description": "Optional: Handle for X data",
+                        "description": (
+                            "Optional: data handle whose exogenous columns are used as X. "
+                            "Errors if the handle has none. Mutually exclusive with X_dataset."
+                        ),
                     },
                     "y_handle": {
                         "type": "string",
-                        "description": "Optional: Handle for y data",
+                        "description": (
+                            "Optional: data handle whose target series is the new y. "
+                            "Mutually exclusive with y_dataset."
+                        ),
                     },
                     "X_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset for X data",
+                        "description": (
+                            "Optional: Demo dataset for X data; it must ship exogenous data. "
+                            "Mutually exclusive with X_handle."
+                        ),
                     },
                     "y_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset for y data",
+                        "description": "Optional: Demo dataset for y data. Mutually exclusive with y_handle.",
                     },
                 },
                 "required": ["estimator_handle"],
@@ -503,7 +554,9 @@ async def list_tools() -> list[Tool]:
             name="evaluate",
             description=(
                 "Cross-validate an estimator on a dataset. "
-                "Dataset and data handle inputs supported for y and X."
+                "Dataset and data handle inputs supported for y and X. "
+                "If y is a data handle carrying exogenous columns and X is omitted, they are "
+                "used as X automatically; passing the same handle as y and X is refused."
             ),
             inputSchema={
                 "type": "object",
@@ -518,7 +571,11 @@ async def list_tools() -> list[Tool]:
                     },
                     "X": {
                         "type": "string",
-                        "description": "Optional: exogenous time series data_handle id or demo dataset name.",
+                        "description": (
+                            "Optional: exogenous time series: a data_handle id (its exogenous columns are "
+                            "used; errors if it has none) or a demo dataset name that ships exogenous data "
+                            "(a target-only dataset such as 'airline' is refused, also as X == y)."
+                        ),
                     },
                     "cv_folds": {
                         "type": "integer",
@@ -662,7 +719,8 @@ async def list_tools() -> list[Tool]:
                         "type": "number",
                         "description": (
                             "Fraction of observations to hold out for the test set, "
-                            "exclusive range (0.0, 1.0). Mutually exclusive with fh."
+                            "exclusive range (0.0, 1.0), rounded up to a whole observation. "
+                            "Must leave at least one training observation. Mutually exclusive with fh."
                         ),
                     },
                     "fh": {
@@ -778,7 +836,8 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="plot_series",
             description=(
-                "Plot one or more time series natively. "
+                "Plot one or more time series natively, e.g. the train and test handles from "
+                "split_data together with the prediction_handle returned by predict. "
                 "Can save the plot to a specified path as a PNG file or return it as a base64 string."
             ),
             inputSchema={
@@ -990,14 +1049,34 @@ async def list_tools() -> list[Tool]:
     ]
 
 
+@functools.cache
+def _tools_by_name() -> dict[str, Tool]:
+    return {tool.name: tool for tool in get_tools()}
+
+
+async def list_tools(
+    ctx: ServerRequestContext, params: PaginatedRequestParams | None
+) -> ListToolsResult:
+    """MCP ``tools/list`` handler."""
+    return ListToolsResult(tools=get_tools())
+
+
 # ===================================================================
 # Tool dispatcher
 # ===================================================================
 
 
-@server.call_tool()
-async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
-    """Handle tool calls."""
+def _error_result(message: str) -> CallToolResult:
+    """Build the structured ``{"success": false, "error": ...}`` error response."""
+    body = json.dumps({"success": False, "error": message})
+    return CallToolResult(content=[TextContent(type="text", text=body)], is_error=True)
+
+
+async def call_tool(ctx: ServerRequestContext, params: CallToolRequestParams) -> CallToolResult:
+    """MCP ``tools/call`` handler: validate the arguments, then dispatch."""
+    name = params.name
+    arguments = params.arguments or {}
+
     import importlib
     import site
     import sys
@@ -1012,6 +1091,17 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
     logger.info(f"=== Tool Call: {name} ===")
     logger.info(f"Arguments: {json.dumps(arguments, indent=2)}")
+
+    # mcp 2.x no longer validates arguments against inputSchema before dispatch,
+    # so wrongly typed values (e.g. the string "false" for a boolean) are rejected
+    # here, before any tool code runs.
+    tool = _tools_by_name().get(name)
+    if tool is not None:
+        try:
+            jsonschema.validate(instance=arguments, schema=tool.input_schema)
+        except jsonschema.ValidationError as e:
+            logger.warning(f"Input validation error for {name}: {e.message}")
+            return _error_result(f"Input validation error: {e.message}")
 
     try:
         # -- Discovery -------------------------------------------------------
@@ -1215,10 +1305,19 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         response_text = json.dumps(sanitized_result, indent=2, default=str)
         truncated_text = _apply_response_token_limit(name, response_text)
 
-        return [TextContent(type="text", text=truncated_text)]
+        return CallToolResult(content=[TextContent(type="text", text=truncated_text)])
     except Exception as e:
         logger.exception(f"Error in tool {name}")
-        return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
+        return _error_result(str(e))
+
+
+# Constructed after the handlers it binds; ``sktime_mcp.app`` imports this instance.
+server = Server(
+    "sktime-mcp",
+    version=__version__,
+    on_list_tools=list_tools,
+    on_call_tool=call_tool,
+)
 
 
 # ===================================================================
@@ -1242,18 +1341,16 @@ async def _periodic_job_cleanup():
 
 
 async def run_server():
-    """Run the MCP server."""
-    # Stdio safety: redirect stdout to stderr to protect MCP JSON-RPC
-    # streams from being corrupted by stray prints in third-party libraries.
-    original_stdout = sys.stdout
-    sys.stdout = sys.stderr
-
-    # Explicitly wrap the original stdout buffer for the MCP server output
-    mcp_stdout = anyio.wrap_file(TextIOWrapper(original_stdout.buffer, encoding="utf-8"))
-
+    """Run the MCP server on stdio."""
     asyncio.create_task(_periodic_job_cleanup())
 
-    async with stdio_server(stdout=mcp_stdout) as (read_stream, write_stream):
+    # Stdio safety: ``stdio_server()`` serves the JSON-RPC wire from a private
+    # duplicate of fd 1 and points fd 1 at stderr for the duration, so stray
+    # output from tools, third-party libraries and child processes misses the
+    # wire. That claim is best-effort (it is skipped when stdout is not fd 1),
+    # so the Python-level stream is redirected as well once the wire is claimed.
+    async with stdio_server() as (read_stream, write_stream):
+        sys.stdout = sys.stderr
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
 

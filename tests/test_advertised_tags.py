@@ -9,18 +9,17 @@ page with ``success: true``, which #316 identified as indistinguishable from
 checked against the live registry.
 """
 
-import asyncio
 import re
 
 from sktime_mcp.registry.interface import get_registry
-from sktime_mcp.server import list_tools
+from sktime_mcp.server import get_tools
 
 _TAG_PATTERN = re.compile(r"'([^']+)' \((?:bool|str)\)")
 
 
 def _advertised_tags():
     """Return the tag names documented on the ``query_registry`` tool."""
-    tools = {tool.name: tool for tool in asyncio.run(list_tools())}
+    tools = {tool.name: tool for tool in get_tools()}
     return _TAG_PATTERN.findall(tools["query_registry"].description)
 
 
