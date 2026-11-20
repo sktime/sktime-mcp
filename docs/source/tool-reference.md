@@ -452,8 +452,9 @@ pip install mlflow
 **Treat this as opt-in.** Most MCP clients prompt before each tool call and let
 you allow or deny individual tools — leave `run_command` on ask-every-time, or
 disable it outright, unless you specifically want the assistant installing
-packages and inspecting the filesystem on your behalf. If you need a hard
-guarantee, run the server inside a container (see the Docker option in the
-{doc}`user-guide`) so the blast radius is the container rather than your machine.
+packages and inspecting the filesystem on your behalf. For stronger isolation,
+use a container with restricted mounts and privileges (see the Docker option in
+the {doc}`user-guide`). Its isolation depends on that configuration; host mounts
+and elevated privileges can expose the host.
 
 See {doc}`developer/architecture` for the full trust boundary.

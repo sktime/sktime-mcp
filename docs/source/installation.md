@@ -10,7 +10,7 @@ This guide covers the steps required to install `sktime-mcp` for both end-users 
 
 ## Standard Installation
 
-The recommended way to install `sktime-mcp` is via pip or uv. To enable full functionality, including support for various data formats and forecasting models, use the `[all]` extra.
+The recommended way to install `sktime-mcp` is via pip or uv. The `[all]` extra installs the bundled optional file-format, database and forecasting dependencies. Individual estimators can still require additional packages; check their dependency hints before use.
 
 ### Using pip
 ```bash
