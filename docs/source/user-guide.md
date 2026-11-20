@@ -461,7 +461,7 @@ The server registers **26 tools**. The table below groups them by intent; the
 | Bring data into the session | `load_data_source`, `inspect_data`, `transform_data`, `split_data`, `save_data` | Load files, inline data, SQL, or URLs into handles; inspect, clean, split, and persist them. |
 | Build and run models | `instantiate`, `fit`, `predict`, `update`, `get_fitted_params`, `call_method` | Create sktime estimators or pipelines, fit them, forecast, update, or call native methods. |
 | Evaluate and reproduce | `evaluate`, `export_code`, `save_model`, `load_model` | Cross-validate, generate Python code, and persist fitted models. |
-| Visualize | `plot_series` | Plot one or more series to a PNG/SVG/WebP file, or inline as base64. |
+| Visualize | `plot_series` | Plot one or more series to a PNG/SVG/WebP file, or inline as an image. |
 | Manage runtime state | `list_handles`, `release_handle`, `release_data_handle`, `list_jobs`, `check_job_status`, `cancel_job` | See what is in memory, clean it up, and track async work. |
 | Repair the environment | `run_command` | Runs an arbitrary shell command — see the warning below. |
 

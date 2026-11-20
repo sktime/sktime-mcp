@@ -7,8 +7,8 @@
 """
 
 import csv
-import os
 import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -80,14 +80,19 @@ class TestFileBadTimeColumn:
     def test_missing_time_column_clean_error(self):
         ex = get_executor()
         with tempfile.TemporaryDirectory() as d:
-            path = os.path.join(d, "data.csv")
-            with open(path, "w", newline="") as f:
+            path = Path(d) / "data.csv"
+            with path.open("w", newline="") as f:
                 w = csv.writer(f)
                 w.writerow(["timestamp", "value"])
                 for i in range(5):
                     w.writerow([f"2024-01-0{i + 1}", i])
             res = ex.load_data_source(
-                {"type": "file", "path": path, "time_column": "index", "target_column": "value"}
+                {
+                    "type": "file",
+                    "path": str(path),
+                    "time_column": "index",
+                    "target_column": "value",
+                }
             )
         assert not res["success"]
         err = res["error"]
@@ -98,14 +103,19 @@ class TestFileBadTimeColumn:
     def test_missing_target_column_lists_available(self):
         ex = get_executor()
         with tempfile.TemporaryDirectory() as d:
-            path = os.path.join(d, "data.csv")
-            with open(path, "w", newline="") as f:
+            path = Path(d) / "data.csv"
+            with path.open("w", newline="") as f:
                 w = csv.writer(f)
                 w.writerow(["timestamp", "value"])
                 for i in range(5):
                     w.writerow([f"2024-01-0{i + 1}", i])
             res = ex.load_data_source(
-                {"type": "file", "path": path, "time_column": "timestamp", "target_column": "nope"}
+                {
+                    "type": "file",
+                    "path": str(path),
+                    "time_column": "timestamp",
+                    "target_column": "nope",
+                }
             )
         assert not res["success"]
         assert "nope" in res["error"]

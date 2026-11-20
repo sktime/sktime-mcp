@@ -103,6 +103,16 @@ class Settings:
         return _get_int_env("SKTIME_MCP_MAX_DATA_HANDLES", 50, minimum=1)
 
     @property
+    def max_horizon(self) -> int:
+        """
+        Maximum forecast horizon (steps) a predict / split_data call may request.
+        Larger horizons are rejected before any work starts (F-24).
+        Env Var: SKTIME_MCP_MAX_HORIZON
+        Default: 10000 (minimum 1; invalid values fall back to the default)
+        """
+        return _get_int_env("SKTIME_MCP_MAX_HORIZON", 10000, minimum=1)
+
+    @property
     def max_response_tokens(self) -> int:
         """
         Maximum tokens allowed per tool response; 0 means unlimited.
@@ -110,6 +120,47 @@ class Settings:
         Default: 0 (minimum: 0)
         """
         return _get_int_env("SKTIME_MCP_MAX_RESPONSE_TOKENS", 0, minimum=0)
+
+    # -- HTTP Transport Security --
+    @property
+    def http_token(self) -> str | None:
+        """
+        Bearer token required by the HTTP/SSE app.
+        Env Var: SKTIME_MCP_HTTP_TOKEN
+        Default: None (the HTTP app refuses to start unless insecure mode is on)
+        """
+        return os.environ.get("SKTIME_MCP_HTTP_TOKEN") or None
+
+    @property
+    def http_insecure(self) -> bool:
+        """
+        Allow the HTTP/SSE app to start without a token.
+        Env Var: SKTIME_MCP_HTTP_INSECURE
+        Default: False
+        """
+        return os.environ.get("SKTIME_MCP_HTTP_INSECURE", "false").lower() == "true"
+
+    @property
+    def http_allowed_hosts(self) -> list[str]:
+        """
+        Comma-separated Host header values accepted by the HTTP/SSE app.
+        Env Var: SKTIME_MCP_HTTP_ALLOWED_HOSTS
+        Default: "127.0.0.1,127.0.0.1:*,localhost,localhost:*"
+        """
+        raw = os.environ.get(
+            "SKTIME_MCP_HTTP_ALLOWED_HOSTS", "127.0.0.1,127.0.0.1:*,localhost,localhost:*"
+        )
+        return [host.strip() for host in raw.split(",") if host.strip()]
+
+    @property
+    def http_allowed_origins(self) -> list[str]:
+        """
+        Comma-separated Origin values accepted by the HTTP/SSE app (also the CORS allow-list).
+        Env Var: SKTIME_MCP_HTTP_ALLOWED_ORIGINS
+        Default: "" (no cross-origin browser access)
+        """
+        raw = os.environ.get("SKTIME_MCP_HTTP_ALLOWED_ORIGINS", "")
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
 settings = Settings()
