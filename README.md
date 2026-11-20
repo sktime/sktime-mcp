@@ -183,7 +183,7 @@ You can configure the server's behavior at runtime using environment variables:
 - `SKTIME_MCP_LOG_LEVEL`: Server logging verbosity level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Defaults to `WARNING`.
 - `SKTIME_MCP_AUTO_FORMAT`: Enables or disables automatic time-series formatting during data loading.
 - `SKTIME_MCP_JOB_MAX_AGE_HOURS`: Hours a finished background job is kept before cleanup (minimum `1`; running and pending jobs are never pruned). Defaults to `24`.
-- `SKTIME_MCP_MAX_HORIZON`: Maximum forecast horizon (steps) a `predict` or `split_data` call may request; larger horizons are rejected before any computation. Defaults to `10000`.
+- `SKTIME_MCP_MAX_HORIZON`: Maximum forecast horizon (steps) a `predict`, `split_data`, or `evaluate` call may request; larger horizons are rejected before any computation. Defaults to `10000`.
 
 ### Connecting from an LLM Client
 
@@ -272,7 +272,7 @@ The server can be configured via environment variables:
 | `SKTIME_MCP_HTTP_INSECURE` | Allow the HTTP/SSE app to start without a token (`true`/`false`) | `"false"` |
 | `SKTIME_MCP_HTTP_ALLOWED_HOSTS` | Comma-separated `Host` header values the HTTP/SSE app accepts (DNS-rebinding protection) | `"127.0.0.1,127.0.0.1:*,localhost,localhost:*"` |
 | `SKTIME_MCP_HTTP_ALLOWED_ORIGINS` | Comma-separated `Origin` values the HTTP/SSE app accepts, also used as the CORS allow-list | (None) |
-| `SKTIME_MCP_MAX_HORIZON` | Maximum forecast horizon (steps) for `predict` / `split_data`; larger requests are rejected up front | `10000` |
+| `SKTIME_MCP_MAX_HORIZON` | Maximum forecast horizon (steps) for `predict` / `split_data` / `evaluate`; larger requests are rejected up front | `10000` |
 | `SKTIME_MCP_MAX_DATA_HANDLES` | Maximum data handles before eviction; minimum `1` | `50` |
 | `SKTIME_MCP_MAX_RESPONSE_TOKENS` | Response token budget; `0` means unlimited | `0` |
 

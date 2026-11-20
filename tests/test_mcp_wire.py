@@ -324,3 +324,26 @@ async def test_nonfinite_tool_result_is_strict_json(monkeypatch):
 
     body = json.loads(text, parse_constant=reject_constant)
     assert body == {"success": True, "score": None, "values": [None, None]}
+
+
+async def test_evaluate_horizon_limit_is_enforced_over_mcp(monkeypatch):
+    from sktime.forecasting.naive import NaiveForecaster
+
+    from sktime_mcp.runtime.jobs import get_job_manager
+
+    executor = get_executor()
+    handle = executor._handle_manager.create_handle("NaiveForecaster", NaiveForecaster(), {})
+    monkeypatch.setenv("SKTIME_MCP_MAX_HORIZON", "12")
+    before = set(get_job_manager().jobs)
+    try:
+        async with _connected_session() as session:
+            result = await session.call_tool(
+                "evaluate",
+                {"estimator_handle": handle, "y": "airline", "fh": 10**9, "run_async": True},
+            )
+        body = _body(result)
+        assert not body["success"]
+        assert "SKTIME_MCP_MAX_HORIZON=12" in body["error"]
+        assert set(get_job_manager().jobs) == before
+    finally:
+        executor._handle_manager.release_handle(handle)

@@ -692,10 +692,13 @@ def get_tools() -> list[Tool]:
         Tool(
             name="evaluate",
             description=(
-                "Cross-validate an estimator on a dataset. "
-                "Dataset and data handle inputs supported for y and X. "
-                "If y is a data handle carrying exogenous columns and X is omitted, they are "
-                "used as X automatically; passing the same handle as y and X is refused."
+                "Cross-validate a forecaster with expanding-window CV. Each fold scores "
+                "fh steps (default 1), with cutoffs advanced by step_length. Without "
+                "initial_window, exactly cv_folds folds end at the final observation. "
+                "Horizon caps and fold geometry are checked before jobs or arrays are created. "
+                "Dataset and data handle inputs are supported for y and X. Exogenous "
+                "columns attached to the y handle are used automatically when X is omitted; "
+                "passing the same handle as y and X is refused."
             ),
             inputSchema={
                 "type": "object",
@@ -718,8 +721,13 @@ def get_tools() -> list[Tool]:
                     },
                     "cv_folds": {
                         "type": "integer",
-                        "description": "Number of cross-validation folds (default: 3). Ignored if initial_window is set.",
+                        "description": (
+                            "Number of cross-validation folds (default: 3). The series must "
+                            "have at least max(fh) + (cv_folds - 1) * step_length + 1 "
+                            "observations. Ignored if initial_window is set."
+                        ),
                         "default": 3,
+                        "minimum": 1,
                     },
                     "metric": {
                         "type": "string",
@@ -727,7 +735,34 @@ def get_tools() -> list[Tool]:
                     },
                     "initial_window": {
                         "type": "integer",
-                        "description": "Optional: initial training window size for expanding-window CV.",
+                        "description": (
+                            "Optional: initial training window size for expanding-window CV. "
+                            "When set, folds run from this window to the end of the series "
+                            "(cv_folds is ignored); must be <= len(y) - max(fh)."
+                        ),
+                        "minimum": 1,
+                    },
+                    "fh": {
+                        "type": ["integer", "array"],
+                        "items": {"type": "integer", "minimum": 1},
+                        "minItems": 1,
+                        "minimum": 1,
+                        "default": 1,
+                        "description": (
+                            "Forecast horizon scored in each fold, relative to the fold cutoff. "
+                            "Integer n: steps 1..n (e.g. 12 = a 12-step-ahead evaluation). "
+                            "List of ints: exactly those steps (e.g. [1, 6, 12]). Default 1. "
+                            "Maximum step is bounded by SKTIME_MCP_MAX_HORIZON."
+                        ),
+                    },
+                    "step_length": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 1,
+                        "description": (
+                            "Number of time steps the fold cutoff advances between folds "
+                            "(default 1). Larger values mean fewer refits."
+                        ),
                     },
                     "run_async": {
                         "type": "boolean",
@@ -1322,6 +1357,8 @@ async def call_tool(ctx: ServerRequestContext, params: CallToolRequestParams) ->
                 cv_folds=arguments.get("cv_folds", 3),
                 metric=arguments.get("metric"),
                 initial_window=arguments.get("initial_window"),
+                fh=arguments.get("fh", 1),
+                step_length=arguments.get("step_length", 1),
                 run_async=arguments.get("run_async", False),
             )
 
