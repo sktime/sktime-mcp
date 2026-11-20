@@ -62,17 +62,23 @@ def test_irregular_biweekly_not_expanded_to_daily():
 
 
 def test_gapped_15min_not_collapsed_to_one_day():
+    # Since #556 the gap is filled at the anchored "15min" frequency instead of
+    # being left alone; what matters is that no value is lost or replaced.
     ex = get_executor()
     idx = pd.date_range("2023-01-01 00:00", periods=20, freq="15min").delete(7)
-    src = _register(ex, "fmt_15min", idx)
+    values = [float(v) for v in range(19)]
+    src = _register(ex, "fmt_15min", idx, values)
     res = None
     try:
         res = ex.format_data_handle(src, release_original=False)
         assert res["success"], res
-        assert res["metadata"]["rows"] == 19
-        assert not res["changes_made"].get("frequency_set")
-        assert "frequency_warning" in res["changes_made"]
-        assert len(ex._data_handles[res["data_handle"]]["y"]) == 19
+        assert res["metadata"]["rows"] == 20
+        assert res["changes_made"]["frequency"] == "15min"
+        assert res["changes_made"]["gaps_filled"] == 1
+        y = ex._data_handles[res["data_handle"]]["y"]
+        assert len(y) == 20
+        assert not y.isna().any()
+        assert list(y.loc[idx.to_period("15min")]) == values
     finally:
         _pop(ex, src, res.get("data_handle") if res else None)
 
