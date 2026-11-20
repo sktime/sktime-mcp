@@ -304,3 +304,23 @@ async def test_sse_app_completes_initialize_and_serves_tools(tmp_path: Path):
     assert result.is_error is False
     assert _body(result)["success"] is True
     assert "Unexpected ASGI message" not in log_path.read_text()
+
+
+async def test_nonfinite_tool_result_is_strict_json(monkeypatch):
+    monkeypatch.setattr(
+        "sktime_mcp.server.query_registry_tool",
+        lambda **kwargs: {
+            "success": True,
+            "score": float("nan"),
+            "values": [float("inf"), float("-inf")],
+        },
+    )
+    async with _connected_session() as session:
+        result = await session.call_tool("query_registry", {})
+    text = result.content[0].text
+
+    def reject_constant(value):
+        raise AssertionError(f"Invalid JSON constant: {value}")
+
+    body = json.loads(text, parse_constant=reject_constant)
+    assert body == {"success": True, "score": None, "values": [None, None]}

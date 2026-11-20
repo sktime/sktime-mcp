@@ -307,7 +307,11 @@ def sanitize_for_json(obj, _seen=None):
         if isinstance(obj, np.integer):
             return int(obj)
         if isinstance(obj, np.floating):
-            return float(obj)
+            f = float(obj)
+            # JSON has no representation for NaN/Inf — map to null.
+            if f != f or f == float("inf") or f == float("-inf"):
+                return None
+            return f
         if isinstance(obj, np.bool_):
             return bool(obj)
         if isinstance(obj, np.ndarray):
@@ -339,6 +343,10 @@ def sanitize_for_json(obj, _seen=None):
         return {str(k): sanitize_for_json(v, _seen) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [sanitize_for_json(item, _seen) for item in obj]
+
+    # JSON has no non-finite numeric literals, including builtin Python floats.
+    if isinstance(obj, float):
+        return obj if obj == obj and obj not in (float("inf"), float("-inf")) else None
 
     # --- Already JSON-safe scalars ---
     if isinstance(obj, (str, int, float, bool, type(None))):
