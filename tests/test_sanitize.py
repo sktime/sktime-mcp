@@ -75,6 +75,11 @@ class TestPandasTypes:
         result = sanitize_for_json(df)
         json.dumps(result)
 
+    def test_index(self):
+        result = sanitize_for_json(pd.period_range("1949-01", periods=3, freq="M"))
+        assert isinstance(result, list) and len(result) == 3
+        json.dumps(result)
+
 
 class TestNestedToolOutput:
     """Realistic nested dicts like actual tool responses."""
@@ -135,19 +140,61 @@ class TestEdgeCases:
         assert sanitize_for_json({}) == {}
 
     def test_nan(self):
-        # NaN/Inf have no JSON representation; map to null so json.dumps
-        # works without the default=str escape hatch.
         assert sanitize_for_json(np.float64("nan")) is None
-        json.dumps(sanitize_for_json(np.float64("nan")))
+        json.dumps(sanitize_for_json(np.float64("nan")), allow_nan=False)
+
+    def test_circular_dict(self):
+        d = {"a": 1}
+        d["self"] = d
+        result = sanitize_for_json(d)
+        assert result["self"] == "<circular reference>"
+        json.dumps(result)
+
+    def test_circular_list(self):
+        lst = [1, 2]
+        lst.append(lst)
+        result = sanitize_for_json(lst)
+        assert result[2] == "<circular reference>"
+        json.dumps(result)
+
+    def test_indirect_cycle(self):
+        a = {}
+        b = {"a": a}
+        a["b"] = b
+        result = sanitize_for_json(a)
+        assert result["b"]["a"] == "<circular reference>"
+        json.dumps(result)
+
+    def test_sibling_containers_not_falsely_flagged(self):
+        shared = {"x": 1}
+        result = sanitize_for_json({"left": shared, "right": shared})
+        assert result == {"left": {"x": 1}, "right": {"x": 1}}
 
     def test_inf(self):
         assert sanitize_for_json(np.float64("inf")) is None
         assert sanitize_for_json(np.float64("-inf")) is None
-        json.dumps(sanitize_for_json(np.float64("inf")))
+        json.dumps(sanitize_for_json(np.float64("inf")), allow_nan=False)
 
     def test_nan_in_dict(self):
-        # Realistic case: a metric dict containing a NaN value must be
-        # JSON-serializable without raising.
         result = sanitize_for_json({"score": np.float64("nan"), "n": 10})
-        json.dumps(result)
+        json.dumps(result, allow_nan=False)
         assert result == {"score": None, "n": 10}
+
+    @pytest.mark.parametrize("number", [float("nan"), float("inf"), float("-inf")])
+    def test_builtin_nonfinite_values_are_null(self, number):
+        result = sanitize_for_json({"score": number, "nested": [number]})
+        assert result == {"score": None, "nested": [None]}
+        json.dumps(result, allow_nan=False)
+
+    def test_array_frame_and_index_use_strict_json(self):
+        result = sanitize_for_json(
+            {
+                "array": np.array([1.0, np.nan, np.inf]),
+                "frame": pd.DataFrame({"x": [1.0, np.nan, -np.inf]}),
+                "index": pd.Index([1.0, np.nan]),
+            }
+        )
+        json.dumps(result, allow_nan=False)
+        assert result["array"] == [1.0, None, None]
+        assert result["frame"] == [{"x": 1.0}, {"x": None}, {"x": None}]
+        assert result["index"] == [1.0, None]

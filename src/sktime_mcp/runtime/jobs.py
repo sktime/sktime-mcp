@@ -4,12 +4,17 @@ Job management for long-running operations in sktime MCP.
 Handles background training jobs with progress tracking and status updates.
 """
 
+import asyncio
+import logging
 import threading
 import uuid
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class JobStatus(Enum):
@@ -22,12 +27,17 @@ class JobStatus(Enum):
     CANCELLED = "cancelled"
 
 
+# Statuses after which a job can no longer change; only these are ever evicted
+# by cleanup_old_jobs.
+_TERMINAL_STATUSES = frozenset({JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED})
+
+
 @dataclass
 class JobInfo:
     """Information about a background job."""
 
     job_id: str
-    job_type: str  # "fit", "fit_predict", "transform", etc.
+    job_type: str  # "fit", "predict", "evaluate", "transform", etc.
     estimator_handle: str
     status: JobStatus = JobStatus.PENDING
     created_at: datetime = field(default_factory=datetime.now)
@@ -65,8 +75,16 @@ class JobInfo:
 
     @property
     def estimated_time_remaining(self) -> float | None:
-        """Estimate remaining time in seconds."""
+        """Estimate remaining time in seconds.
+
+        Only meaningful when progress is fine-grained. Jobs here have a handful
+        of coarse steps (load / run / summarize), so extrapolating from them
+        gave wildly wrong estimates (e.g. 15s remaining when the job finished in
+        under a second). Return None unless the job reports many steps.
+        """
         if self.status != JobStatus.RUNNING or self.completed_steps == 0:
+            return None
+        if self.total_steps < 10:
             return None
 
         elapsed = self.elapsed_time
@@ -127,6 +145,10 @@ class JobManager:
 
     def __init__(self):
         self.jobs: dict[str, JobInfo] = {}
+        # Retained references to the background asyncio tasks running each job,
+        # so cancel_job can actually cancel the running coroutine (not just flip
+        # the status). Keyed by job_id.
+        self._tasks: dict[str, Any] = {}
         self.lock = threading.Lock()
 
     def create_job(
@@ -142,7 +164,7 @@ class JobManager:
         Create a new job and return its ID.
 
         Args:
-            job_type: Type of job (fit, fit_predict, etc.)
+            job_type: Type of job (fit, predict, evaluate, etc.)
             estimator_handle: Handle of the estimator
             estimator_name: Name of the estimator
             dataset_name: Name of the dataset (if applicable)
@@ -166,6 +188,29 @@ class JobManager:
             )
 
         return job_id
+
+    def register_task(self, job_id: str, task: Any) -> None:
+        """Associate a background asyncio task with a job.
+
+        Retaining the task reference lets ``cancel_job`` cancel the running
+        coroutine, and prevents the event loop from garbage-collecting a
+        still-pending task. A done callback clears the reference and surfaces
+        any exception that would otherwise be swallowed by fire-and-forget.
+        """
+        with self.lock:
+            self._tasks[job_id] = task
+        task.add_done_callback(lambda t: self._on_task_done(job_id, t))
+
+    def _on_task_done(self, job_id: str, task: Any) -> None:
+        """Done callback: drop the task reference and log unhandled errors."""
+        with self.lock:
+            self._tasks.pop(job_id, None)
+        # A cancelled task raises on .exception(); nothing to report there.
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("Background job %s failed with an unhandled exception: %r", job_id, exc)
 
     def update_job(
         self,
@@ -195,6 +240,11 @@ class JobManager:
                 return False
 
             job = self.jobs[job_id]
+
+            # Cancelled jobs are terminal from the client's perspective.
+            # Ignore late updates from background work that may still be winding down.
+            if job.status == JobStatus.CANCELLED:
+                return True
 
             # Update status
             if status is not None:
@@ -241,16 +291,21 @@ class JobManager:
         self,
         status: JobStatus | None = None,
         limit: int | None = None,
+        offset: int = 0,
     ) -> list[JobInfo]:
         """
-        List all jobs, optionally filtered by status.
+        List jobs, optionally filtered by status, with offset/limit pagination.
+
+        Jobs are ordered newest-first, then ``offset`` items are skipped and up
+        to ``limit`` are returned. Use ``count_jobs`` for the total page count.
 
         Args:
             status: Filter by status (None = all jobs)
-            limit: Maximum number of jobs to return
+            limit: Maximum number of jobs to return (None = no limit)
+            offset: Number of jobs to skip from the start of the ordered list
 
         Returns:
-            List of JobInfo objects
+            List of JobInfo objects for the requested page
         """
         with self.lock:
             jobs = list(self.jobs.values())
@@ -262,11 +317,20 @@ class JobManager:
             # Sort by creation time (newest first)
             jobs.sort(key=lambda j: j.created_at, reverse=True)
 
-            # Apply limit
+            # Apply pagination: skip `offset`, then take up to `limit`
+            if offset:
+                jobs = jobs[offset:]
             if limit is not None:
                 jobs = jobs[:limit]
 
             return jobs
+
+    def count_jobs(self, status: JobStatus | None = None) -> int:
+        """Return the total number of jobs matching an optional status filter."""
+        with self.lock:
+            if status is None:
+                return len(self.jobs)
+            return sum(1 for j in self.jobs.values() if j.status == status)
 
     def cancel_job(self, job_id: str) -> bool:
         """
@@ -277,6 +341,13 @@ class JobManager:
 
         Returns:
             True if job was cancelled, False if not found or already completed
+
+        Notes:
+            Cancellation is cooperative. The background task is cancelled at its
+            next await point, which stops any remaining job steps. Work already
+            running inside a thread-pool executor (e.g. a single fit call) cannot
+            be force-killed and runs to completion, but its result is discarded
+            because update_job ignores late updates on a CANCELLED job.
         """
         with self.lock:
             if job_id not in self.jobs:
@@ -285,30 +356,56 @@ class JobManager:
             job = self.jobs[job_id]
 
             # Can only cancel pending or running jobs
-            if job.status in (JobStatus.PENDING, JobStatus.RUNNING):
-                job.status = JobStatus.CANCELLED
-                job.end_time = datetime.now()
-                return True
+            if job.status not in (JobStatus.PENDING, JobStatus.RUNNING):
+                return False
 
-            return False
+            job.status = JobStatus.CANCELLED
+            job.end_time = datetime.now()
+            # Terminal step label, so status doesn't stay frozen on the last
+            # in-flight message (e.g. "Running cross-validation...").
+            job.current_step = "Cancelled"
+            task = self._tasks.get(job_id)
+
+        # Cancel outside the lock: the task's done callback also takes the lock.
+        if task is not None and not task.done():
+            task.cancel()
+
+        return True
 
     def cleanup_old_jobs(self, max_age_hours: int = 24) -> int:
         """
-        Remove jobs older than max_age_hours.
+        Remove finished jobs that ended more than max_age_hours ago.
+
+        Only terminal jobs (COMPLETED, FAILED, CANCELLED) are eligible: a
+        PENDING or RUNNING job is never evicted here, however old, because
+        dropping its record would orphan the still-running task without
+        cancelling it. Use ``cancel_job`` for those.
 
         Args:
-            max_age_hours: Maximum age in hours
+            max_age_hours: Maximum age in hours; must be at least 1.
 
         Returns:
             Number of jobs removed
+
+        Raises:
+            ValueError: if max_age_hours is below 1 (a zero or negative age
+                would wipe every finished job, which is never intended).
         """
+        if max_age_hours < 1:
+            raise ValueError(f"max_age_hours must be >= 1, got {max_age_hours!r}")
+
         cutoff = datetime.now() - timedelta(hours=max_age_hours)
 
         with self.lock:
-            old_job_ids = [job_id for job_id, job in self.jobs.items() if job.created_at < cutoff]
+            old_job_ids = [
+                job_id
+                for job_id, job in self.jobs.items()
+                if job.status in _TERMINAL_STATUSES and (job.end_time or job.created_at) <= cutoff
+            ]
 
             for job_id in old_job_ids:
                 del self.jobs[job_id]
+                self._tasks.pop(job_id, None)
 
             return len(old_job_ids)
 
@@ -325,8 +422,63 @@ class JobManager:
         with self.lock:
             if job_id in self.jobs:
                 del self.jobs[job_id]
+                self._tasks.pop(job_id, None)
                 return True
             return False
+
+
+NO_EVENT_LOOP_ERROR = (
+    "run_async=true needs the MCP server's running asyncio event loop, but this call "
+    "was made from synchronous code with no event loop, so no background job was "
+    "created. Call the tool with run_async=false, or invoke it through the server."
+)
+
+
+def start_background_job(
+    job_manager: "JobManager",
+    make_coro: Callable[[str], Coroutine[Any, Any, Any]],
+    *,
+    job_type: str,
+    estimator_handle: str,
+    estimator_name: str | None = None,
+    dataset_name: str | None = None,
+    horizon: int | None = None,
+    total_steps: int = 3,
+) -> dict[str, Any]:
+    """Create a job and schedule ``make_coro(job_id)`` on the running event loop.
+
+    This is the single scheduling path for every ``run_async=True`` tool. When
+    no event loop is running (plain synchronous callers), it returns a
+    structured error *before* creating a job or a coroutine, so nothing runs
+    synchronously under the guise of a job and no coroutine is left un-awaited.
+
+    Returns ``{"success": True, "job_id": ..., "status": "running"}`` on
+    success, or ``{"success": False, "error": ...}``.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return {"success": False, "error": NO_EVENT_LOOP_ERROR}
+
+    job_id = job_manager.create_job(
+        job_type=job_type,
+        estimator_handle=estimator_handle,
+        estimator_name=estimator_name,
+        dataset_name=dataset_name,
+        horizon=horizon,
+        total_steps=total_steps,
+    )
+    coro = None
+    try:
+        coro = make_coro(job_id)
+        task = loop.create_task(coro)
+    except Exception as exc:
+        if coro is not None:
+            coro.close()
+        job_manager.delete_job(job_id)
+        return {"success": False, "error": f"Could not schedule background job: {exc}"}
+    job_manager.register_task(job_id, task)
+    return {"success": True, "job_id": job_id, "status": "running"}
 
 
 # Singleton instance

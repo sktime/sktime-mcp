@@ -6,13 +6,15 @@ and running fit/predict operations.
 """
 
 import asyncio
+import contextlib
 import inspect
 import logging
-import os
 import uuid
+from collections import deque
 from typing import Any
 
 import pandas as pd
+from pandas.tseries.frequencies import to_offset as _to_offset
 
 from sktime_mcp.registry.interface import get_registry
 from sktime_mcp.runtime.handles import get_handle_manager
@@ -26,7 +28,7 @@ logger = logging.getLogger(__name__)
 # load_* function in sktime.datasets to the MCP server.
 def _discover_demo_datasets() -> dict:
     """Return a mapping of dataset name -> dotted module path for every
-    ``load_*`` function exported by ``sktime.datasets``."""
+    zero-argument ``load_*`` function exported by ``sktime.datasets``."""
     try:
         import sktime.datasets as _ds_module
 
@@ -34,12 +36,410 @@ def _discover_demo_datasets() -> dict:
             name.removeprefix("load_"): f"sktime.datasets.{name}"
             for name, obj in inspect.getmembers(_ds_module, inspect.isfunction)
             if name.startswith("load_")
+            and all(
+                p.default is not inspect.Parameter.empty
+                for p in inspect.signature(obj).parameters.values()
+                if p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)
+            )
         }
     except Exception:  # pragma: no cover
         return {}  # fallback: empty dict if sktime not installed
 
 
-DEMO_DATASETS = _discover_demo_datasets()
+_DEMO_DATASETS: dict | None = None
+
+
+def _get_demo_datasets() -> dict:
+    """Lazy singleton — discovers datasets only on first call."""
+    global _DEMO_DATASETS
+    if _DEMO_DATASETS is None:
+        _DEMO_DATASETS = _discover_demo_datasets()
+    return _DEMO_DATASETS
+
+
+def _to_period_index_if_possible(obj: Any) -> Any:
+    """Return *obj* with a ``PeriodIndex`` when its index is a regular datetime index.
+
+    Seasonal sktime forecasters coerce the series index to a ``PeriodIndex``
+    internally (``index.to_period(freq)``) and raise on offset frequencies such
+    as ``MonthBegin`` ("MS"), which is what ``load_data_source`` produces for
+    monthly data. Demo datasets carry a ``PeriodIndex`` and work, so we
+    normalise handle-loaded data to match. ``to_period()`` is called with no
+    argument so pandas maps the offset to its period alias (MS -> "M"); passing
+    the offset string back in would re-raise the same error.
+
+    No-op for non-datetime indexes, ``PeriodIndex`` already, or an index with no
+    determinable frequency.
+    """
+    if obj is None or not hasattr(obj, "index"):
+        return obj
+    idx = obj.index
+    if isinstance(idx, pd.PeriodIndex) or not isinstance(idx, pd.DatetimeIndex):
+        return obj
+    try:
+        if idx.freq is None:
+            inferred = pd.infer_freq(idx)
+            if inferred is None:
+                return obj
+            idx = pd.DatetimeIndex(idx, freq=inferred)
+        converted = obj.copy()
+        months = _anchored_months(idx.freq)
+        if months is not None:
+            # Monthly data anchored mid-month (e.g. the 15th) carries a plain
+            # DateOffset(months=n) which has no period alias; map it to "M".
+            converted.index = idx.to_period("M" if months == 1 else f"{months}M")
+        else:
+            converted.index = idx.to_period()
+        return converted
+    except (ValueError, TypeError):
+        return obj
+
+
+def _anchored_months(freq: Any) -> int | None:
+    """Number of months in a plain ``pd.DateOffset(months=n)``; None for any other offset."""
+    if type(freq) is pd.DateOffset and set(freq.kwds) == {"months"}:
+        return int(freq.kwds["months"]) * int(freq.n)
+    return None
+
+
+def _infer_freq_from_regular_window(index: pd.DatetimeIndex, max_windows: int = 50) -> str | None:
+    """``pd.infer_freq`` over sliding 3-point windows; first recognised alias wins.
+
+    ``pd.infer_freq`` needs the whole index to be regular, so a single gap
+    defeats it. A 3-point window of consecutive timestamps is enough for pandas
+    to name anchored aliases such as ``W-MON``, ``30min``, ``QS-OCT`` or ``B``.
+    The caller still verifies the alias against the full index.
+    """
+    for start in range(0, min(max_windows, len(index) - 2)):
+        try:
+            inferred = pd.infer_freq(index[start : start + 3])
+        except (ValueError, TypeError):
+            inferred = None
+        if inferred is not None:
+            return inferred
+    return None
+
+
+def _step_matches_interval(index: pd.DatetimeIndex, freq: Any, interval: pd.Timedelta) -> bool:
+    """True if one *freq* step from the first timestamp is within 15% of *interval*.
+
+    Guards the window-inferred alias: three points one minute apart inside
+    30-minute data would otherwise suggest "min", and every timestamp *is* on a
+    minute boundary, so the subset check alone would let the series be blown
+    up 30-fold. Anchored offsets vary a little (28-31 days per month, 90-92 per
+    quarter), hence the tolerance.
+    """
+    try:
+        step = (index.min() + _to_offset(freq)) - index.min()
+    except (ValueError, TypeError, OverflowError):
+        return False
+    return abs(step - interval) <= 0.15 * interval
+
+
+def _candidate_frequencies(index: pd.DatetimeIndex, most_common_diff: pd.Timedelta) -> list[Any]:
+    """Frequencies worth trying for *index*, most specific first.
+
+    Every candidate is later checked with ``index.isin(pd.date_range(...))``;
+    nothing here is trusted on its own.
+    """
+    candidates: list[Any] = []
+    inferred = _infer_freq_from_regular_window(index)
+    if inferred is not None and _step_matches_interval(index, inferred, most_common_diff):
+        candidates.append(inferred)
+    days = most_common_diff.days
+    if most_common_diff == pd.Timedelta(days=7):
+        # Weekly anchored on the weekday of the first timestamp, not "W" (= W-SUN).
+        candidates.append(f"W-{index.min().strftime('%a').upper()}")
+    elif 28 <= days <= 31 and most_common_diff == pd.Timedelta(days=days):
+        # Monthly on an arbitrary day of the month (e.g. the 15th): pandas has
+        # no alias, but a DateOffset anchored on the first timestamp walks it.
+        candidates.append(pd.DateOffset(months=1))
+    elif most_common_diff > pd.Timedelta(0):
+        candidates.append(_to_offset(most_common_diff))
+    return candidates
+
+
+def _missing_values_report(y: Any, X: Any) -> dict[str, int]:
+    """Per-column NaN counts of the stored data, as plain ints (load-response shape)."""
+    report: dict[str, int] = {}
+    for obj in (y, X):
+        if obj is None:
+            continue
+        if isinstance(obj, pd.DataFrame):
+            report.update({str(col): int(n) for col, n in obj.isna().sum().items()})
+        else:
+            name = obj.name if getattr(obj, "name", None) is not None else "target"
+            report[str(name)] = int(obj.isna().sum())
+    return report
+
+
+# Max forecast rows returned inline before truncation (NB-22). Normal horizons
+# (<= a few dozen) are never affected; a 1000-step forecast would otherwise
+# flood the client with ~30KB+ of inline JSON.
+_MAX_PREDICTION_ROWS = 500
+
+# Dunder methods that are safe and useful to call via call_method (e.g. __call__
+# for callable metrics/aligners). Everything else starting with "_" is blocked
+# (BUG-11) — notably __reduce__/__class__/__getattribute__ and private methods.
+_ALLOWED_DUNDERS = frozenset({"__call__", "__len__", "__repr__", "__str__"})
+
+
+def _is_sktime_object(obj: Any) -> bool:
+    """True if *obj* is a genuine sktime estimator/object, not a bare value.
+
+    craft evaluates arbitrary specs, so a spec like "42" returns an int. Such
+    non-objects should not receive an estimator handle (BUG-10). We accept
+    anything deriving from skbase's BaseObject, falling back to a duck-typed
+    check for get_params + a scitype tag. A bare class (spec "NaiveForecaster"
+    without parentheses) has both attributes but is not an instance.
+    """
+    if isinstance(obj, type):
+        return False
+    try:
+        from skbase.base import BaseObject
+
+        if isinstance(obj, BaseObject):
+            return True
+    except Exception:  # pragma: no cover - skbase always present with sktime
+        pass
+    return hasattr(obj, "get_params") and hasattr(obj, "get_class_tag")
+
+
+def _column_names(X: Any) -> list[str]:
+    """Column names of an exogenous frame, for the ``exogenous`` response entry."""
+    if isinstance(X, pd.DataFrame):
+        return [str(c) for c in X.columns]
+    name = getattr(X, "name", None)
+    return [str(name)] if name is not None else []
+
+
+def _index_to_str(index: pd.Index) -> pd.Index:
+    """Stringify an index for JSON keys.
+
+    ``index.astype(str)`` raises on a MultiIndex (panel/hierarchical
+    forecasts, F-11); its levels are joined with "_", like the flattened
+    interval/quantile columns.
+    """
+    if isinstance(index, pd.MultiIndex):
+        return pd.Index(["_".join(map(str, key)) for key in index])
+    return index.astype(str)
+
+
+def _cap_prediction_rows(
+    result: dict, prediction_handle: str | None = None
+) -> tuple[dict, dict | None]:
+    """Cap an index-keyed prediction dict, returning (capped, truncation_note)."""
+    if not isinstance(result, dict) or len(result) <= _MAX_PREDICTION_ROWS:
+        return result, None
+    total = len(result)
+    kept = dict(list(result.items())[:_MAX_PREDICTION_ROWS])
+    if prediction_handle:
+        hint = (
+            f"the full forecast is stored in data handle '{prediction_handle}' "
+            "(prediction_handle): use save_data to write it to a file, plot_series to "
+            "plot it, or call_method on a metric with y_pred_data_handle to score it"
+        )
+    else:
+        hint = "request a smaller horizon"
+    note = {
+        "shown": _MAX_PREDICTION_ROWS,
+        "total": total,
+        "note": f"forecast truncated; {hint}",
+    }
+    return kept, note
+
+
+_PROBA_QUANTILES = [0.05, 0.5, 0.95]
+
+
+def _is_distribution(obj: Any) -> bool:
+    """True for a probability distribution as returned by predict_proba.
+
+    skpro and sktime (vendored ``sktime.base._proba``) both derive from a
+    ``BaseDistribution``; fall back to duck typing on mean/var/quantile,
+    excluding pandas objects which also have those methods.
+    """
+    if isinstance(obj, (pd.Series, pd.DataFrame)):
+        return False
+    for module in ("skpro.distributions.base", "sktime.base._proba._base"):
+        try:
+            base = __import__(module, fromlist=["BaseDistribution"]).BaseDistribution
+        except Exception:
+            continue
+        if isinstance(obj, base):
+            return True
+    return all(callable(getattr(obj, m, None)) for m in ("mean", "var", "quantile"))
+
+
+def _summarize_distribution(dist: Any) -> tuple[dict[str, Any], pd.DataFrame]:
+    """Numeric summary of a predict_proba distribution (F-23).
+
+    Returns the JSON-ready summary (``distribution`` class name, ``mean`` and
+    ``var`` keyed by time point, ``quantiles`` keyed by time point then level)
+    and a frame with the same values, columns flattened like interval
+    forecasts (``<var>_mean``, ``<var>_var``, ``<var>_0.05`` ...), for the
+    prediction handle. ``sanitize_for_json`` used to send back ``repr(dist)``.
+    """
+    mean = pd.DataFrame(dist.mean())
+    var = pd.DataFrame(dist.var())
+    if var.shape == mean.shape:
+        var.columns = mean.columns
+    quantiles = pd.DataFrame(dist.quantile(_PROBA_QUANTILES))
+    univariate = mean.shape[1] == 1
+
+    if isinstance(quantiles.columns, pd.MultiIndex):
+        levels = [str(col[-1]) for col in quantiles.columns.values]
+        flat = ["_".join(map(str, col)) for col in quantiles.columns.values]
+    else:
+        levels = flat = [str(col) for col in quantiles.columns]
+
+    frame = pd.concat([mean.add_suffix("_mean"), var.add_suffix("_var"), quantiles], axis=1)
+    frame.columns = [
+        *mean.add_suffix("_mean").columns,
+        *var.add_suffix("_var").columns,
+        *flat,
+    ]
+
+    index = list(_index_to_str(mean.index))
+    quantiles_json = quantiles.copy()
+    quantiles_json.columns = levels if univariate else flat
+    quantiles_json.index = index
+    if univariate:
+        mean_json = dict(zip(index, mean.iloc[:, 0].tolist(), strict=True))
+        var_json = dict(zip(index, var.iloc[:, 0].tolist(), strict=True))
+    else:
+        mean_json = mean.set_axis(index).to_dict(orient="index")
+        var_json = var.set_axis(index).to_dict(orient="index")
+    summary = {
+        "distribution": type(dist).__name__,
+        "mean": mean_json,
+        "var": var_json,
+        "quantiles": quantiles_json.to_dict(orient="index"),
+    }
+    return summary, frame
+
+
+def _get_index_frequency_metadata(
+    index: pd.Index,
+    fallback: str | None = None,
+) -> str | None:
+    """Return a stable frequency label for metadata without assuming datetime-only indexes."""
+    if isinstance(index, (pd.DatetimeIndex, pd.PeriodIndex)):
+        freq = getattr(index, "freq", None)
+        if freq is not None:
+            return str(freq)
+        inferred = pd.infer_freq(index)
+        if inferred is not None:
+            return inferred
+
+    return fallback
+
+
+def _resolve_metric_scoring(metric_name: str) -> Any | None:
+    """Return an instantiated sktime forecasting metric by name, or None if not found."""
+    try:
+        from sktime.registry import all_estimators
+    except ImportError:  # pragma: no cover
+        return None
+    try:
+        metrics_df = all_estimators("metric", as_dataframe=True)
+        row = metrics_df[metrics_df["name"] == metric_name]
+        if row.empty:
+            return None
+        return row.iloc[0]["object"]()
+    except Exception as e:
+        logger.warning(f"Failed to resolve metric '{metric_name}': {e}")
+        return None
+
+
+def _run_evaluate(
+    instance: Any,
+    y: Any,
+    X: Any,
+    cv_folds: int,
+    scoring: Any | None,
+    initial_window: int | None,
+) -> tuple[list[dict[str, Any]], dict[str, float], dict[str, dict[str, float]]]:
+    """
+    Run sktime.evaluate with an expanding-window splitter and summarize results.
+
+    Returns
+    -------
+    fold_results : list of dict
+        Per-fold rows from sktime.evaluate.
+    metrics : dict
+        Mean value per ``test_*`` metric column.
+    summary : dict
+        Mean, std, min, max per ``test_*`` metric column.
+    """
+    from sktime.forecasting.model_evaluation import evaluate
+
+    try:
+        from sktime.split import ExpandingWindowSplitter
+    except ImportError:  # pragma: no cover - sktime < 0.29
+        from sktime.forecasting.model_selection import ExpandingWindowSplitter
+
+    n = len(y)
+    if initial_window is not None:
+        if not 1 <= initial_window < n:
+            raise ValueError(
+                f"initial_window must be between 1 and n-1={n - 1} "
+                f"(series has {n} observations), got {initial_window}"
+            )
+        win = initial_window
+    else:
+        folds = int(cv_folds)
+        if not 1 <= folds <= n - 1:
+            raise ValueError(
+                f"cv_folds must be between 1 and n-1={n - 1} "
+                f"(series has {n} observations), got {folds}"
+            )
+        win = n - folds
+    cv = ExpandingWindowSplitter(initial_window=win, step_length=1, fh=[1])
+
+    # error_score="raise" — sktime's default (np.nan) swallows per-fold
+    # exceptions and reports success with all-NaN metrics
+    results = evaluate(forecaster=instance, y=y, X=X, cv=cv, scoring=scoring, error_score="raise")
+    if "estimator" in results.columns:
+        results = results.drop(columns=["estimator"])
+
+    fold_results = results.to_dict(orient="records")
+    metric_cols = [
+        c for c in results.select_dtypes(include="number").columns if c.startswith("test_")
+    ]
+    metrics = {c: float(results[c].mean()) for c in metric_cols}
+    summary = {
+        c: {
+            "mean": float(results[c].mean()),
+            "std": float(results[c].std()),
+            "min": float(results[c].min()),
+            "max": float(results[c].max()),
+        }
+        for c in metric_cols
+    }
+    return fold_results, metrics, summary
+
+
+def _merge_adapter_validation_warnings(
+    validation_report: dict[str, Any],
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge warnings added during adapter conversion into validation output."""
+    metadata_validation = metadata.get("validation")
+    if not isinstance(metadata_validation, dict):
+        return validation_report
+
+    metadata_warnings = metadata_validation.get("warnings", [])
+    if not metadata_warnings:
+        return validation_report
+
+    merged = validation_report.copy()
+    existing_warnings = list(merged.get("warnings", []))
+    for warning in metadata_warnings:
+        if warning not in existing_warnings:
+            existing_warnings.append(warning)
+    merged["warnings"] = existing_warnings
+    return merged
 
 
 class Executor:
@@ -53,66 +453,431 @@ class Executor:
         self._registry = get_registry()
         self._handle_manager = get_handle_manager()
         self._job_manager = get_job_manager()
-        self._data_handles = {}  # Store data handles
-        self._auto_format_enabled = (
-            os.environ.get("SKTIME_MCP_AUTO_FORMAT", "true").lower() == "true"
+        self._data_handles: dict[str, Any] = {}
+        # Tombstones for data handles evicted under the cap (see _cleanup_oldest_data).
+        self._evicted_data: deque[str] = deque(maxlen=1024)
+        from sktime_mcp.config import settings
+
+        self._max_data_handles = settings.max_data_handles
+        self._auto_format_enabled = settings.auto_format
+
+    def _cleanup_oldest_data(self, count: int = 10) -> None:
+        to_remove = list(self._data_handles.keys())[:count]
+        for handle_id in to_remove:
+            del self._data_handles[handle_id]
+            self._evicted_data.append(handle_id)
+            logger.info(
+                "Evicted data handle %s (limit %d reached)", handle_id, self._max_data_handles
+            )
+
+    def data_handle_missing(self, handle_id: str) -> dict[str, Any]:
+        """Error body for a missing data handle — distinguishes evicted from unknown.
+
+        Returns the ``error`` string plus the capped available-handles summary,
+        so callers can splat it into a not-found response.
+        """
+        if handle_id in self._evicted_data:
+            error = (
+                f"Data handle '{handle_id}' was evicted (handle limit "
+                f"{self._max_data_handles} reached); reload the source."
+            )
+        else:
+            error = f"Data handle '{handle_id}' not found"
+        return {"error": error, **self.summarize_available_handles()}
+
+    def _register_data_handle(self, handle_id: str, data: dict[str, Any]) -> None:
+        if len(self._data_handles) >= self._max_data_handles:
+            self._cleanup_oldest_data(count=max(1, self._max_data_handles // 5))
+        self._data_handles[handle_id] = data
+
+    def _register_prediction_handle(
+        self,
+        predictions: pd.Series | pd.DataFrame,
+        *,
+        estimator_handle: str,
+        mode: str,
+        horizon: int | None,
+        instance: Any,
+    ) -> str:
+        """Store a predict result as a data handle so it can be plotted, saved or scored (F-06).
+
+        Interval/quantile frames get the same flattened columns the JSON
+        response uses; the time index is kept as-is (not stringified) so the
+        handle plots and scores against a test split.
+        """
+        y = predictions.copy()
+        if isinstance(y, pd.DataFrame) and isinstance(y.columns, pd.MultiIndex):
+            y.columns = ["_".join(map(str, col)) for col in y.columns.values]
+
+        cutoff = getattr(instance, "cutoff", None)
+        if cutoff is not None and hasattr(cutoff, "__len__") and len(cutoff) == 1:
+            cutoff = cutoff[0]
+        if isinstance(y, pd.DataFrame):
+            columns = [str(c) for c in y.columns]
+        else:
+            columns = [str(y.name) if y.name is not None else "target"]
+
+        metadata: dict[str, Any] = {
+            "source": "prediction",
+            "estimator_handle": estimator_handle,
+            "mode": mode,
+            "horizon": horizon,
+            "cutoff": str(cutoff) if cutoff is not None else None,
+            "columns": columns,
+            "rows": len(y),
+            "start_date": str(y.index[0]) if len(y) else None,
+            "end_date": str(y.index[-1]) if len(y) else None,
+            "frequency": _get_index_frequency_metadata(y.index),
+        }
+        handle_id = f"data_{uuid.uuid4().hex[:8]}"
+        self._register_data_handle(
+            handle_id,
+            {"y": y, "X": None, "metadata": metadata, "validation": {}, "config": {}},
         )
+        return handle_id
+
+    def summarize_available_handles(self, limit: int = 5) -> dict[str, Any]:
+        """Capped view of data-handle ids for not-found error responses.
+
+        Returns the *limit* most recent handles plus the total count, so
+        error responses stay small and don't enumerate every handle in the
+        process.
+        """
+        handle_ids = list(self._data_handles.keys())
+        return {
+            "available_handles": handle_ids[-limit:],
+            "n_available_handles": len(handle_ids),
+        }
+
+    def _no_exog_error(self, handle_id: str) -> dict[str, Any]:
+        """Error body for a data handle used as X that carries no exogenous columns."""
+        return {
+            "success": False,
+            "error": (
+                f"Data handle '{handle_id}' has no exogenous columns: it holds only the "
+                "target series. Load the source with exog_columns=[...] in "
+                "load_data_source to attach exogenous features, or omit the X argument."
+            ),
+        }
+
+    def _no_dataset_exog_error(self, name: str) -> dict[str, Any]:
+        """Error body for a demo dataset used as X that carries no exogenous data."""
+        return {
+            "success": False,
+            "error": (
+                f"Demo dataset '{name}' has no exogenous data: it is a target series only "
+                "and cannot be used as X. Omit the X argument, or pick a dataset that "
+                "ships exogenous features (e.g. 'longley')."
+            ),
+        }
+
+    @staticmethod
+    def _ambiguous_slot_error(slot: str, handle: str, dataset: str) -> dict[str, Any]:
+        """Error body when both a data handle and a demo dataset name the same slot."""
+        return {
+            "success": False,
+            "error": (
+                f"Ambiguous {slot} input: both {slot}_handle='{handle}' and "
+                f"{slot}_dataset='{dataset}' were given. Pass exactly one of them."
+            ),
+        }
+
+    def _resolve_source(self, source: str, prefer: str = "y") -> dict[str, Any]:
+        """Resolve a source id to a series, trying data_handle then demo dataset.
+
+        ``prefer`` selects which component to return ("y" or "X"). "X" is the
+        stored exogenous frame of a data handle or the exogenous data of a
+        demo dataset — an error if the source has none (F-05 / #556 item 6:
+        it used to fall through to the target, so X == y silently regressed
+        the target on itself).
+        """
+        if source in self._data_handles:
+            if prefer == "X":
+                X = self._data_handles[source].get("X")
+                if X is None:
+                    return self._no_exog_error(source)
+                return {"success": True, "data": X}
+            return {"success": True, "data": self._data_handles[source]["y"]}
+        res = self.load_dataset(source)
+        if res["success"]:
+            if prefer == "X":
+                if res["X"] is None:
+                    return self._no_dataset_exog_error(source)
+                return {"success": True, "data": res["X"]}
+            data = res["y"] if res["y"] is not None else res["X"]
+            return {"success": True, "data": data}
+        return res
+
+    def _resolve_xy_inputs(
+        self,
+        *,
+        X_dataset: str | None = None,
+        y_dataset: str | None = None,
+        X_handle: str | None = None,
+        y_handle: str | None = None,
+        auto_X: bool = True,
+    ) -> dict[str, Any]:
+        """Resolve the fit/predict/update data arguments to ``X`` and ``y``.
+
+        ``X_handle`` resolves to the handle's exogenous frame, never its
+        target. With ``auto_X``, a ``y_handle`` that carries X supplies it when
+        no explicit X source is given (predict passes ``auto_X=False`` because
+        it needs *future* X). The result's ``exogenous`` entry
+        ({"handle", "columns"}) records X taken from a data handle, or is None.
+
+        A handle and a dataset for the same slot (``y_handle`` + ``y_dataset``,
+        ``X_handle`` + ``X_dataset``) is ambiguous and refused (#556 item 6:
+        the dataset used to win silently).
+        """
+        if y_handle and y_dataset:
+            return self._ambiguous_slot_error("y", y_handle, y_dataset)
+        if X_handle and X_dataset:
+            return self._ambiguous_slot_error("X", X_handle, X_dataset)
+        if X_handle and X_handle == y_handle:
+            return {
+                "success": False,
+                "error": (
+                    f"X_handle and y_handle name the same data handle '{X_handle}'. Pass "
+                    "only y_handle: the handle's stored exogenous columns are used as X "
+                    "automatically."
+                ),
+            }
+
+        X = None
+        y = None
+        exogenous = None
+
+        if X_handle:
+            if X_handle not in self._data_handles:
+                return {"success": False, **self.data_handle_missing(X_handle)}
+            x_res = self._resolve_source(X_handle, prefer="X")
+            if not x_res["success"]:
+                return x_res
+            X = x_res["data"]
+            exogenous = {"handle": X_handle, "columns": _column_names(X)}
+
+        if y_handle:
+            if y_handle not in self._data_handles:
+                return {"success": False, **self.data_handle_missing(y_handle)}
+            y = self._data_handles[y_handle]["y"]
+
+        if X_dataset and X_dataset == y_dataset:
+            data_res = self.load_dataset(X_dataset)
+            if not data_res["success"]:
+                return data_res
+            if data_res["X"] is None:
+                return self._no_dataset_exog_error(X_dataset)
+            y = data_res["y"]
+            X = data_res["X"]
+        else:
+            if X_dataset:
+                data_res = self.load_dataset(X_dataset)
+                if not data_res["success"]:
+                    return data_res
+                if data_res["X"] is None:
+                    return self._no_dataset_exog_error(X_dataset)
+                X = data_res["X"]
+
+            if y_dataset:
+                data_res = self.load_dataset(y_dataset)
+                if not data_res["success"]:
+                    return data_res
+                y = data_res["y"]
+
+        if auto_X and X is None and y_handle and not X_dataset:
+            stored = self._data_handles[y_handle].get("X")
+            if stored is not None:
+                X = stored
+                exogenous = {"handle": y_handle, "columns": _column_names(X)}
+
+        return {"success": True, "X": X, "y": y, "exogenous": exogenous}
+
+    def _resolve_evaluate_sources(self, y: str, X: str | None) -> dict[str, Any]:
+        """Resolve evaluate's ``y``/``X`` source ids (data handle or demo dataset).
+
+        Refuses ``X == y`` for a data handle (the target would be regressed on
+        itself) and, when ``X`` is omitted, uses the exogenous columns stored
+        on a ``y`` data handle. A demo dataset used as ``X`` must ship exogenous
+        data; it never falls back to its target (so ``X == y`` on a
+        target-only dataset such as 'airline' is refused too).
+        """
+        if X and y == X and y in self._data_handles:
+            return {
+                "success": False,
+                "error": (
+                    f"y and X name the same data handle '{y}', which would regress the "
+                    "target on itself (target leakage). Pass only y: the handle's stored "
+                    "exogenous columns are used as X automatically."
+                ),
+            }
+        y_res = self._resolve_source(y)
+        if not y_res["success"]:
+            return y_res
+        _X = None
+        exogenous = None
+        if X:
+            x_res = self._resolve_source(X, prefer="X")
+            if not x_res["success"]:
+                return x_res
+            _X = x_res["data"]
+            if X in self._data_handles:
+                exogenous = {"handle": X, "columns": _column_names(_X)}
+        elif y in self._data_handles:
+            stored = self._data_handles[y].get("X")
+            if stored is not None:
+                _X = stored
+                exogenous = {"handle": y, "columns": _column_names(_X)}
+        return {"success": True, "y": y_res["data"], "X": _X, "exogenous": exogenous}
 
     def instantiate(
         self,
-        estimator_name: str,
-        params: dict[str, Any] | None = None,
+        spec: str,
     ) -> dict[str, Any]:
-        """Instantiate an estimator and return a handle."""
-        node = self._registry.get_estimator_by_name(estimator_name)
-        if node is None:
-            return {"success": False, "error": f"Unknown estimator: {estimator_name}"}
+        """Instantiate an estimator or pipeline from a spec and return a handle."""
+        import importlib
+
+        importlib.invalidate_caches()
 
         try:
-            instance = node.class_ref(**(params or {}))
+            from sktime.utils.dependencies._dependencies import _get_installed_packages_private
+
+            _get_installed_packages_private.cache_clear()
+        except ImportError:
+            pass
+
+        import numpy as np
+        import pandas as pd
+        import sktime.registry._craft as _craft_module
+        from sktime.registry import craft
+
+        # Temporarily patch all_estimators to inject standard libraries into craft's registry.
+        # This allows users to pass callables like `numpy.exp` into estimators
+        # like CurveFitForecaster via the craft spec.
+        original_all = _craft_module.all_estimators
+
+        def mock_all_estimators(*args, **kwargs):
+            results = original_all(*args, **kwargs)
+            # results is a list of tuples: [(name, class), ...]
+            # We append numpy and pandas so they enter the register dict!
+            results.append(("np", np))
+            results.append(("numpy", np))
+            results.append(("pd", pd))
+            results.append(("pandas", pd))
+            return results
+
+        _craft_module.all_estimators = mock_all_estimators
+        try:
+            try:
+                instance = craft(spec)
+            finally:
+                _craft_module.all_estimators = original_all
+
+            # A bare class name ("NaiveForecaster") evaluates to the class;
+            # wrapping it in a handle made fit fail with "missing 1 required
+            # positional argument: 'y'" (#556 item 25).
+            if isinstance(instance, type):
+                name = instance.__name__
+                return {
+                    "success": False,
+                    "error": (
+                        f"Spec '{spec}' names the class {name} but does not "
+                        f"instantiate it. Call it with its parameters, e.g. "
+                        f"'{name}()' or '{name}(sp=12)'."
+                    ),
+                }
+
+            # Reject specs that don't produce an sktime object — e.g. "42",
+            # "[1,2,3]", "None" otherwise got est_ handles that failed
+            # confusingly downstream (BUG-10).
+            if not _is_sktime_object(instance):
+                return {
+                    "success": False,
+                    "error": (
+                        f"Spec did not produce an sktime estimator, got "
+                        f"{type(instance).__name__}. Provide a craft spec such as "
+                        "'NaiveForecaster(sp=12)' or 'Detrender() * ARIMA()'."
+                    ),
+                }
+
+            estimator_name = type(instance).__name__
             handle_id = self._handle_manager.create_handle(
                 estimator_name=estimator_name,
                 instance=instance,
-                params=params or {},
+                params={"spec": spec},
             )
             return {
                 "success": True,
                 "handle": handle_id,
                 "estimator": estimator_name,
-                "params": params or {},
+                "spec": spec,
             }
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            import sys
+
+            error_msg = str(e)
+            if (
+                "requires package" in error_msg
+                or "pip install" in error_msg
+                or "ModuleNotFoundError" in type(e).__name__
+            ):
+                error_msg += f"\n\n(Hint for AI: To install missing dependencies, use the server's exact python environment by running: `{sys.executable} -m pip install <package_name>`)"
+
+            logger.error("fit failed: %s", e, exc_info=True)
+            return {
+                "success": False,
+                "error": error_msg,
+            }
 
     # L-7: We can also add custom load_dataset functions here
     def load_dataset(self, name: str) -> dict[str, Any]:
-        """Load a demo dataset."""
-        if name not in DEMO_DATASETS:
+        """Load a demo dataset.
+
+        Returns canonical keys with one consistent meaning for every
+        dataset family: ``y`` is always the target/labels, ``X`` is always
+        the features/panel (or None).
+        """
+        demo_datasets = _get_demo_datasets()
+        if name not in demo_datasets:
             return {
                 "success": False,
                 "error": f"Unknown dataset: {name}",
-                "available": list(DEMO_DATASETS.keys()),
+                "available": list(demo_datasets.keys()),
             }
 
         try:
-            module_path = DEMO_DATASETS[name]
+            module_path = demo_datasets[name]
             parts = module_path.rsplit(".", 1)
             module = __import__(parts[0], fromlist=[parts[1]])
             loader = getattr(module, parts[1])
             data = loader()
 
             if isinstance(data, tuple):
-                y, X = data[0], data[1] if len(data) > 1 else None
+                # sktime classifier/clusterer datasets return (X-panel, y-labels)
+                # whereas forecaster datasets return (y-target, X-exog)
+                if name in (
+                    "arrow_head",
+                    "italy_power_demand",
+                    "basic_motions",
+                    "gunpoint",
+                    "osuleaf",
+                    "plaid",
+                ):
+                    X, y = data[0], data[1] if len(data) > 1 else None
+                    primary = X
+                else:
+                    y, X = data[0], data[1] if len(data) > 1 else None
+                    primary = y
             else:
                 y, X = data, None
+                primary = y
 
             return {
                 "success": True,
                 "name": name,
-                "shape": y.shape if hasattr(y, "shape") else len(y),
-                "type": str(type(y).__name__),
-                "data": y,
-                "exog": X,
+                "shape": primary.shape if hasattr(primary, "shape") else len(primary),
+                "type": str(type(primary).__name__),
+                "y": y,
+                "X": X,
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -126,21 +891,86 @@ class Executor:
     ) -> dict[str, Any]:
         """Fit an estimator."""
         try:
-            instance = self._handle_manager.get_instance(handle_id)
+            handle_info = self._handle_manager.get_info(handle_id)
+            instance = handle_info.instance
         except KeyError:
-            return {"success": False, "error": f"Handle not found: {handle_id}"}
+            return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
 
+        obj_type = getattr(instance, "get_class_tag", lambda x, y: "")("object_type", "")
+        if not hasattr(instance, "fit"):
+            return {
+                "success": False,
+                "error": f"The {obj_type or 'estimator'} scitype does not support fit(). Please use the 'call_method' tool to interact with its native methods.",
+            }
+
+        # Check scitype to determine how to call fit
+        # By default in sktime:
+        # - Forecasters: fit(y, X=None, fh=None)
+        # - Classifiers/Regressors: fit(X, y)
+        # - Transformers/Clusterers: fit(X, y=None)
+
+        is_classifier_or_regressor = False
+        is_transformer = False
+        if hasattr(instance, "get_class_tag"):
+            obj_type = instance.get_class_tag("object_type", "")
+            if obj_type in ("classifier", "regressor"):
+                is_classifier_or_regressor = True
+            elif obj_type == "transformer":
+                is_transformer = True
+
+        warnings_out = []
         try:
-            if fh is not None:
-                instance.fit(y, X=X, fh=fh)
-            elif X is not None:
-                instance.fit(y, X=X)
+            if is_classifier_or_regressor:
+                # With decoupled X and y handles, X is features and y is labels
+                instance.fit(X, y)
+            elif is_transformer:
+                if X is not None:
+                    instance.fit(y, X)
+                else:
+                    instance.fit(y)
+            elif obj_type == "detector":
+                # A detector annotates one series, which sktime calls X. It is
+                # the MCP target slot (y_handle/y_dataset), or the X slot when
+                # no target was given. fit(y, X=X) collided on X (F-10).
+                if y is not None:
+                    instance.fit(y)
+                    if X is not None:
+                        warnings_out.append(
+                            "X was ignored: a detector annotates a single series (y); "
+                            "it takes no exogenous data."
+                        )
+                else:
+                    instance.fit(X)
+            elif obj_type == "clusterer":
+                if y is not None:
+                    instance.fit(X, y)
+                else:
+                    instance.fit(X)
             else:
-                instance.fit(y)
+                # Assume forecaster or similar default.
+                # sktime 1.3 flips the ``remember_data`` config default to
+                # False, after which ``update`` on forecasters without a
+                # native update no longer refits on the accumulated data.
+                # Pin the current semantics so the ``update`` tool keeps
+                # behaving the same across sktime versions.
+                _set_config = getattr(instance, "set_config", None)
+                if callable(_set_config):
+                    with contextlib.suppress(Exception):  # older sktime lacks the key
+                        _set_config(remember_data=True)
+                if fh is not None:
+                    instance.fit(y, X=X, fh=fh)
+                elif X is not None:
+                    instance.fit(y, X=X)
+                else:
+                    instance.fit(y)
 
             self._handle_manager.mark_fitted(handle_id)
-            return {"success": True, "handle": handle_id, "fitted": True}
+            out = {"success": True, "handle": handle_id, "fitted": True}
+            if warnings_out:
+                out["warnings"] = warnings_out
+            return out
         except Exception as e:
+            logger.error("%s failed: %s", type(e).__name__, e, exc_info=True)
             return {"success": False, "error": str(e)}
 
     def predict(
@@ -148,388 +978,685 @@ class Executor:
         handle_id: str,
         fh: int | list[int] | None = None,
         X: Any | None = None,
+        y: Any | None = None,
+        mode: str = "predict",
+        coverage: float | list[float] = 0.9,
+        alpha: float | list[float] | None = None,
     ) -> dict[str, Any]:
         """Generate predictions."""
         try:
             instance = self._handle_manager.get_instance(handle_id)
         except KeyError:
-            return {"success": False, "error": f"Handle not found: {handle_id}"}
+            return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
+
+        obj_type = getattr(instance, "get_class_tag", lambda x, y: "")("object_type", "")
+        if (
+            not hasattr(instance, "predict")
+            and mode == "predict"
+            and not (hasattr(instance, "transform") and obj_type == "transformer")
+        ):
+            return {
+                "success": False,
+                "error": f"The {obj_type or 'estimator'} scitype does not support predict(). Please use the 'call_method' tool to interact with its native methods.",
+            }
+
+        if not self._handle_manager.is_fitted(handle_id):
+            return {"success": False, "error": "Estimator not fitted"}
+
+        is_classifier_or_regressor = False
+        is_transformer = False
+        if hasattr(instance, "get_class_tag"):
+            obj_type = instance.get_class_tag("object_type", "")
+            if obj_type in ("classifier", "regressor"):
+                is_classifier_or_regressor = True
+            elif obj_type in ("transformer", "clusterer"):
+                is_transformer = True
+        is_detector = obj_type == "detector"
+
+        # A forecaster fitted with X needs future X at predict; sktime otherwise
+        # raises an opaque KeyError on the horizon index (F-05).
+        if X is None and obj_type == "forecaster" and getattr(instance, "_X", None) is not None:
+            return {
+                "success": False,
+                "error": (
+                    "This forecaster was fitted with exogenous data (X) but predict got "
+                    "none. Future X covering the forecast horizon is required: pass "
+                    "X_handle (e.g. the test half from split_data) or X_dataset."
+                ),
+            }
+
+        dropped_y_warning = None
+        try:
+            if fh is None and not (is_classifier_or_regressor or is_transformer or is_detector):
+                fh = list(range(1, 13))
+
+            kwargs = {}
+            if X is not None:
+                kwargs["X"] = X
+            if y is not None and obj_type not in ("transformer", "detector"):
+                # For transformers and detectors y is the series itself (handled
+                # in their branches below). Forwarding it to a forecaster raised
+                # a raw "unexpected keyword argument 'y'" TypeError (NB-18):
+                # only pass it when predict accepts it. A transformer has no
+                # predict at all, so the signature lookup must not raise (F-31).
+                accepts_y = False
+                try:
+                    accepts_y = "y" in inspect.signature(instance.predict).parameters
+                except (ValueError, TypeError, AttributeError):
+                    accepts_y = False
+                if accepts_y:
+                    kwargs["y"] = y
+                else:
+                    dropped_y_warning = (
+                        f"y was ignored: {obj_type or 'this estimator'}.predict() does not "
+                        "accept y (it is only used by annotators/detectors)."
+                    )
+
+            if is_classifier_or_regressor:
+                # Classifiers take X in predict (X is the feature matrix)
+                # But instance.predict(X) is the signature.
+                # Since kwargs["X"] has it, we can just pass X positionally
+                if mode == "predict":
+                    predictions = instance.predict(X)
+                elif mode == "predict_proba":
+                    predictions = instance.predict_proba(X)
+                else:
+                    return {"success": False, "error": f"Mode {mode} not supported for {obj_type}"}
+            elif is_transformer:
+                if mode == "predict":
+                    if obj_type == "clusterer":
+                        # predict(fh=...) on a clusterer raised a raw TypeError (F-54)
+                        if X is None:
+                            return {
+                                "success": False,
+                                "error": (
+                                    "Clusterer predict needs the panel to assign clusters "
+                                    "to: pass X_handle or X_dataset."
+                                ),
+                            }
+                        predictions = instance.predict(X)
+                    else:
+                        # predict for a transformer is transform. The series is y
+                        # (as in fit, with X as extra data) or X alone; only the
+                        # X route used to work (F-31).
+                        if y is not None:
+                            predictions = (
+                                instance.transform(y, X) if X is not None else instance.transform(y)
+                            )
+                        elif X is not None:
+                            predictions = instance.transform(X)
+                        else:
+                            return {
+                                "success": False,
+                                "error": (
+                                    "Transformer predict (transform) needs the series to "
+                                    "transform: pass y_handle (as in fit) or X_handle."
+                                ),
+                            }
+                else:
+                    return {"success": False, "error": f"Mode {mode} not supported for {obj_type}"}
+            elif is_detector:
+                # Detectors have predict(X): the series to annotate, no fh (F-10).
+                if mode != "predict":
+                    return {
+                        "success": False,
+                        "error": (
+                            f"Mode {mode} not supported for detector. Use mode='predict' "
+                            "for the detection frame, or call_method with predict_points, "
+                            "predict_segments, predict_scores or transform."
+                        ),
+                    }
+                series = y if y is not None else X
+                if series is None:
+                    return {
+                        "success": False,
+                        "error": (
+                            "Detector predict needs the series to annotate: pass y_handle "
+                            "or y_dataset (as in fit; X_handle/X_dataset also work)."
+                        ),
+                    }
+                predictions = instance.predict(series)
+            else:
+                proba_modes = (
+                    "predict_interval",
+                    "predict_quantiles",
+                    "predict_proba",
+                    "predict_var",
+                )
+                get_tag = getattr(instance, "get_tag", None)
+                if (
+                    mode in proba_modes
+                    and get_tag is not None
+                    and not get_tag("capability:pred_int", True, raise_error=False)
+                ):
+                    # sktime raises "does not have the capability to return
+                    # fully probabilistic predictions ... open an issue" (F-23)
+                    return {
+                        "success": False,
+                        "error": (
+                            f"{type(instance).__name__} does not support {mode}: it has no "
+                            "probabilistic forecasting capability (capability:pred_int is "
+                            "False). Use mode='predict' for point forecasts, or a "
+                            "forecaster with interval support such as NaiveForecaster, "
+                            "ThetaForecaster or ARIMA."
+                        ),
+                    }
+                if mode == "predict":
+                    predictions = instance.predict(fh=fh, **kwargs)
+                elif mode == "predict_interval":
+                    predictions = instance.predict_interval(fh=fh, coverage=coverage, **kwargs)
+                elif mode == "predict_quantiles":
+                    predictions = instance.predict_quantiles(fh=fh, alpha=alpha, **kwargs)
+                elif mode == "predict_proba":
+                    try:
+                        predictions = instance.predict_proba(fh=fh, **kwargs)
+                    except NotImplementedError as e:
+                        return {
+                            "success": False,
+                            "error": (
+                                f"{type(instance).__name__} does not support predict_proba "
+                                f"here: {e}. Use mode='predict_interval' or "
+                                "'predict_quantiles' for its probabilistic forecasts."
+                            ),
+                        }
+                elif mode == "predict_var":
+                    predictions = instance.predict_var(fh=fh, **kwargs)
+                else:
+                    return {"success": False, "error": f"Unknown prediction mode: {mode}"}
+
+            from sktime_mcp.server import sanitize_for_json
+
+            is_forecast = not (is_classifier_or_regressor or is_transformer or is_detector)
+            # horizon is only meaningful for forecasters; echoing it for
+            # classifiers/regressors/transformers implied a truncation that
+            # didn't happen (N-01).
+            horizon = (len(fh) if hasattr(fh, "__len__") else fh) if is_forecast else None
+
+            # predict_proba returns a distribution object whose repr() was
+            # all the response carried (F-23): summarise it numerically; the
+            # summary frame is what the prediction handle stores.
+            distribution = None
+            if _is_distribution(predictions):
+                distribution, predictions = _summarize_distribution(predictions)
+
+            # Register the forecast as a data handle so it can be plotted,
+            # saved and scored (F-06). Non-frame results (ndarray from a
+            # classifier) are not handles.
+            prediction_handle = None
+            if isinstance(predictions, (pd.Series, pd.DataFrame)):
+                prediction_handle = self._register_prediction_handle(
+                    predictions,
+                    estimator_handle=handle_id,
+                    mode=mode,
+                    horizon=horizon,
+                    instance=instance,
+                )
+
+            truncated_note = None
+            if distribution is not None:
+                result = distribution
+                for key in ("mean", "var", "quantiles"):
+                    result[key], note = _cap_prediction_rows(result[key], prediction_handle)
+                    truncated_note = truncated_note or note
+            elif isinstance(predictions, pd.Series):
+                predictions_copy = predictions.copy()
+                predictions_copy.index = _index_to_str(predictions_copy.index)
+                result, truncated_note = _cap_prediction_rows(
+                    predictions_copy.to_dict(), prediction_handle
+                )
+            elif isinstance(predictions, pd.DataFrame):
+                predictions_copy = predictions.copy()
+                predictions_copy.index = _index_to_str(predictions_copy.index)
+                # Flatten multiindex columns (predict_interval/quantiles) for JSON.
+                if isinstance(predictions_copy.columns, pd.MultiIndex):
+                    predictions_copy.columns = [
+                        "_".join(map(str, col)) for col in predictions_copy.columns.values
+                    ]
+                # orient="index" keeps the time index as the key so interval /
+                # variance values map to time points, consistent with predict
+                # (NB-21). orient="list" dropped the index entirely.
+                result, truncated_note = _cap_prediction_rows(
+                    predictions_copy.to_dict(orient="index"), prediction_handle
+                )
+            else:
+                result = sanitize_for_json(predictions)
+
+            out = {
+                "success": True,
+                "mode": mode,
+            }
+            if is_forecast:
+                out["horizon"] = horizon
+            if prediction_handle:
+                out["prediction_handle"] = prediction_handle
+            if mode == "predict":
+                out["predictions"] = result
+            elif mode == "predict_interval":
+                out["intervals"] = result
+                out["coverage"] = coverage
+            elif mode == "predict_quantiles":
+                out["quantiles"] = result
+                out["alpha"] = alpha
+            else:
+                out["predictions"] = result
+            if truncated_note:
+                out["predictions_truncated"] = truncated_note
+            if dropped_y_warning:
+                out["warnings"] = [dropped_y_warning]
+            return out
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def predict_async(
+        self,
+        handle_id: str,
+        *,
+        horizon: int = 12,
+        mode: str = "predict",
+        coverage: float | list[float] = 0.9,
+        alpha: float | list[float] | None = None,
+        X_dataset: str | None = None,
+        y_dataset: str | None = None,
+        X_handle: str | None = None,
+        y_handle: str | None = None,
+        job_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Async version of predict with job tracking."""
+        try:
+            self._job_manager.update_job(job_id, status=JobStatus.RUNNING)
+
+            # Step 1: Load data
+            self._job_manager.update_job(job_id, completed_steps=0, current_step="Loading data...")
+            await asyncio.sleep(0.01)
+
+            # predict needs *future* X, so the y_handle's stored X is not reused
+            resolved = self._resolve_xy_inputs(
+                X_dataset=X_dataset,
+                y_dataset=y_dataset,
+                X_handle=X_handle,
+                y_handle=y_handle,
+                auto_X=False,
+            )
+            if not resolved["success"]:
+                raise ValueError(resolved["error"])
+            X, y = resolved["X"], resolved["y"]
+
+            fh = list(range(1, horizon + 1))
+
+            # Step 2: Generate predictions
+            self._job_manager.update_job(
+                job_id, completed_steps=1, current_step="Generating predictions..."
+            )
+            await asyncio.sleep(0.01)
+
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(
+                None,
+                lambda: self.predict(
+                    handle_id, fh=fh, X=X, y=y, mode=mode, coverage=coverage, alpha=alpha
+                ),
+            )
+
+            if not result.get("success"):
+                self._job_manager.update_job(
+                    job_id,
+                    status=JobStatus.FAILED,
+                    current_step="Prediction failed.",
+                    errors=[result.get("error", "Unknown error")],
+                )
+                return result
+
+            self._job_manager.update_job(
+                job_id,
+                status=JobStatus.COMPLETED,
+                completed_steps=2,
+                current_step="Prediction completed.",
+                result=result,
+            )
+            return result
+
+        except Exception as e:
+            self._job_manager.update_job(
+                job_id,
+                status=JobStatus.FAILED,
+                current_step="Prediction failed.",
+                errors=[str(e)],  # traceback logged server-side, not leaked to the client
+            )
+            return {"success": False, "error": str(e)}
+
+    def call_method(
+        self,
+        handle_id: str,
+        method_name: str,
+        kwargs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Dynamically call a method on the underlying estimator."""
+        try:
+            instance = self._handle_manager.get_instance(handle_id)
+        except KeyError:
+            return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
+
+        # Block private/dunder methods: they are not part of the estimator API
+        # and expose internals — e.g. __reduce__ dumps __dict__ including the
+        # fitted _y/_X training data to any caller (BUG-11).
+        if method_name.startswith("_") and method_name not in _ALLOWED_DUNDERS:
+            return {
+                "success": False,
+                "error": (
+                    f"Method '{method_name}' is private and not callable via call_method. "
+                    "Only public estimator methods are exposed."
+                ),
+            }
+
+        if not hasattr(instance, method_name):
+            obj_type = getattr(instance, "get_class_tag", lambda x, y: "")("object_type", "")
+            return {
+                "success": False,
+                "error": f"The {obj_type or 'estimator'} does not have a method '{method_name}'.",
+            }
+
+        kwargs = kwargs or {}
+
+        try:
+            method = getattr(instance, method_name)
+
+            # Map data_handle and dataset from kwargs if they exist
+            # This allows the LLM to pass 'dataset': 'airline' and we inject the actual data
+            for k, v in list(kwargs.items()):
+                if k.endswith("_dataset") and isinstance(v, str):
+                    data_res = self.load_dataset(v)
+                    if not data_res.get("success"):
+                        error_res = {
+                            "success": False,
+                            "error": data_res.get("error", f"Unknown dataset: {v}"),
+                        }
+                        if "available" in data_res:
+                            error_res["available"] = data_res["available"]
+                        return error_res
+                    # Replace the kwarg with the actual data (e.g. y_dataset -> y);
+                    # the prefix selects the dataset component
+                    actual_key = k.replace("_dataset", "")
+                    if actual_key == "X":
+                        if data_res["X"] is None:
+                            return self._no_dataset_exog_error(v)
+                        value = data_res["X"]
+                    else:
+                        value = data_res["y"]
+                    kwargs[actual_key] = value
+                    del kwargs[k]
+                elif k.endswith("_data_handle") and isinstance(v, str):
+                    if v in self._data_handles:
+                        actual_key = k.replace("_data_handle", "")
+                        kwargs[actual_key] = self._data_handles[v]["y"]
+                        del kwargs[k]
+                    else:
+                        return {"success": False, "error": f"Unknown data handle: {v}"}
+
+            result = method(**kwargs)
+
+            # Materialize generators (e.g. splitter.split) so the caller gets
+            # the actual values instead of a useless repr string
+            if inspect.isgenerator(result):
+                result = list(result)
+
+            from sktime_mcp.server import sanitize_for_json
+
+            if hasattr(result, "to_dict"):
+                if isinstance(result, __import__("pandas").DataFrame) and isinstance(
+                    result.columns, __import__("pandas").MultiIndex
+                ):
+                    result = result.copy()
+                    result.columns = ["_".join(map(str, col)) for col in result.columns.values]
+                    result = result.to_dict(orient="list")
+                else:
+                    result = result.to_dict()
+
+            return {"success": True, "result": sanitize_for_json(result)}
+        except Exception as e:
+            logger.error("%s failed: %s", type(e).__name__, e, exc_info=True)
+            return {"success": False, "error": str(e)}
+
+    def update(
+        self,
+        handle_id: str,
+        y: Any,
+        X: Any | None = None,
+        update_params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Update a fitted estimator with new data."""
+        try:
+            instance = self._handle_manager.get_instance(handle_id)
+        except KeyError:
+            return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
+
+        if not self._handle_manager.is_fitted(handle_id):
+            return {"success": False, "error": "Estimator not fitted"}
+
+        if y is None:
+            return {
+                "success": False,
+                "error": (
+                    "update requires new data — provide y_handle or y_dataset "
+                    "(and optionally X_handle/X_dataset)."
+                ),
+            }
+
+        # update mutates the live instance in place; snapshot fitted state so
+        # a rejected update does not leave the handle un-fitted
+        import copy
+
+        snapshot = copy.deepcopy(instance)
+
+        try:
+            kwargs = update_params or {}
+            if X is not None:
+                instance.update(y, X=X, **kwargs)
+            else:
+                instance.update(y, **kwargs)
+            return {
+                "success": True,
+                "handle": handle_id,
+                "message": "Estimator updated successfully",
+            }
+        except Exception as e:
+            self._handle_manager.replace_instance(handle_id, snapshot)
+            return {"success": False, "error": str(e)}
+
+    def get_fitted_params(self, handle_id: str) -> dict[str, Any]:
+        """Get fitted parameters from an estimator."""
+        try:
+            instance = self._handle_manager.get_instance(handle_id)
+        except KeyError:
+            return {"success": False, "error": self._handle_manager.describe_missing(handle_id)}
 
         if not self._handle_manager.is_fitted(handle_id):
             return {"success": False, "error": "Estimator not fitted"}
 
         try:
-            if fh is None:
-                fh = list(range(1, 13))
+            from sktime_mcp.server import sanitize_for_json
 
-            predictions = instance.predict(fh=fh, X=X) if X is not None else instance.predict(fh=fh)
-
-            if isinstance(predictions, pd.Series):
-                # Convert index to string to avoid JSON serialization issues with Period/DatetimeIndex
-                predictions_copy = predictions.copy()
-                predictions_copy.index = predictions_copy.index.astype(str)
-                result = predictions_copy.to_dict()
-            elif isinstance(predictions, pd.DataFrame):
-                predictions_copy = predictions.copy()
-                predictions_copy.index = predictions_copy.index.astype(str)
-                result = predictions_copy.to_dict(orient="list")
-            else:
-                result = predictions.tolist() if hasattr(predictions, "tolist") else predictions
-
-            return {
-                "success": True,
-                "predictions": result,
-                "horizon": len(fh) if hasattr(fh, "__len__") else fh,
-            }
+            params = instance.get_fitted_params()
+            return {"success": True, "fitted_params": sanitize_for_json(params)}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def fit_predict(
+    async def fit_async(
         self,
         handle_id: str,
-        dataset: str,
-        horizon: int = 12,
-        data_handle: str | None = None,
-    ) -> dict[str, Any]:
-        """Convenience method: load data, fit, and predict."""
-        if dataset and data_handle:
-            return {
-                "success": False,
-                "error": "Provide either 'dataset' or 'data_handle', not both.",
-            }
-
-        if data_handle is None and (not dataset or not str(dataset).strip()):
-            return {
-                "success": False,
-                "error": (
-                    "Either 'dataset' (e.g. 'airline') or "
-                    "'data_handle' (from load_data_source) is required."
-                ),
-            }
-        if data_handle is not None:
-            # Use custom loaded data
-            if data_handle not in self._data_handles:
-                return {
-                    "success": False,
-                    "error": f"Unknown data handle: {data_handle}",
-                    "available_handles": list(self._data_handles.keys()),
-                }
-            data_info = self._data_handles[data_handle]
-            y = data_info["y"]
-            X = data_info.get("X")
-        else:
-            # Use demo dataset
-            data_result = self.load_dataset(dataset)
-            if not data_result["success"]:
-                return data_result
-            y = data_result["data"]
-            X = data_result.get("exog")
-
-        fh = list(range(1, horizon + 1))
-
-        fit_result = self.fit(handle_id, y, X=X, fh=fh)
-        if not fit_result["success"]:
-            return fit_result
-
-        return self.predict(handle_id, fh=fh, X=X)
-
-    async def fit_predict_async(
-        self,
-        handle_id: str,
-        dataset: str | None = None,
-        data_handle: str | None = None,
-        horizon: int = 12,
+        X_dataset: str | None = None,
+        y_dataset: str | None = None,
+        X_handle: str | None = None,
+        y_handle: str | None = None,
+        fh: Any | None = None,
         job_id: str | None = None,
     ) -> dict[str, Any]:
-        """
-        Async version of fit_predict with job tracking.
-
-        Runs the training in the background without blocking the MCP server.
-        Accepts either a demo dataset name or a data handle from
-        load_data_source.
-
-        Args:
-            handle_id: Estimator handle
-            dataset: Demo dataset name
-            data_handle: Data handle from load_data_source
-            horizon: Forecast horizon
-            job_id: Optional job ID for tracking (created if not provided)
-
-        Returns:
-            Dictionary with success status and job_id
-        """
-        # Get estimator info for job tracking
+        """Async version of fit with job tracking."""
         try:
-            handle_info = self._handle_manager.get_info(handle_id)
-            estimator_name = handle_info.estimator_name
-        except Exception as e:
-            logger.warning(f"Could not get estimator name: {e}")
-            estimator_name = "Unknown"
+            import asyncio
 
-        source_name = dataset if dataset else data_handle
+            from sktime_mcp.runtime.jobs import JobStatus
 
-        # Create job if not provided
-        if job_id is None:
-            job_id = self._job_manager.create_job(
-                job_type="fit_predict",
-                estimator_handle=handle_id,
-                estimator_name=estimator_name,
-                dataset_name=source_name,
-                horizon=horizon,
-                total_steps=3,
-            )
-
-        try:
             # Update status to RUNNING
             self._job_manager.update_job(job_id, status=JobStatus.RUNNING)
 
             # Step 1: Load data
-            if data_handle:
-                # Use custom data from a loaded handle
-                self._job_manager.update_job(
-                    job_id,
-                    completed_steps=0,
-                    current_step=f"Loading data from handle '{data_handle}'...",
-                )
-                await asyncio.sleep(0.01)
+            self._job_manager.update_job(
+                job_id,
+                completed_steps=0,
+                current_step="Loading data...",
+            )
+            await asyncio.sleep(0.01)
 
-                if data_handle not in self._data_handles:
-                    self._job_manager.update_job(
-                        job_id,
-                        status=JobStatus.FAILED,
-                        errors=[f"Unknown data handle: {data_handle}"],
-                    )
-                    return {
-                        "success": False,
-                        "error": f"Unknown data handle: {data_handle}",
-                        "available_handles": list(self._data_handles.keys()),
-                    }
-
-                data_info = self._data_handles[data_handle]
-                y = data_info["y"]
-                X = data_info.get("X")
-            else:
-                # Use built-in demo dataset
-                self._job_manager.update_job(
-                    job_id,
-                    completed_steps=0,
-                    current_step=f"Loading dataset '{dataset}'...",
-                )
-                await asyncio.sleep(0.01)
-
-                data_result = self.load_dataset(dataset)
-                if not data_result["success"]:
-                    self._job_manager.update_job(
-                        job_id,
-                        status=JobStatus.FAILED,
-                        errors=[f"Failed to load dataset: {data_result.get('error')}"],
-                    )
-                    return data_result
-
-                y = data_result["data"]
-                X = data_result.get("exog")
-
-            fh = list(range(1, horizon + 1))
+            resolved = self._resolve_xy_inputs(
+                X_dataset=X_dataset, y_dataset=y_dataset, X_handle=X_handle, y_handle=y_handle
+            )
+            if not resolved["success"]:
+                raise ValueError(resolved["error"])
+            X, y = resolved["X"], resolved["y"]
 
             # Step 2: Fit model
             self._job_manager.update_job(
                 job_id,
                 completed_steps=1,
-                current_step=f"Fitting {estimator_name} on {source_name}...",
+                current_step="Fitting model (this may take a while)...",
             )
-            await asyncio.sleep(0.01)
 
-            loop = asyncio.get_event_loop()
-            fit_result = await loop.run_in_executor(
-                None, lambda: self.fit(handle_id, y, X=X, fh=fh)
-            )
+            # Run fit in thread pool so it doesn't block async loop
+            loop = asyncio.get_running_loop()
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+
+                def run_fit():
+                    return self.fit(handle_id, y, X=X, fh=fh)
+
+                fit_result = await loop.run_in_executor(pool, run_fit)
 
             if not fit_result["success"]:
-                self._job_manager.update_job(
-                    job_id,
-                    status=JobStatus.FAILED,
-                    errors=[f"Fit failed: {fit_result.get('error')}"],
-                )
-                return fit_result
+                raise ValueError(fit_result["error"])
 
-            # Step 3: Generate predictions
+            if X_dataset or y_dataset:
+                try:
+                    handle_info = self._handle_manager.get_info(handle_id)
+                    handle_info.metadata["training_dataset"] = y_dataset or X_dataset
+                except Exception:
+                    pass
+
             self._job_manager.update_job(
                 job_id,
+                status=JobStatus.COMPLETED,
                 completed_steps=2,
-                current_step=f"Generating predictions (horizon={horizon})...",
+                current_step="Training completed successfully.",
+                result={
+                    "success": True,
+                    "handle": handle_id,
+                    "fitted": True,
+                    **({"exogenous": resolved["exogenous"]} if resolved["exogenous"] else {}),
+                    **({"warnings": fit_result["warnings"]} if fit_result.get("warnings") else {}),
+                },
+            )
+            return {"success": True, "handle": handle_id}
+
+        except Exception as e:
+            from sktime_mcp.runtime.jobs import JobStatus
+
+            self._job_manager.update_job(
+                job_id,
+                status=JobStatus.FAILED,
+                current_step="Training failed.",
+                errors=[str(e)],  # traceback logged server-side, not leaked to the client
+            )
+            return {"success": False, "error": str(e)}
+
+    async def evaluate_async(
+        self,
+        handle_id: str,
+        y: str,
+        *,
+        X: str | None = None,
+        cv_folds: int = 3,
+        metric: str | None = None,
+        initial_window: int | None = None,
+        job_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Async version of evaluate with job tracking."""
+        try:
+            self._job_manager.update_job(job_id, status=JobStatus.RUNNING)
+
+            # Step 1: Load data
+            self._job_manager.update_job(job_id, completed_steps=0, current_step="Loading data...")
+            await asyncio.sleep(0.01)
+
+            try:
+                instance = self._handle_manager.get_instance(handle_id)
+            except KeyError as err:
+                raise ValueError(self._handle_manager.describe_missing(handle_id)) from err
+
+            sources = self._resolve_evaluate_sources(y, X)
+            if not sources["success"]:
+                raise ValueError(sources["error"])
+            _y, _X = sources["y"], sources["X"]
+
+            scoring = None
+            if metric:
+                scoring = _resolve_metric_scoring(metric)
+                if scoring is None:
+                    raise ValueError(
+                        f"Unknown metric: {metric}. "
+                        "Check available metrics with query_registry(task='metric')."
+                    )
+
+            # Step 2: Run cross-validation
+            self._job_manager.update_job(
+                job_id, completed_steps=1, current_step="Running cross-validation..."
             )
             await asyncio.sleep(0.01)
 
-            predict_result = await loop.run_in_executor(
-                None, lambda: self.predict(handle_id, fh=fh, X=X)
+            loop = asyncio.get_running_loop()
+            fold_results, metrics, summary = await loop.run_in_executor(
+                None,
+                lambda: _run_evaluate(instance, _y, _X, cv_folds, scoring, initial_window),
             )
 
-            if not predict_result["success"]:
-                self._job_manager.update_job(
-                    job_id,
-                    status=JobStatus.FAILED,
-                    errors=[f"Prediction failed: {predict_result.get('error')}"],
-                )
-                return predict_result
+            # Step 3: Summarize results
+            self._job_manager.update_job(
+                job_id, completed_steps=2, current_step="Summarizing results..."
+            )
+            await asyncio.sleep(0.01)
 
-            # Mark as completed
+            result = {
+                "success": True,
+                "metrics": metrics,
+                "fold_results": fold_results,
+                "summary": summary,
+                "cv_folds_run": len(fold_results),
+                "cv_folds_requested": cv_folds,
+            }
+            if sources["exogenous"]:
+                result["exogenous"] = sources["exogenous"]
             self._job_manager.update_job(
                 job_id,
                 status=JobStatus.COMPLETED,
                 completed_steps=3,
-                current_step="Completed",
-                result=predict_result,
+                current_step="Evaluation completed.",
+                result=result,
             )
-
-            return predict_result
+            return result
 
         except Exception as e:
-            logger.exception(f"Error in async fit_predict for job {job_id}")
-            self._job_manager.update_job(job_id, status=JobStatus.FAILED, errors=[str(e)])
-            return {"success": False, "error": str(e), "job_id": job_id}
+            self._job_manager.update_job(
+                job_id,
+                status=JobStatus.FAILED,
+                current_step="Evaluation failed.",
+                errors=[str(e)],  # traceback logged server-side, not leaked to the client
+            )
+            return {"success": False, "error": str(e)}
 
     # L-9: We can add more methods here to handle diverse use cases and their pipelines
-    def instantiate_pipeline(
-        self,
-        components: list[str],
-        params_list: list[dict[str, Any]] | None = None,
-    ) -> dict[str, Any]:
-        """
-        Instantiate a pipeline from a list of components.
-
-        Args:
-            components: List of estimator names in pipeline order
-            params_list: Optional list of parameter dicts for each component
-
-        Returns:
-            Dictionary with success status and handle
-        """
-        if not components:
-            return {"success": False, "error": "Pipeline cannot be empty"}
-
-        # Validate the pipeline first
-        from sktime_mcp.composition.validator import get_composition_validator
-
-        validator = get_composition_validator()
-        validation = validator.validate_pipeline(components)
-
-        if not validation.valid:
-            return {
-                "success": False,
-                "error": "Invalid pipeline composition",
-                "validation_errors": validation.errors,
-                "suggestions": validation.suggestions,
-            }
-
-        try:
-            # If only one component, just instantiate it directly
-            if len(components) == 1:
-                params = params_list[0] if params_list else {}
-                return self.instantiate(components[0], params)
-
-            # Build the pipeline
-            # Get all component nodes
-            component_instances = []
-            params_list = params_list or [{}] * len(components)
-
-            for i, comp_name in enumerate(components):
-                node = self._registry.get_estimator_by_name(comp_name)
-                if node is None:
-                    return {"success": False, "error": f"Unknown estimator: {comp_name}"}
-
-                params = params_list[i] if i < len(params_list) else {}
-                instance = node.class_ref(**params)
-                component_instances.append(instance)
-
-            # Determine the type of pipeline to create
-            # Check if all but last are transformers
-            all_transformers_except_last = all(
-                self._registry.get_estimator_by_name(comp).task == "transformation"
-                for comp in components[:-1]
-            )
-
-            final_task = self._registry.get_estimator_by_name(components[-1]).task
-
-            if all_transformers_except_last and final_task == "forecasting":
-                # Use TransformedTargetForecaster
-                from sktime.forecasting.compose import TransformedTargetForecaster
-
-                # Chain transformers if multiple
-                if len(component_instances) == 2:
-                    pipeline = TransformedTargetForecaster(
-                        [
-                            ("transformer", component_instances[0]),
-                            ("forecaster", component_instances[1]),
-                        ]
-                    )
-                else:
-                    # Multiple transformers - chain them
-                    from sktime.transformations.compose import TransformerPipeline
-
-                    transformer_pipeline = TransformerPipeline(
-                        [(f"step_{i}", comp) for i, comp in enumerate(component_instances[:-1])]
-                    )
-                    pipeline = TransformedTargetForecaster(
-                        [
-                            ("transformers", transformer_pipeline),
-                            ("forecaster", component_instances[-1]),
-                        ]
-                    )
-
-            elif all_transformers_except_last and final_task in ("classification", "regression"):
-                # Use sklearn-style Pipeline
-                from sktime.pipeline import Pipeline
-
-                pipeline = Pipeline(
-                    [(f"step_{i}", comp) for i, comp in enumerate(component_instances)]
-                )
-
-            elif all(
-                self._registry.get_estimator_by_name(comp).task == "transformation"
-                for comp in components
-            ):
-                # All transformers - use TransformerPipeline
-                from sktime.transformations.compose import TransformerPipeline
-
-                pipeline = TransformerPipeline(
-                    [(f"step_{i}", comp) for i, comp in enumerate(component_instances)]
-                )
-
-            else:
-                return {
-                    "success": False,
-                    "error": "Unsupported pipeline composition type",
-                    "hint": "Currently supports: transformers → forecaster, transformers → classifier/regressor, or transformer chains",
-                }
-
-            # Create a handle for the pipeline
-            pipeline_name = " → ".join(components)
-            handle_id = self._handle_manager.create_handle(
-                estimator_name=pipeline_name,
-                instance=pipeline,
-                params={"components": components, "params_list": params_list},
-            )
-
-            return {
-                "success": True,
-                "handle": handle_id,
-                "pipeline": pipeline_name,
-                "components": components,
-                "params_list": params_list,
-            }
-
-        except Exception as e:
-            import traceback
-
-            return {
-                "success": False,
-                "error": str(e),
-                "traceback": traceback.format_exc(),
-            }
 
     def list_datasets(self) -> list[str]:
         """List available demo datasets."""
-        return list(DEMO_DATASETS.keys())
+        return list(_get_demo_datasets().keys())
 
     def load_data_source(self, config: dict[str, Any]) -> dict[str, Any]:
         """
@@ -572,6 +1699,7 @@ class Executor:
 
             # Update metadata to reflect the target and used columns
             metadata = adapter.get_metadata().copy()
+            validation_report = _merge_adapter_validation_warnings(validation_report, metadata)
             metadata["columns"] = [y.name if hasattr(y, "name") and y.name else "target"]
             if X is not None:
                 metadata["exog_columns"] = list(X.columns)
@@ -580,27 +1708,32 @@ class Executor:
             # Generate handle
             data_handle = f"data_{uuid.uuid4().hex[:8]}"
 
-            # Store
-            self._data_handles[data_handle] = {
-                "y": y,
-                "X": X,
-                "metadata": metadata,
-                "validation": validation_report,
-                "config": config,  # Store config for reference
-            }
+            # Store (enforces max_data_handles limit)
+            self._register_data_handle(
+                data_handle,
+                {
+                    "y": y,
+                    "X": X,
+                    "metadata": metadata,
+                    "validation": validation_report,
+                    "config": config,
+                },
+            )
 
             # Apply auto-formatting if enabled
             if getattr(self, "_auto_format_enabled", True):
                 try:
                     format_result = self.format_data_handle(
-                        data_handle, auto_infer_freq=True, fill_missing=True, remove_duplicates=True
+                        data_handle,
+                        auto_infer_freq=True,
+                        fill_missing=True,
+                        remove_duplicates=True,
+                        release_original=True,
                     )
                     if format_result["success"]:
-                        # Return the NEW handle (formatted)
                         return {
                             "success": True,
                             "data_handle": format_result["data_handle"],
-                            "original_handle": data_handle,
                             "metadata": format_result["metadata"],
                             "validation": validation_report,
                             "formatted": True,
@@ -609,6 +1742,15 @@ class Executor:
                 except Exception as e:
                     logger.warning(f"Auto-formatting failed: {e}")
                     # Continue with unformatted data if formatting fails
+
+            # Auto-format disabled or failed: still normalise the stored handle to
+            # a PeriodIndex where possible so seasonal forecasters work (#531).
+            stored = self._data_handles.get(data_handle)
+            if stored is not None:
+                stored["y"] = _to_period_index_if_possible(stored["y"])
+                if stored.get("X") is not None:
+                    stored["X"] = _to_period_index_if_possible(stored["X"])
+
             _final_meta = adapter.get_metadata().copy()
             _final_meta["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
             return {
@@ -665,7 +1807,7 @@ class Executor:
 
             from sktime_mcp.data import DataSourceRegistry
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             adapter = DataSourceRegistry.create_adapter(config)
             data = await loop.run_in_executor(None, adapter.load)
 
@@ -695,6 +1837,7 @@ class Executor:
             y, X = adapter.to_sktime_format(data)
 
             metadata = adapter.get_metadata().copy()
+            validation_report = _merge_adapter_validation_warnings(validation_report, metadata)
             metadata["columns"] = [y.name if hasattr(y, "name") and y.name else "target"]
             if X is not None:
                 metadata["exog_columns"] = list(X.columns)
@@ -702,19 +1845,26 @@ class Executor:
             metadata["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
             data_handle = f"data_{uuid.uuid4().hex[:8]}"
 
-            self._data_handles[data_handle] = {
-                "y": y,
-                "X": X,
-                "metadata": metadata,
-                "validation": validation_report,
-                "config": config,
-            }
+            self._register_data_handle(
+                data_handle,
+                {
+                    "y": y,
+                    "X": X,
+                    "metadata": metadata,
+                    "validation": validation_report,
+                    "config": config,
+                },
+            )
 
             # auto-format if enabled
             if getattr(self, "_auto_format_enabled", True):
                 try:
                     format_result = self.format_data_handle(
-                        data_handle, auto_infer_freq=True, fill_missing=True, remove_duplicates=True
+                        data_handle,
+                        auto_infer_freq=True,
+                        fill_missing=True,
+                        remove_duplicates=True,
+                        release_original=True,
                     )
                     if format_result["success"]:
                         data_handle = format_result["data_handle"]
@@ -755,12 +1905,17 @@ class Executor:
         auto_infer_freq: bool = True,
         fill_missing: bool = True,
         remove_duplicates: bool = True,
+        release_original: bool = False,
     ) -> dict[str, Any]:
         """
         Format data associated with a handle.
+
+        The input handle is preserved unless ``release_original`` is True —
+        that flag is for internal auto-format-on-load, where the raw handle
+        was never exposed to the caller.
         """
         if data_handle not in self._data_handles:
-            return {"success": False, "error": f"Data handle '{data_handle}' not found"}
+            return {"success": False, **self.data_handle_missing(data_handle)}
 
         data_info = self._data_handles[data_handle]
         y = data_info["y"].copy()
@@ -772,101 +1927,137 @@ class Executor:
             "missing_filled": 0,
             "gaps_filled": 0,
         }
+        original_frequency = data_info["metadata"].get("frequency")
 
         # 1. Remove duplicates
         if remove_duplicates and y.index.duplicated().any():
-            n_duplicates = y.index.duplicated().sum()
+            n_duplicates = int(y.index.duplicated().sum())
             y = y[~y.index.duplicated(keep="first")]
             if X is not None:
                 X = X[~X.index.duplicated(keep="first")]
             changes_made["duplicates_removed"] = n_duplicates
 
-        # 2. Sort by index
+        # 2. Sort by index (report it, like the other repairs — NB-08)
+        if not y.index.is_monotonic_increasing:
+            changes_made["sorted"] = True
         y = y.sort_index()
         if X is not None:
             X = X.sort_index()
 
-        # 3. Infer and set frequency
-        if auto_infer_freq:
-            freq = y.index.freq
+        # 3. Infer and set frequency. Only a DatetimeIndex without a freq needs
+        # this (a PeriodIndex always carries one). Every candidate frequency is
+        # verified against the observed timestamps before reindexing: reindexing
+        # onto a mis-anchored range (monthly data on the 15th -> "MS", weekly
+        # Mondays -> "W" = W-SUN) used to replace every value with NaN (#556).
+        freq_to_set: Any = None
+        if (
+            auto_infer_freq
+            and isinstance(y.index, pd.DatetimeIndex)
+            and y.index.freq is None
+            and len(y) > 1
+        ):
+            most_common_diff = y.index.to_series().diff().dropna().mode()[0]
+            full_range = None
+            rejected: Any = None
+            for candidate in _candidate_frequencies(y.index, most_common_diff):
+                try:
+                    candidate_range = pd.date_range(
+                        start=y.index.min(), end=y.index.max(), freq=candidate
+                    )
+                except (ValueError, TypeError):
+                    continue
+                if y.index.isin(candidate_range).all():
+                    freq_to_set = candidate
+                    full_range = candidate_range
+                    break
+                if rejected is None:
+                    rejected = candidate
 
-            if freq is None:
-                # Try to infer
-                freq = pd.infer_freq(y.index)
-
-                if freq is None:
-                    # Manual inference
-                    time_diffs = y.index.to_series().diff().dropna()
-                    if len(time_diffs) > 0:
-                        most_common_diff = time_diffs.mode()[0]
-
-                        if most_common_diff == pd.Timedelta(days=1):
-                            freq = "D"
-                        elif most_common_diff == pd.Timedelta(hours=1):
-                            freq = "h"
-                        elif most_common_diff == pd.Timedelta(minutes=1):
-                            freq = "min"
-                        elif most_common_diff == pd.Timedelta(seconds=1):
-                            freq = "s"
-                        elif most_common_diff == pd.Timedelta(days=7):
-                            freq = "W"
-                        elif most_common_diff.days >= 28 and most_common_diff.days <= 31:
-                            freq = "MS"
-                        else:
-                            freq = "D"
-
-                # Create complete date range
-                if freq:
-                    full_range = pd.date_range(start=y.index.min(), end=y.index.max(), freq=freq)
-
-                    n_gaps = len(full_range) - len(y)
-
-                    y = y.reindex(full_range)
-                    if X is not None:
-                        X = X.reindex(full_range)
-
-                    changes_made["gaps_filled"] = n_gaps
-                    changes_made["frequency_set"] = True
-                    changes_made["frequency"] = freq
+            if full_range is not None:
+                # index is a subset of full_range, so this never drops a value
+                # and n_gaps is never negative.
+                n_gaps = int(len(full_range) - len(y))
+                y = y.reindex(full_range)
+                if X is not None:
+                    X = X.reindex(full_range)
+                changes_made["gaps_filled"] = n_gaps
+                changes_made["frequency_set"] = True
+                months = _anchored_months(freq_to_set)
+                if months is not None:
+                    changes_made["frequency"] = "M" if months == 1 else f"{months}M"
+                    changes_made["frequency_warning"] = (
+                        f"Monthly timestamps fall on day {y.index.min().day} of the month, "
+                        f"which pandas cannot express as a frequency; the index was aligned "
+                        f"to monthly periods ('{changes_made['frequency']}'). "
+                        f"Values were kept; {n_gaps} gap(s) filled."
+                    )
+                else:
+                    changes_made["frequency"] = getattr(freq_to_set, "freqstr", freq_to_set)
+            elif rejected is not None:
+                changes_made["frequency_warning"] = (
+                    f"Inferred frequency '{getattr(rejected, 'freqstr', rejected)}' "
+                    f"(most common interval {most_common_diff}) does not align with the "
+                    f"observed timestamps. Reindexing skipped; the series was left unchanged."
+                )
+            else:
+                changes_made["frequency_warning"] = (
+                    f"Could not determine frequency from most common interval "
+                    f"({most_common_diff}). Reindexing skipped."
+                )
 
         # 4. Fill missing values
-        if fill_missing and y.isna().any():
-            n_missing = y.isna().sum()
+        if fill_missing and y.isna().any(axis=None):
+            n_missing = (
+                int(y.isna().sum().sum()) if isinstance(y, pd.DataFrame) else int(y.isna().sum())
+            )
             y = y.ffill().bfill()
             if X is not None:
                 X = X.ffill().bfill()
             changes_made["missing_filled"] = n_missing
 
-        # 5. Set frequency explicitly on index
-        if hasattr(y.index, "freq") and changes_made.get("frequency"):
-            y.index.freq = changes_made["frequency"]
+        # 5. Set frequency explicitly on index (reindex already did; ffill/bfill keep it)
+        if freq_to_set is not None and isinstance(y.index, pd.DatetimeIndex):
+            y.index.freq = freq_to_set
             if X is not None:
-                X.index.freq = changes_made["frequency"]
+                X.index.freq = freq_to_set
+
+        # 6. Normalise a regular DatetimeIndex to PeriodIndex so seasonal
+        # forecasters can predict on handle-loaded data (#531).
+        y = _to_period_index_if_possible(y)
+        if X is not None:
+            X = _to_period_index_if_possible(X)
 
         # Generate new handle
         new_handle = f"data_{uuid.uuid4().hex[:8]}"
 
-        # Store formatted data
-        self._data_handles[new_handle] = {
+        new_data = {
             "y": y,
             "X": X,
             "metadata": {
                 **data_info["metadata"],
                 "formatted": True,
-                "frequency": str(y.index.freq) if y.index.freq else changes_made.get("frequency"),
+                "frequency": _get_index_frequency_metadata(
+                    y.index,
+                    fallback=changes_made.get("frequency") or original_frequency,
+                ),
                 "rows": len(y),
                 "start_date": str(y.index.min()),
                 "end_date": str(y.index.max()),
+                "missing_values": _missing_values_report(y, X),
             },
             "validation": data_info.get("validation", {}),
             "config": data_info.get("config", {}),
             "original_handle": data_handle,
         }
+        self._register_data_handle(new_handle, new_data)
+
+        if release_original and data_handle in self._data_handles:
+            del self._data_handles[data_handle]
 
         return {
             "success": True,
             "data_handle": new_handle,
-            "metadata": self._data_handles[new_handle]["metadata"],
+            "metadata": new_data["metadata"],
             "changes_made": changes_made,
         }
 
@@ -912,7 +2103,7 @@ class Executor:
         else:
             return {
                 "success": False,
-                "error": f"Data handle '{data_handle}' not found",
+                "error": self.data_handle_missing(data_handle)["error"],
             }
 
 

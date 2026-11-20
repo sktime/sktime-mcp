@@ -1,76 +1,198 @@
 """
 evaluate tool for sktime MCP.
 
-Executes cross-validation on an estimator.
+Cross-validates an estimator on a dataset.
 """
 
 import logging
 from typing import Any
 
-from sktime.forecasting.model_evaluation import evaluate
-
-try:
-    from sktime.split import ExpandingWindowSplitter
-except ImportError:  # pragma: no cover - sktime < 0.29
-    from sktime.forecasting.model_selection import ExpandingWindowSplitter
-
-from sktime_mcp.runtime.executor import get_executor
+from sktime_mcp.runtime.executor import _resolve_metric_scoring, _run_evaluate, get_executor
+from sktime_mcp.runtime.jobs import get_job_manager, start_background_job
 
 logger = logging.getLogger(__name__)
 
 
-def evaluate_estimator_tool(
-    estimator_handle: str,
-    dataset: str,
-    cv_folds: int = 3,
-) -> dict[str, Any]:
-    """
-    Evaluate an estimator using cross-validation.
+def _validate_evaluate_inputs(executor, estimator_handle: str, y: str) -> dict[str, Any] | None:
+    """Reject non-forecasters and non-Series targets before any CV work.
 
-    Args:
-        estimator_handle: Handle from instantiate_estimator
-        dataset: Name of demo dataset
-        cv_folds: Number of folds for Splitter
-
-    Returns:
-        Dictionary with cross-validation results
+    Returns an error dict to short-circuit on, or None when inputs are valid.
+    Cross-validation here uses an ExpandingWindowSplitter and forecasting
+    metrics, which only make sense for a forecaster on a single Series.
     """
-    executor = get_executor()
+    import pandas as pd
 
     try:
         instance = executor._handle_manager.get_instance(estimator_handle)
     except KeyError:
-        return {"success": False, "error": f"Handle not found: {estimator_handle}"}
+        return {
+            "success": False,
+            "error": executor._handle_manager.describe_missing(estimator_handle),
+        }
 
-    data_result = executor.load_dataset(dataset)
-    if not data_result["success"]:
-        return data_result
+    get_tag = getattr(instance, "get_class_tag", None)
+    obj_type = get_tag("object_type", "") if callable(get_tag) else ""
+    if obj_type != "forecaster":
+        return {
+            "success": False,
+            "error": (
+                f"evaluate cross-validates forecasters, but this handle is a "
+                f"{obj_type or 'non-forecaster object'}. Use call_method for "
+                "non-forecaster estimators."
+            ),
+        }
 
-    y = data_result["data"]
-    X = data_result.get("exog")
+    # Resolve y and confirm it is a numeric Series (not Panel/Hierarchical, and
+    # not categorical label data from a classification dataset).
+    y_res = executor._resolve_source(y)
+    if not y_res["success"]:
+        return y_res
+    _y = y_res["data"]
+    try:
+        from sktime.datatypes import check_is_scitype
+
+        is_series = check_is_scitype(_y, scitype="Series", return_metadata=[])[0]
+    except Exception:
+        is_series = True  # let the downstream run surface an unusual case
+    if not is_series:
+        return {
+            "success": False,
+            "error": (
+                "evaluate expects a univariate/Series target, but the given y is Panel "
+                "or Hierarchical scitype. Forecasting CV is not defined for panel data."
+            ),
+        }
+
+    import numpy as np
+
+    if isinstance(_y, pd.Series):
+        numeric = pd.api.types.is_numeric_dtype(_y)
+    elif isinstance(_y, pd.DataFrame):
+        numeric = all(pd.api.types.is_numeric_dtype(_y[c]) for c in _y.columns)
+    elif isinstance(_y, np.ndarray):
+        numeric = np.issubdtype(_y.dtype, np.number)
+    else:
+        numeric = True
+    if not numeric:
+        return {
+            "success": False,
+            "error": (
+                f"evaluate needs a numeric forecasting target, but y '{y}' is non-numeric "
+                "(categorical/label data — this looks like classification data, not a "
+                "forecasting series)."
+            ),
+        }
+    return None
+
+
+def evaluate_tool(
+    estimator_handle: str,
+    y: str,
+    X: str | None = None,
+    cv_folds: int = 3,
+    metric: str | None = None,
+    initial_window: int | None = None,
+    run_async: bool = False,
+) -> dict[str, Any]:
+    """
+    Cross-validate an estimator on a dataset.
+
+    y and X accept data_handle ids or built-in demo dataset names.
+    Set run_async=True to run as a background job.
+    """
+    if initial_window is None and cv_folds < 1:
+        return {
+            "success": False,
+            "error": f"cv_folds must be a positive integer, got {cv_folds}",
+        }
+    if initial_window is not None and initial_window < 1:
+        return {
+            "success": False,
+            "error": f"initial_window must be a positive integer, got {initial_window}",
+        }
+
+    executor = get_executor()
+
+    # Scitype validation up front, so async calls reject synchronously instead
+    # of burning a background job on invalid inputs (#535).
+    invalid = _validate_evaluate_inputs(executor, estimator_handle, y)
+    if invalid is not None:
+        return invalid
+
+    # X=<handle> resolves to that handle's exogenous columns, a y handle's
+    # stored X is used when X is omitted, and X == y (a handle) is refused as
+    # target leakage (F-05). Resolved here so async calls reject synchronously.
+    sources = executor._resolve_evaluate_sources(y, X)
+    if not sources["success"]:
+        return sources
+
+    if run_async:
+        # _validate_evaluate_inputs already rejected a missing handle; this
+        # only guards the window between that check and job creation.
+        try:
+            estimator_name = executor._handle_manager.get_info(estimator_handle).estimator_name
+        except KeyError:
+            return {
+                "success": False,
+                "error": executor._handle_manager.describe_missing(estimator_handle),
+            }
+
+        return start_background_job(
+            get_job_manager(),
+            lambda job_id: executor.evaluate_async(
+                handle_id=estimator_handle,
+                y=y,
+                X=X,
+                cv_folds=cv_folds,
+                metric=metric,
+                initial_window=initial_window,
+                job_id=job_id,
+            ),
+            job_type="evaluate",
+            estimator_handle=estimator_handle,
+            estimator_name=estimator_name,
+            dataset_name=y,
+            total_steps=3,
+        )
 
     try:
-        n = len(y)
-        folds = max(1, min(int(cv_folds), max(1, n - 1)))
-        # Exactly `folds` backtest windows: train grows, last fold uses n-1 obs before last point.
-        initial_window = max(1, n - folds)
-        cv = ExpandingWindowSplitter(initial_window=initial_window, step_length=1, fh=[1])
-
-        results = evaluate(forecaster=instance, y=y, X=X, cv=cv)
-
-        # Convert index or objects to strings suitable for JSON output if needed
-        # We drop objects that are complex (like estimator instances themselves) from the output
-        if "estimator" in results.columns:
-            results = results.drop(columns=["estimator"])
-
-        metrics = results.to_dict(orient="records")
-
+        instance = executor._handle_manager.get_instance(estimator_handle)
+    except KeyError:
         return {
-            "success": True,
-            "results": metrics,
-            "cv_folds_run": len(metrics),
-            "cv_folds_requested": int(cv_folds),
+            "success": False,
+            "error": executor._handle_manager.describe_missing(estimator_handle),
         }
+
+    _y, _X = sources["y"], sources["X"]
+
+    scoring = None
+    if metric:
+        scoring = _resolve_metric_scoring(metric)
+        if scoring is None:
+            return {
+                "success": False,
+                "error": (
+                    f"Unknown metric: {metric}. "
+                    "Check available metrics with query_registry(task='metric')."
+                ),
+            }
+
+    try:
+        fold_results, metrics, summary = _run_evaluate(
+            instance, _y, _X, cv_folds, scoring, initial_window
+        )
     except Exception as e:
         logger.exception("Error during evaluate")
         return {"success": False, "error": str(e)}
+
+    result = {
+        "success": True,
+        "metrics": metrics,
+        "fold_results": fold_results,
+        "summary": summary,
+        "cv_folds_run": len(fold_results),
+        "cv_folds_requested": cv_folds,
+    }
+    if sources["exogenous"]:
+        result["exogenous"] = sources["exogenous"]
+    return result

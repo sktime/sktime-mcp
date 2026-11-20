@@ -12,63 +12,110 @@ from sktime_mcp.runtime.executor import get_executor
 logger = logging.getLogger(__name__)
 
 
-def load_data_source_tool(config: dict[str, Any]) -> dict[str, Any]:
-    """
-    Load data from any source (pandas, SQL, file, etc.).
+def load_data_source_tool(
+    config: dict[str, Any],
+    run_async: bool = False,
+) -> dict[str, Any]:
+    """Load data from any source (pandas, SQL, file, etc.).
 
-    Args:
-        config: Data source configuration
-            {
-                "type": "pandas" | "sql" | "file" | "url",
-                ... (type-specific configuration)
-            }
+    Can run synchronously (blocking) or asynchronously in the background.
 
-    Returns:
-        Dictionary with:
-        - success: bool
-        - data_handle: str (handle ID for the loaded data)
-        - metadata: dict (information about the data)
-        - validation: dict (validation results)
+    Parameters
+    ----------
+    config : dict
+        Data source configuration dictionary. Must contain:
 
-    Examples:
-        # Pandas DataFrame
-        >>> load_data_source_tool({
-        ...     "type": "pandas",
-        ...     "data": {"date": [...], "value": [...]},
-        ...     "time_column": "date",
-        ...     "target_column": "value"
-        ... })
+        - ``"type"`` (str) -- source type: ``"pandas"``, ``"sql"``, ``"file"``,
+          or ``"url"``.
+        - Additional type-specific configuration keys (e.g. ``"data"``,
+          ``"path"``, ``"time_column"``, ``"target_column"``).
+    run_async : bool, default=False
+        If True, schedules the loading as a background job and
+        returns a job_id immediately. If False, blocks until loaded
+        and returns the data_handle directly.
 
-        # SQL Database
-        >>> load_data_source_tool({
-        ...     "type": "sql",
-        ...     "connection_string": "postgresql://user:pass@host:5432/db",
-        ...     "query": "SELECT date, value FROM sales",
-        ...     "time_column": "date",
-        ...     "target_column": "value"
-        ... })
+    Returns
+    -------
+    dict
+        Dictionary containing load results and metadata.
 
-        # CSV File
-        >>> load_data_source_tool({
-        ...     "type": "file",
-        ...     "path": "/path/to/data.csv",
-        ...     "time_column": "date",
-        ...     "target_column": "value"
-        ... })
+        If ``run_async`` is False, contains:
+
+        - ``"success"`` (bool) -- True if the data was loaded successfully.
+        - ``"data_handle"`` (str) -- the unique handle ID for the loaded data.
+        - ``"metadata"`` (dict) -- rich metadata including row count, columns,
+          and data type information.
+        - ``"validation"`` (dict) -- results of indexing and format validation
+          checks.
+
+        If ``run_async`` is True, contains:
+
+        - ``"success"`` (bool) -- True if the background job was scheduled
+          successfully.
+        - ``"job_id"`` (str) -- unique job ID to monitor progress via
+          ``check_job_status``.
+        - ``"message"`` (str) -- a user-friendly status message.
+        - ``"source_type"`` (str) -- the type of the source requested to load.
+
+    Examples
+    --------
+    # Synchronous Pandas DataFrame Loading
+    >>> load_data_source_tool({
+    ...     "type": "pandas",
+    ...     "data": {"date": [...], "value": [...]},
+    ...     "time_column": "date",
+    ...     "target_column": "value"
+    ... })
+
+    # Asynchronous CSV File Loading
+    >>> load_data_source_tool({
+    ...     "type": "file",
+    ...     "path": "/path/to/data.csv",
+    ...     "time_column": "date",
+    ...     "target_column": "value"
+    ... }, run_async=True)
     """
     executor = get_executor()
-    return executor.load_data_source(config)
+    if not run_async:
+        return executor.load_data_source(config)
+
+    from sktime_mcp.runtime.jobs import get_job_manager, start_background_job
+
+    source_type = config.get("type", "unknown")
+    scheduled = start_background_job(
+        get_job_manager(),
+        lambda job_id: executor.load_data_source_async(config, job_id),
+        job_type="data_loading",
+        estimator_handle="",
+        dataset_name=source_type,
+        total_steps=3,  # load, validate, format
+    )
+    if not scheduled["success"]:
+        return scheduled
+
+    job_id = scheduled["job_id"]
+    return {
+        **scheduled,
+        "message": (
+            f"Data loading job started for source type '{source_type}'. "
+            f"Use check_job_status('{job_id}') to monitor progress."
+        ),
+        "source_type": source_type,
+    }
 
 
 def list_data_sources_tool() -> dict[str, Any]:
-    """
-    List all available data source types.
+    """List all available data source types.
 
-    Returns:
-        Dictionary with:
-        - success: bool
-        - sources: list of available source types
-        - descriptions: dict with descriptions for each source type
+    Returns
+    -------
+    dict
+        Dictionary containing available data sources:
+
+        - ``"success"`` (bool) -- True if the list was retrieved successfully.
+        - ``"sources"`` (list of str) -- List of supported source type names.
+        - ``"descriptions"`` (dict) -- A mapping of source type names to their class and
+          descriptions.
     """
     from sktime_mcp.data import DataSourceRegistry
 
@@ -91,84 +138,20 @@ def list_data_sources_tool() -> dict[str, Any]:
 
 
 def release_data_handle_tool(data_handle: str) -> dict[str, Any]:
-    """
-    Release a data handle and free memory.
+    """Release a data handle and free memory.
 
-    Args:
-        data_handle: Data handle to release
+    Parameters
+    ----------
+    data_handle : str
+        Data handle to release.
 
-    Returns:
-        Dictionary with success status
+    Returns
+    -------
+    dict
+        Dictionary containing success status:
+
+        - ``"success"`` (bool) -- True if the handle was successfully released, False otherwise.
+        - ``"message"`` (str, optional) -- Detailed status or error message.
     """
     executor = get_executor()
     return executor.release_data_handle(data_handle)
-
-
-def load_data_source_async_tool(
-    config: dict[str, Any],
-) -> dict[str, Any]:
-    """
-    Load data from any source in the background (non-blocking).
-
-    Schedules the data loading as a background job and returns
-    immediately with a job_id. Use check_job_status to monitor
-    progress and retrieve the data_handle when done.
-
-    Args:
-        config: Data source configuration (same as load_data_source)
-
-    Returns:
-        Dictionary with:
-        - success: bool
-        - job_id: Job ID for tracking progress
-        - message: Information about the job
-
-    Example:
-        >>> load_data_source_async_tool({
-        ...     "type": "file",
-        ...     "path": "/path/to/large_data.csv",
-        ...     "time_column": "date",
-        ...     "target_column": "value"
-        ... })
-        {
-            "success": True,
-            "job_id": "abc-123-def-456",
-            "message": "Data loading job started..."
-        }
-    """
-    import asyncio
-
-    from sktime_mcp.runtime.jobs import get_job_manager
-
-    executor = get_executor()
-    job_manager = get_job_manager()
-
-    source_type = config.get("type", "unknown")
-
-    # create a background job for data loading
-    job_id = job_manager.create_job(
-        job_type="data_loading",
-        estimator_handle="",
-        dataset_name=source_type,
-        total_steps=3,  # load, validate, format
-    )
-
-    # schedule on event loop
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    coro = executor.load_data_source_async(config, job_id)
-    asyncio.run_coroutine_threadsafe(coro, loop)
-
-    return {
-        "success": True,
-        "job_id": job_id,
-        "message": (
-            f"Data loading job started for source type '{source_type}'. "
-            f"Use check_job_status('{job_id}') to monitor progress."
-        ),
-        "source_type": source_type,
-    }

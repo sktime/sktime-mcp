@@ -2,41 +2,194 @@
 Tests for evaluate tool.
 """
 
-import sys
-
 import pytest
+from sktime.forecasting.naive import NaiveForecaster
 
-sys.path.insert(0, "src")
+from sktime_mcp.runtime.executor import get_executor
+from sktime_mcp.tools.evaluate import evaluate_tool
 
 
-def test_evaluate_estimator_tool():
-    """Test evaluate_estimator_tool with a simple estimator."""
-    from sktime.forecasting.naive import NaiveForecaster
-
-    from sktime_mcp.runtime.executor import get_executor
-    from sktime_mcp.tools.evaluate import evaluate_estimator_tool
-
+def test_evaluate_tool_basic():
+    """evaluate_tool returns fold_results and summary for a simple forecaster."""
     executor = get_executor()
-
-    # Create handle manually for the test
     handle = executor._handle_manager.create_handle("NaiveForecaster", NaiveForecaster(), {})
 
     try:
-        result = evaluate_estimator_tool(handle, "airline", cv_folds=2)
-
+        result = evaluate_tool(estimator_handle=handle, y="airline", cv_folds=2)
         assert result["success"], f"Evaluate failed: {result.get('error')}"
-        assert "results" in result
+        assert "fold_results" in result
         assert result["cv_folds_run"] == 2
-        assert len(result["results"]) == 2
+        assert len(result["fold_results"]) == 2
 
-        # Verify result contains common metrics like test_MeanAbsolutePercentageError
-        metric_columns = [k for k in result["results"][0] if "test_" in k]
+        metric_columns = [k for k in result["fold_results"][0] if "test_" in k]
         assert len(metric_columns) > 0
-
     finally:
-        # Clean up
         executor._handle_manager.release_handle(handle)
+
+
+def test_evaluate_with_metric():
+    """evaluate_tool with explicit metric name."""
+    executor = get_executor()
+    handle = executor._handle_manager.create_handle("NaiveForecaster", NaiveForecaster(), {})
+
+    try:
+        result = evaluate_tool(
+            estimator_handle=handle,
+            y="airline",
+            cv_folds=2,
+            metric="MeanAbsolutePercentageError",
+        )
+        assert result["success"], f"Evaluate with metric failed: {result.get('error')}"
+        assert len(result["fold_results"]) == 2
+    finally:
+        executor._handle_manager.release_handle(handle)
+
+
+def test_evaluate_invalid_metric():
+    """evaluate_tool with unknown metric returns error."""
+    executor = get_executor()
+    handle = executor._handle_manager.create_handle("NaiveForecaster", NaiveForecaster(), {})
+
+    try:
+        result = evaluate_tool(
+            estimator_handle=handle,
+            y="airline",
+            cv_folds=2,
+            metric="NonexistentMetric",
+        )
+        assert not result["success"]
+        assert "Unknown metric" in result["error"]
+    finally:
+        executor._handle_manager.release_handle(handle)
+
+
+def test_evaluate_with_data_handle():
+    """evaluate_tool accepts y as a data_handle id."""
+    executor = get_executor()
+    data_res = executor.load_dataset("airline")
+    assert data_res["success"]
+    executor._data_handles["test_dh"] = {"y": data_res["y"]}
+    handle = executor._handle_manager.create_handle("NaiveForecaster", NaiveForecaster(), {})
+
+    try:
+        result = evaluate_tool(estimator_handle=handle, y="test_dh", cv_folds=2)
+        assert result["success"], f"Evaluate with data_handle failed: {result.get('error')}"
+        assert len(result["fold_results"]) == 2
+    finally:
+        executor._handle_manager.release_handle(handle)
+        executor._data_handles.pop("test_dh", None)
+
+
+def test_evaluate_initial_window_overrides_cv_folds():
+    """When initial_window is set, cv_folds is ignored and folds equal n - initial_window."""
+    executor = get_executor()
+    handle = executor._handle_manager.create_handle("NaiveForecaster", NaiveForecaster(), {})
+
+    try:
+        # airline has 144 obs; initial_window=140 gives 4 expanding folds regardless of cv_folds
+        result = evaluate_tool(
+            estimator_handle=handle,
+            y="airline",
+            cv_folds=2,
+            initial_window=140,
+        )
+        assert result["success"], f"Evaluate failed: {result.get('error')}"
+        assert len(result["fold_results"]) == 4
+    finally:
+        executor._handle_manager.release_handle(handle)
+
+
+def test_evaluate_handle_not_found():
+    """evaluate_tool returns a clear error when the estimator_handle is unknown."""
+    result = evaluate_tool(estimator_handle="does_not_exist", y="airline", cv_folds=2)
+    assert not result["success"]
+    assert "Handle not found" in result["error"]
+
+
+def test_evaluate_per_fold_error_surfaces_as_failure():
+    """Per-fold exceptions must fail the evaluation, not report success with NaN.
+
+    sktime's default ``error_score=np.nan`` swallows per-fold errors and
+    ``evaluate`` used to return ``success: true`` with all-NaN metrics.
+    The trigger is a forecaster whose ``_predict`` always raises, so the
+    test does not depend on which inputs a given sktime version rejects.
+    """
+    import math
+
+    import pandas as pd
+    from sktime.forecasting.naive import NaiveForecaster
+
+    class _FailingForecaster(NaiveForecaster):
+        def _predict(self, fh, X=None):
+            raise RuntimeError("deliberate per-fold failure")
+
+    executor = get_executor()
+    idx = pd.date_range("2000-01-01", periods=48, freq="MS")
+    y = pd.Series([100.0 + i + 10 * (i % 12) for i in range(48)], index=idx)
+    executor._data_handles["test_nan_dh"] = {"y": y}
+    handle = executor._handle_manager.create_handle("_FailingForecaster", _FailingForecaster(), {})
+
+    try:
+        result = evaluate_tool(estimator_handle=handle, y="test_nan_dh", cv_folds=3)
+        assert not result["success"], (
+            f"Expected per-fold errors to fail the evaluation, got: {result.get('metrics')}"
+        )
+        assert "deliberate per-fold failure" in result["error"]
+        # And in no case may a NaN metric masquerade as a result
+        for value in (result.get("metrics") or {}).values():
+            assert not (isinstance(value, float) and math.isnan(value))
+    finally:
+        executor._handle_manager.release_handle(handle)
+        executor._data_handles.pop("test_nan_dh", None)
 
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestCvFoldsValidation:
+    """cv_folds/initial_window are validated, never silently clamped."""
+
+    def _handle(self):
+        executor = get_executor()
+        return executor, executor._handle_manager.create_handle(
+            "NaiveForecaster", NaiveForecaster(), {}
+        )
+
+    def test_cv_folds_zero_rejected(self):
+        executor, handle = self._handle()
+        try:
+            result = evaluate_tool(estimator_handle=handle, y="airline", cv_folds=0)
+            assert not result["success"]
+            assert "cv_folds" in result["error"]
+        finally:
+            executor._handle_manager.release_handle(handle)
+
+    def test_cv_folds_negative_rejected(self):
+        executor, handle = self._handle()
+        try:
+            result = evaluate_tool(estimator_handle=handle, y="airline", cv_folds=-5)
+            assert not result["success"]
+            assert "cv_folds" in result["error"]
+        finally:
+            executor._handle_manager.release_handle(handle)
+
+    def test_cv_folds_exceeding_series_rejected(self):
+        executor, handle = self._handle()
+        try:
+            # airline has 144 observations; 500 folds is impossible
+            result = evaluate_tool(estimator_handle=handle, y="airline", cv_folds=500)
+            assert not result["success"]
+            assert "cv_folds" in result["error"]
+            assert "143" in result["error"]
+        finally:
+            executor._handle_manager.release_handle(handle)
+
+    def test_initial_window_exceeding_series_rejected(self):
+        executor, handle = self._handle()
+        try:
+            result = evaluate_tool(estimator_handle=handle, y="airline", initial_window=144)
+            assert not result["success"]
+            assert "initial_window" in result["error"]
+        finally:
+            executor._handle_manager.release_handle(handle)

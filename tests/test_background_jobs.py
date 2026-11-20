@@ -2,6 +2,8 @@
 Test background job management.
 """
 
+from datetime import datetime, timedelta
+
 from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 
 
@@ -115,6 +117,59 @@ def test_list_jobs():
     job_manager.delete_job(job3)
 
 
+def test_list_jobs_offset_slicing():
+    """JobManager.list_jobs offset/limit returns the correct newest-first slice."""
+    job_manager = get_job_manager()
+    ids = [job_manager.create_job("fit", f"off{i}", "ARIMA") for i in range(4)]
+
+    try:
+        newest_first = job_manager.list_jobs()
+        first_two = job_manager.list_jobs(limit=2, offset=0)
+        next_two = job_manager.list_jobs(limit=2, offset=2)
+
+        assert [j.job_id for j in first_two] == [j.job_id for j in newest_first[:2]]
+        assert [j.job_id for j in next_two] == [j.job_id for j in newest_first[2:4]]
+        # first and second page must not overlap
+        assert {j.job_id for j in first_two}.isdisjoint({j.job_id for j in next_two})
+    finally:
+        for jid in ids:
+            job_manager.delete_job(jid)
+
+
+def test_list_jobs_tool_pagination_metadata():
+    """list_jobs_tool reports total/offset/limit/has_more and paginates disjointly."""
+    from sktime_mcp.tools.job_tools import list_jobs_tool
+
+    job_manager = get_job_manager()
+    ids = [job_manager.create_job("fit", f"pg{i}", "ARIMA") for i in range(5)]
+
+    try:
+        page1 = list_jobs_tool(limit=2, offset=0)
+        assert page1["success"]
+        assert page1["limit"] == 2
+        assert page1["offset"] == 0
+        assert page1["count"] == 2
+        assert page1["total"] >= 5
+        assert page1["has_more"] is True
+
+        page2 = list_jobs_tool(limit=2, offset=2)
+        assert page2["offset"] == 2
+        assert page2["count"] == 2
+        assert {j["job_id"] for j in page1["jobs"]}.isdisjoint({j["job_id"] for j in page2["jobs"]})
+
+        # Offset beyond the end yields an empty page with has_more False
+        beyond = list_jobs_tool(limit=2, offset=page1["total"] + 10)
+        assert beyond["count"] == 0
+        assert beyond["has_more"] is False
+
+        # Negative offset is rejected
+        bad = list_jobs_tool(offset=-1)
+        assert not bad["success"]
+    finally:
+        for jid in ids:
+            job_manager.delete_job(jid)
+
+
 def test_cancel_job():
     """Test cancelling a job."""
     job_manager = get_job_manager()
@@ -160,15 +215,62 @@ def test_list_jobs_tool_accepts_case_insensitive_status():
     job_manager.delete_job(job_id)
 
 
+def test_cancel_job_delete_keeps_running_job_record():
+    """delete=True should not remove a running job record immediately."""
+    from sktime_mcp.tools.job_tools import cancel_job_tool
+
+    job_manager = get_job_manager()
+    job_id = job_manager.create_job("fit_predict", "handle", "ARIMA")
+    job_manager.update_job(job_id, status=JobStatus.RUNNING)
+
+    result = cancel_job_tool(job_id, delete=True)
+
+    assert result["success"]
+    assert "retained" in result["message"]
+
+    job = job_manager.get_job(job_id)
+    assert job is not None
+    assert job.status == JobStatus.CANCELLED
+
+    job_manager.delete_job(job_id)
+
+
+def test_cancelled_job_ignores_late_updates():
+    """Cancelled jobs should stay cancelled even if background work reports later."""
+    job_manager = get_job_manager()
+    job_id = job_manager.create_job("fit_predict", "handle", "ARIMA", total_steps=3)
+    job_manager.update_job(job_id, status=JobStatus.RUNNING)
+    job_manager.cancel_job(job_id)
+
+    job_manager.update_job(
+        job_id,
+        status=JobStatus.COMPLETED,
+        completed_steps=3,
+        current_step="Finished",
+        result={"predictions": {1: 100}},
+    )
+
+    job = job_manager.get_job(job_id)
+    assert job is not None
+    assert job.status == JobStatus.CANCELLED
+    assert job.completed_steps == 0
+    assert job.result is None
+
+    job_manager.delete_job(job_id)
+
+
 def test_cleanup_old_jobs():
-    """Test cleaning up old jobs."""
+    """Test cleaning up old finished jobs."""
     job_manager = get_job_manager()
 
-    # Create a job
+    # Create a job that finished two days ago
     job_id = job_manager.create_job("fit_predict", "handle", "ARIMA")
+    job_manager.update_job(job_id, status=JobStatus.COMPLETED)
+    job_manager.jobs[job_id].end_time = datetime.now() - timedelta(hours=48)
 
-    # Cleanup jobs older than 0 hours (should remove all)
-    count = job_manager.cleanup_old_jobs(max_age_hours=0)
+    # Cleanup finished jobs older than 24 hours
+    count = job_manager.cleanup_old_jobs(max_age_hours=24)
+    assert count >= 1
 
     print(f"✓ Cleaned up {count} old job(s)")
 

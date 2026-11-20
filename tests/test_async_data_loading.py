@@ -13,24 +13,38 @@ sys.path.insert(0, "src")
 
 from sktime_mcp.runtime.executor import get_executor
 from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
-from sktime_mcp.tools.data_tools import load_data_source_async_tool
+from sktime_mcp.tools.data_tools import load_data_source_tool
 
 
 class TestAsyncDataLoadingTool(unittest.TestCase):
     """Test the tool-level function returns a job_id."""
 
     def test_returns_job_id(self):
-        """Async load should return a job_id immediately."""
+        """Async load returns a job_id immediately when called under a running loop."""
         config = {
             "type": "pandas",
             "data": {"date": ["2020-01", "2020-02", "2020-03"], "value": [10, 20, 30]},
             "time_column": "date",
             "target_column": "value",
         }
-        result = load_data_source_async_tool(config)
+        job_manager = get_job_manager()
+
+        async def _run():
+            result = load_data_source_tool(config, run_async=True)
+            # Let the scheduled job finish before the loop closes.
+            for _ in range(200):
+                job = job_manager.get_job(result["job_id"])
+                if job.status in (JobStatus.COMPLETED, JobStatus.FAILED):
+                    break
+                await asyncio.sleep(0.05)
+            return result, job
+
+        result, job = asyncio.run(_run())
         self.assertTrue(result["success"])
         self.assertIn("job_id", result)
+        self.assertEqual(result["status"], "running")
         self.assertEqual(result["source_type"], "pandas")
+        self.assertIs(job.status, JobStatus.COMPLETED)
 
 
 class TestAsyncDataLoadingExecutor(unittest.TestCase):

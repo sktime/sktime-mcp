@@ -1,8 +1,8 @@
 """
 Registry Interface for sktime MCP.
 
-This module provides the core interface to sktime's estimator registry,
-exposing structured semantic information about all available estimators.
+Thin adapter over sktime's estimator registry.
+Delegates to ``sktime.registry`` functions directly.
 """
 
 import inspect
@@ -23,12 +23,12 @@ class EstimatorNode:
 
     Attributes:
         name: The class name of the estimator (e.g., "ARIMA")
-        task: The task type (e.g., "forecaster", "transformer", "classifier")
+        task: The scitype (e.g., "forecaster", "transformer", "classifier")
         class_ref: Reference to the actual Python class
         module: Full module path to the estimator
         tags: Dictionary of capability tags
-        hyperparameters: List of hyperparameter names with their defaults
-        docstring: The estimator's docstring for understanding usage
+        parameters: Parameter names with their defaults
+        docstring: The estimator's docstring
     """
 
     name: str
@@ -36,7 +36,7 @@ class EstimatorNode:
     class_ref: type
     module: str
     tags: dict[str, Any] = field(default_factory=dict)
-    hyperparameters: dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, Any] = field(default_factory=dict)
     docstring: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -46,10 +46,9 @@ class EstimatorNode:
             "task": self.task,
             "module": self.module,
             "tags": self.tags,
-            "hyperparameters": self.hyperparameters,
-            "docstring": (
-                self.docstring[:500] if self.docstring else None
-            ),  # L-1: Truncate docstring to 500 characters, we can also try summarization
+            "parameters": self.parameters,
+            "hyperparameters": self.parameters,  # keep for backward compatibility
+            "docstring": (self.docstring[:500] if self.docstring else None),
         }
 
     def to_summary(self) -> dict[str, Any]:
@@ -64,134 +63,97 @@ class EstimatorNode:
 
 class RegistryInterface:
     """
-    Interface to sktime's estimator registry.
+    Adapter over sktime's estimator registry.
 
-    This class wraps sktime's `all_estimators` function and provides
-    structured access to estimator metadata, tags, and documentation.
-
-    The registry is the single source of truth for all estimator information.
+    Delegates to ``sktime.registry.all_estimators`` for discovery and
+    filtering, ``sktime.registry.craft`` for name-based lookups, and
+    uses public class methods (``get_class_tags``,
+    ``get_param_names``, ``get_param_defaults``) for metadata extraction.
     """
-
-    # Map of sktime estimator types to task names
-    TASK_MAP = {
-        "forecaster": "forecasting",
-        "transformer": "transformation",
-        "classifier": "classification",
-        "regressor": "regression",
-        "clusterer": "clustering",
-        "param_est": "parameter_estimation",
-        "splitter": "splitting",
-        # "alignment": "alignment", L-2: It is failing, but I will investigate it later
-        "network": "network",
-        "detector": "detection",
-    }
 
     def __init__(self):
         """Initialize the registry interface."""
-        self._cache: dict[str, EstimatorNode] = {}
-        self._all_tags: set = set()
-        self._loaded = False
-
-    def _ensure_loaded(self):
-        """Lazy-load the registry on first access."""
-        if not self._loaded:
-            self._load_registry()
-            self._loaded = True
-
-    def _load_registry(self):
-        """Load all estimators from sktime's registry."""
-        # L-3: Sometimes, We need to import other packages as well to load the estimators
         try:
-            from sktime.registry import all_estimators
+            from sktime.registry import all_estimators  # noqa: F401
         except ImportError as e:
             logger.error(f"Failed to import sktime registry: {e}")
             raise RuntimeError("sktime must be installed to use sktime-mcp") from e
+        self._scitype_bases: dict[str, type] | None = None
+        self._tag_value_types: dict[str, Any] | None = None
 
-        # Load each type of estimator
-        for estimator_type in self.TASK_MAP:
-            try:
-                estimators = all_estimators(
-                    estimator_types=estimator_type,
-                    return_names=True,
-                    as_dataframe=False,
-                )
+    def _get_scitype_bases(self) -> dict[str, type]:
+        """Map each valid scitype to its sktime base class (cached)."""
+        if self._scitype_bases is None:
+            from sktime.registry import get_base_class_register
 
-                for name, cls in estimators:
-                    try:
-                        node = self._create_node(name, cls, estimator_type)
-                        self._cache[name] = node
-                        self._all_tags.update(node.tags.keys())
-                    except Exception as e:
-                        logger.debug(f"Failed to load estimator {name}: {e}")
-                        continue
+            self._scitype_bases = {row[0]: row[1] for row in get_base_class_register()}
+        return self._scitype_bases
 
-            except Exception as e:
-                logger.warning(f"Failed to load estimator type {estimator_type}: {e}")
-                continue
+    def _resolve_task(self, cls: type) -> str:
+        """Pick the most specific *valid* scitype for ``cls``.
 
-        logger.info(f"Loaded {len(self._cache)} estimators from sktime registry")
+        Candidates are the class's ``object_type`` tag values (str or list)
+        that are registered scitypes; if none is valid (e.g. skchange's
+        ``"interval_scorer"``), the registered base classes ``cls`` inherits
+        from are used instead.  Among candidates the most specific one wins
+        (deepest base-class MRO), e.g. ``"metric_forecasting"`` over
+        ``"metric"``.  The raw ``object_type`` stays available in ``tags``.
+        """
+        bases = self._get_scitype_bases()
+        candidates = self._valid_object_types(cls)
+        if not candidates:
+            candidates = [s for s, base in bases.items() if issubclass(cls, base)]
+        if not candidates:
+            return "object"
+        return max(candidates, key=lambda s: len(bases[s].__mro__))
 
-    def _create_node(self, name: str, cls: type, estimator_type: str) -> EstimatorNode:
-        """Create an EstimatorNode from a class."""
-        # Get tags
-        tags = self._get_tags(cls)
-
-        # Get hyperparameters from __init__ signature
-        hyperparameters = self._get_hyperparameters(cls)
-
-        # Get docstring
-        docstring = inspect.getdoc(cls)
-
-        return EstimatorNode(
-            name=name,
-            task=self.TASK_MAP.get(estimator_type, estimator_type),
-            class_ref=cls,
-            module=f"{cls.__module__}.{cls.__name__}",
-            tags=tags,
-            hyperparameters=hyperparameters,
-            docstring=docstring,
-        )
-
-    def _get_tags(self, cls: type) -> dict[str, Any]:
-        """Extract tags from an estimator class."""
-        tags = {}
-
+    def _valid_object_types(self, cls: type) -> list[str]:
+        """Values of the ``object_type`` tag that are registered scitypes."""
+        bases = self._get_scitype_bases()
         try:
-            # sktime estimators have a get_class_tags() method
+            raw = cls.get_class_tag("object_type", None)
+        except Exception:
+            raw = None
+        raw_list = raw if isinstance(raw, list) else [raw]
+        return [c for c in raw_list if isinstance(c, str) and c in bases]
+
+    def _create_node(self, name: str, cls: type) -> EstimatorNode:
+        """Create an EstimatorNode from sktime estimator."""
+        scitype = self._resolve_task(cls)
+
+        tags: dict[str, Any] = {}
+        try:
             if hasattr(cls, "get_class_tags"):
                 tags = cls.get_class_tags()
-            elif hasattr(cls, "_tags"):
-                tags = dict(cls._tags) if cls._tags else {}
         except Exception as e:
             logger.debug(f"Failed to get tags for {cls.__name__}: {e}")
 
-        return tags
-
-    def _get_hyperparameters(self, cls: type) -> dict[str, Any]:
-        """Extract hyperparameters from __init__ signature."""
-        params = {}
-
+        parameters: dict[str, Any] = {}
         try:
-            sig = inspect.signature(cls.__init__)
-            for param_name, param in sig.parameters.items():
-                if param_name in ("self", "args", "kwargs"):
-                    continue
-
-                default = None
-                if param.default is not inspect.Parameter.empty:
-                    default = param.default
-                    # Convert non-serializable defaults to string representation
-                    if not isinstance(default, (int, float, str, bool, list, dict, type(None))):
-                        default = str(default)
-
-                params[param_name] = {
-                    "default": default,
-                    "required": param.default is inspect.Parameter.empty,
-                }
+            param_names = cls.get_param_names()
+            param_defaults = cls.get_param_defaults()
+            for p in param_names:
+                default = param_defaults.get(p)
+                required = p not in param_defaults
+                if default is not None and not isinstance(
+                    default, (int, float, str, bool, list, dict, type(None))
+                ):
+                    default = str(default)
+                parameters[p] = {"default": default, "required": required}
         except Exception as e:
-            logger.debug(f"Failed to get hyperparameters for {cls.__name__}: {e}")
+            logger.debug(f"Failed to get parameters for {cls.__name__}: {e}")
 
-        return params
+        return EstimatorNode(
+            name=name,
+            task=scitype,
+            class_ref=cls,
+            module=f"{cls.__module__}.{cls.__name__}",
+            tags=tags,
+            parameters=parameters,
+            docstring=inspect.getdoc(cls),
+        )
+
+    # ---- query methods (delegate to sktime.registry) --------------------
 
     def get_all_estimators(
         self,
@@ -199,96 +161,100 @@ class RegistryInterface:
         tags: dict[str, Any] | None = None,
     ) -> list[EstimatorNode]:
         """
-        Get all estimators, optionally filtered by task and tags.
+        Get all estimators, optionally filtered by scitype and tags.
+
+        Scitype filtering is delegated to ``sktime.registry.all_estimators``
+        (scitype hierarchy: ``task="estimator"`` includes forecasters).  Objects
+        whose ``object_type`` tag is not a registered scitype (e.g. skchange's
+        ``"interval_scorer"``) are invisible to sktime's filter, so they are
+        added by base-class inheritance under the task they resolve to.
+        Tag filtering uses the same semantics as sktime's ``filter_tags`` --
+        a scalar value must equal the estimator's tag, a list value matches
+        any of its elements -- but is applied here so that list-valued
+        estimator tags (``python_dependencies``, ``y_inner_mtype``, ...) are
+        matched by membership instead of raising ``unhashable type: 'list'``.
 
         Args:
-            task: Filter by task type (e.g., "forecasting", "classification")
-            tags: Filter by capability tags (e.g., {"capability:pred_int": True})
-
-        Returns:
-            List of matching EstimatorNode objects
+            task: Filter by scitype (e.g., "forecaster", "classifier").
+            tags: Filter by capability tags.
         """
-        self._ensure_loaded()
+        from sktime.registry import all_estimators
 
-        results = list(self._cache.values())
-
-        # Filter by task
-        if task:
-            results = [e for e in results if e.task == task]
-
-        # Filter by tags
+        estimators = all_estimators(
+            estimator_types=task,
+            return_names=True,
+            as_dataframe=False,
+        )
+        if task is not None:
+            bases = self._get_scitype_bases()
+            seen = {name for name, _ in estimators}
+            for name, cls in all_estimators(return_names=True, as_dataframe=False):
+                if name in seen or self._valid_object_types(cls):
+                    continue
+                if issubclass(bases[self._resolve_task(cls)], bases[task]):
+                    estimators.append((name, cls))
+            estimators.sort(key=lambda item: item[0])
         if tags:
-            results = self._filter_by_tags(results, tags)
+            estimators = [
+                (name, cls)
+                for name, cls in estimators
+                if all(self._tag_matches(cls, key, wanted) for key, wanted in tags.items())
+            ]
 
+        results = []
+        for name, cls in estimators:
+            try:
+                results.append(self._create_node(name, cls))
+            except Exception as e:
+                logger.debug(f"Failed to create node for {name}: {e}")
         return results
-
-    def _filter_by_tags(
-        self,
-        estimators: list[EstimatorNode],
-        required_tags: dict[str, Any],
-    ) -> list[EstimatorNode]:
-        """Filter estimators by required tag values."""
-        filtered = []
-
-        for estimator in estimators:
-            matches = True
-            for tag_name, tag_value in required_tags.items():
-                est_tag_value = estimator.tags.get(tag_name)
-                if est_tag_value != tag_value:
-                    matches = False
-                    break
-
-            if matches:
-                filtered.append(estimator)
-
-        return filtered
 
     def get_estimator_by_name(self, name: str) -> EstimatorNode | None:
         """
         Get a specific estimator by its class name.
 
-        Args:
-            name: The class name of the estimator (e.g., "ARIMA")
+        Uses ``sktime.registry.craft`` for direct class resolution
+        instead of scanning all estimators.
 
-        Returns:
-            EstimatorNode if found, None otherwise
+        Args:
+            name: The class name of the estimator (e.g., "ARIMA").
         """
-        self._ensure_loaded()
-        return self._cache.get(name)
+        from sktime.registry import craft
+
+        try:
+            cls = craft(name)
+            if isinstance(cls, type):
+                return self._create_node(name, cls)
+        except Exception:
+            pass
+        return None
 
     def get_available_tasks(self) -> list[str]:
-        """Get list of available task types."""
-        return list(self.TASK_MAP.values())
+        """Get list of available scitypes from sktime's base class register."""
+        from sktime.registry import get_base_class_register
+
+        return [row[0] for row in get_base_class_register()]
 
     def get_available_tags(self) -> list[dict[str, Any]]:
         """Get rich metadata for all available tags using sktime's registry.
 
-        Returns a list of dicts, each containing:
-        - tag: the tag name (e.g., "scitype:y")
-        - description: human-readable explanation of what the tag means
-        - value_type: the expected value type (e.g., "bool", "str")
-        - applies_to: list of estimator types this tag applies to
+        Returns a list of dicts with: tag, description, value_type, applies_to.
         """
-        self._ensure_loaded()
+        from sktime.registry import all_tags
 
         try:
-            from sktime.registry import all_tags
-
             tags_df = all_tags(as_dataframe=True)
-        except ImportError:
-            # Fallback to old behaviour if all_tags is not available
-            return [{"tag": t} for t in sorted(self._all_tags)]
+        except Exception:
+            return []
 
         result = []
         for _, row in tags_df.iterrows():
-            # Normalize scitype to a list for consistency
             scitype = row.get("scitype", [])
             if isinstance(scitype, str):
                 scitype = [scitype]
             elif not isinstance(scitype, list):
                 scitype = list(scitype) if hasattr(scitype, "__iter__") else [str(scitype)]
 
-            # Convert value_type to a JSON-safe string representation
             value_type = row.get("type", "")
             if not isinstance(value_type, str):
                 value_type = str(value_type)
@@ -305,21 +271,129 @@ class RegistryInterface:
         result.sort(key=lambda x: x["tag"])
         return result
 
-    def search_estimators(self, query: str) -> list[EstimatorNode]:
+    @staticmethod
+    def _tag_matches(cls: type, key: str, wanted: Any) -> bool:
+        """True if the class tag ``key`` equals / contains any of ``wanted``."""
+        try:
+            actual = cls.get_class_tag(key, None)
+        except Exception:
+            return False
+        wanted_list = wanted if isinstance(wanted, list) else [wanted]
+        actual_list = actual if isinstance(actual, list) else [actual]
+        return any(a == w for a in actual_list for w in wanted_list)
+
+    def _get_tag_value_types(self) -> dict[str, Any]:
+        """Map tag name -> raw sktime value type spec (cached).
+
+        The spec is ``"bool"``, ``"int"``, ``"str"``, ``"list"``, ``"type"``,
+        ``("list", "str")``, ``("str", [allowed...])`` or ``("list", [allowed...])``.
+        """
+        if self._tag_value_types is None:
+            from sktime.registry import all_tags
+
+            try:
+                self._tag_value_types = {row[0]: row[2] for row in all_tags(as_dataframe=False)}
+            except Exception:
+                self._tag_value_types = {}
+        return self._tag_value_types
+
+    def coerce_tag_filters(
+        self, tags: dict[str, Any]
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """Coerce tag filter values to the tag's declared value type.
+
+        ``"true"``/``"false"``/``"1"``/``"0"`` (and 0/1) become bools for bool
+        tags, numeric strings become ints for int tags, and values for tags
+        with an allowed-values list are checked against it.  A list of values
+        is coerced element-wise (any-of semantics).  Tags with an unknown or
+        unconstrained type are passed through unchanged.
+
+        Returns:
+            ``(coerced_tags, errors)`` where each error is a dict with
+            ``tag``, ``value`` and ``expected`` keys.
+        """
+        types = self._get_tag_value_types()
+        coerced: dict[str, Any] = {}
+        errors: list[dict[str, Any]] = []
+        for key, value in tags.items():
+            spec = types.get(key)
+            values = value if isinstance(value, list) else [value]
+            out = []
+            for v in values:
+                ok, cv, expected = self._coerce_tag_value(v, spec)
+                if not ok:
+                    errors.append({"tag": key, "value": v, "expected": expected})
+                    break
+                out.append(cv)
+            else:
+                coerced[key] = out if isinstance(value, list) else out[0]
+        return coerced, errors
+
+    @staticmethod
+    def _coerce_tag_value(value: Any, spec: Any) -> tuple[bool, Any, str]:
+        """Coerce one value against a sktime tag type spec.
+
+        Returns ``(ok, coerced_value, expected_description)``.
+        """
+        base, allowed = spec, None
+        if isinstance(spec, tuple) and len(spec) == 2:
+            base, allowed = spec
+        if allowed == "str":
+            allowed = None
+
+        if base == "bool":
+            if isinstance(value, bool):
+                return True, value, "bool"
+            if isinstance(value, int) and value in (0, 1):
+                return True, bool(value), "bool"
+            if isinstance(value, str):
+                lowered = value.strip().lower()
+                if lowered in ("true", "1"):
+                    return True, True, "bool"
+                if lowered in ("false", "0"):
+                    return True, False, "bool"
+            return False, value, "bool (true/false)"
+        if base == "int":
+            if isinstance(value, bool):
+                return False, value, "int"
+            if isinstance(value, int):
+                return True, value, "int"
+            if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+                return True, int(value.strip()), "int"
+            return False, value, "int"
+        if base in ("str", "list"):
+            if isinstance(allowed, list):
+                if value in allowed:
+                    return True, value, f"one of {allowed}"
+                return False, value, f"one of {allowed}"
+            if base == "str" and not isinstance(value, str):
+                return False, value, "str"
+            return True, value, "str"
+        return True, value, str(spec)
+
+    def search_estimators(
+        self,
+        query: str,
+        task: str | None = None,
+        tags: dict[str, Any] | None = None,
+    ) -> list[EstimatorNode]:
         """
         Search estimators by name, module, or docstring.
 
-        Args:
-            query: Search string (case-insensitive)
+        ``task`` and ``tags`` are applied first through
+        :meth:`get_all_estimators` (the same filter path used without a
+        query); the substring match then narrows that list and ranks it.
 
-        Returns:
-            List of matching EstimatorNode objects
+        Args:
+            query: Search string (case-insensitive).
+            task: Optional scitype filter.
+            tags: Optional capability tag filter.
         """
-        self._ensure_loaded()
+        all_ests = self.get_all_estimators(task=task, tags=tags)
         query_lower = query.strip().lower()
 
         results = []
-        for node in self._cache.values():
+        for node in all_ests:
             name_lower = node.name.lower()
             module_lower = node.module.lower()
             docstring_lower = node.docstring.lower() if node.docstring else ""

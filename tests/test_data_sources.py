@@ -68,6 +68,25 @@ class TestPandasAdapter:
 class TestExecutorDataIntegration:
     """Executor can load data sources and run fit_predict via data handles."""
 
+    def test_load_data_source_auto_format_supports_rangeindex(self, caplog):
+        """Integer-indexed data should not trip datetime-only auto-format logic."""
+        executor = get_executor()
+
+        config = {
+            "type": "pandas",
+            "data": {
+                "y": [1, 2, 3, 4],
+            },
+        }
+
+        with caplog.at_level("WARNING"):
+            result = executor.load_data_source(config)
+
+        assert result["success"]
+        assert result["formatted"] is True
+        assert result["metadata"]["frequency"] == "Integer"
+        assert "Auto-formatting failed" not in caplog.text
+
     def test_load_and_predict_with_data_handle(self):
         executor = get_executor()
 
@@ -89,15 +108,15 @@ class TestExecutorDataIntegration:
         handles = executor.list_data_handles()
         assert handles["count"] >= 1
 
-        est_result = executor.instantiate("NaiveForecaster", {"strategy": "last"})
+        est_result = executor.instantiate(spec="NaiveForecaster(strategy='last')")
         assert est_result["success"]
 
-        pred_result = executor.fit_predict(
-            est_result["handle"],
-            "",
-            5,
-            data_handle=result["data_handle"],
-        )
+        data = executor._data_handles[result["data_handle"]]
+        fh = list(range(1, 6))
+        fit_result = executor.fit(est_result["handle"], y=data["y"], X=data.get("X"), fh=fh)
+        assert fit_result["success"]
+
+        pred_result = executor.predict(est_result["handle"], fh=fh, X=data.get("X"))
         assert pred_result["success"]
         assert len(pred_result["predictions"]) == 5
 
