@@ -1,27 +1,21 @@
-"""Tests for server environment configuration parsing."""
+"""Tests for server environment configuration parsing.
 
-import importlib
-import sys
+The job settings live on ``sktime_mcp.config.settings`` and are read from the
+environment on every access, so no module reload is needed. The detailed
+parsing rules (warnings, minimums, every integer setting) are covered in
+``tests/test_env_config.py``; this file keeps the original server-level
+regression cases.
+"""
 
-sys.path.insert(0, "src")
-
-
-def _reload_server_module():
-    """Reload server module so import-time env parsing is re-evaluated."""
-    if "sktime_mcp.server" in sys.modules:
-        return importlib.reload(sys.modules["sktime_mcp.server"])
-
-    return importlib.import_module("sktime_mcp.server")
+from sktime_mcp.config import settings
 
 
 def test_invalid_job_max_age_env_falls_back_to_default(monkeypatch):
-    """Invalid max-age env values should not crash server import."""
+    """Invalid max-age env values should fall back rather than raise."""
     monkeypatch.setenv("SKTIME_MCP_JOB_MAX_AGE_HOURS", "abc")
     monkeypatch.delenv("SKTIME_MCP_JOB_CLEANUP_INTERVAL", raising=False)
 
-    server = _reload_server_module()
-
-    assert server.JOB_MAX_AGE_HOURS == 24
+    assert settings.job_max_age_hours == 24
 
 
 def test_invalid_job_cleanup_interval_env_falls_back_to_default(monkeypatch):
@@ -29,9 +23,7 @@ def test_invalid_job_cleanup_interval_env_falls_back_to_default(monkeypatch):
     monkeypatch.setenv("SKTIME_MCP_JOB_CLEANUP_INTERVAL", "abc")
     monkeypatch.delenv("SKTIME_MCP_JOB_MAX_AGE_HOURS", raising=False)
 
-    server = _reload_server_module()
-
-    assert server.JOB_CLEANUP_INTERVAL_SECS == 3600
+    assert settings.job_cleanup_interval_secs == 3600
 
 
 def test_valid_numeric_server_env_values_are_respected(monkeypatch):
@@ -39,7 +31,5 @@ def test_valid_numeric_server_env_values_are_respected(monkeypatch):
     monkeypatch.setenv("SKTIME_MCP_JOB_MAX_AGE_HOURS", "48")
     monkeypatch.setenv("SKTIME_MCP_JOB_CLEANUP_INTERVAL", "120")
 
-    server = _reload_server_module()
-
-    assert server.JOB_MAX_AGE_HOURS == 48
-    assert server.JOB_CLEANUP_INTERVAL_SECS == 120
+    assert settings.job_max_age_hours == 48
+    assert settings.job_cleanup_interval_secs == 120

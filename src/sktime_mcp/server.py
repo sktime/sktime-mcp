@@ -10,8 +10,8 @@ import asyncio
 import functools
 import json
 import logging
-import os
 import sys
+from contextlib import suppress
 
 import jsonschema
 
@@ -81,31 +81,6 @@ from sktime_mcp.tools.save_data import save_data_tool
 from sktime_mcp.tools.save_model import save_model_tool
 from sktime_mcp.tools.split_data import split_data_tool
 from sktime_mcp.tools.transform_data import transform_data_tool
-
-
-# ---------------------------------------------------------------------------
-# Server configuration via environment variables
-# ---------------------------------------------------------------------------
-def _get_int_env(name: str, default: int) -> int:
-    """Return an integer env var value, falling back to default on parse errors."""
-    raw_value = os.environ.get(name)
-    if raw_value is None:
-        return default
-
-    try:
-        return int(raw_value)
-    except (TypeError, ValueError):
-        logging.getLogger(__name__).warning(
-            "Invalid %s=%r; using default value %d instead.",
-            name,
-            raw_value,
-            default,
-        )
-        return default
-
-
-JOB_MAX_AGE_HOURS = _get_int_env("SKTIME_MCP_JOB_MAX_AGE_HOURS", 24)
-JOB_CLEANUP_INTERVAL_SECS = _get_int_env("SKTIME_MCP_JOB_CLEANUP_INTERVAL", 3600)
 
 # Configure logging to stderr with detailed format
 _handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
@@ -1348,14 +1323,20 @@ server = Server(
 
 
 async def _periodic_job_cleanup():
-    """Automatically clean up old jobs on a timer."""
+    """Automatically clean up old finished jobs on a timer.
+
+    Settings are re-read on every iteration (so env changes apply live) and
+    the whole iteration runs inside the ``try`` so that no single failure,
+    whether from config or from the cleanup itself, can end the loop.
+    Cancellation (``asyncio.CancelledError``) is not an ``Exception`` and
+    still stops the task normally.
+    """
     from sktime_mcp.runtime.jobs import get_job_manager
 
     while True:
-        await asyncio.sleep(settings.job_cleanup_interval_secs)
         try:
-            job_manager = get_job_manager()
-            removed = job_manager.cleanup_old_jobs(settings.job_max_age_hours)
+            await asyncio.sleep(settings.job_cleanup_interval_secs)
+            removed = get_job_manager().cleanup_old_jobs(settings.job_max_age_hours)
             if removed:
                 logger.info(f"Periodic cleanup: removed {removed} old job(s)")
         except Exception:
@@ -1363,17 +1344,17 @@ async def _periodic_job_cleanup():
 
 
 async def run_server():
-    """Run the MCP server on stdio."""
-    asyncio.create_task(_periodic_job_cleanup())
-
-    # Stdio safety: ``stdio_server()`` serves the JSON-RPC wire from a private
-    # duplicate of fd 1 and points fd 1 at stderr for the duration, so stray
-    # output from tools, third-party libraries and child processes misses the
-    # wire. That claim is best-effort (it is skipped when stdout is not fd 1),
-    # so the Python-level stream is redirected as well once the wire is claimed.
-    async with stdio_server() as (read_stream, write_stream):
-        sys.stdout = sys.stderr
-        await server.run(read_stream, write_stream, server.create_initialization_options())
+    """Run the MCP 2 server on stdio and retain its cleanup task."""
+    cleanup_task = asyncio.create_task(_periodic_job_cleanup())
+    try:
+        # Keep MCP 2's private wire descriptor and stdout protection.
+        async with stdio_server() as (read_stream, write_stream):
+            sys.stdout = sys.stderr
+            await server.run(read_stream, write_stream, server.create_initialization_options())
+    finally:
+        cleanup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await cleanup_task
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
