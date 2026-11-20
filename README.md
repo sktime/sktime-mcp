@@ -179,7 +179,7 @@ This exposes standard SSE on `/sse` and message passing on `/messages/`. Every r
 
 You can configure the server's behavior at runtime using environment variables:
 
-- `SKTIME_MCP_MAX_RESPONSE_TOKENS`: Maximum tokens allowed per tool response (e.g., `10000`). If a response exceeds this limit, it is truncated and appended with a notice. Set to `0` (default) for unlimited.
+- `SKTIME_MCP_MAX_RESPONSE_TOKENS`: Maximum tokens allowed per tool response (e.g., `10000`). If a response exceeds this limit, the largest lists/dicts/strings in the result are capped (keeping the first entries) so the response stays valid JSON, and a `truncated` object describes what was cut. Set to `0` (default) for unlimited.
 - `SKTIME_MCP_LOG_LEVEL`: Server logging verbosity level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Defaults to `WARNING`.
 - `SKTIME_MCP_AUTO_FORMAT`: Enables or disables automatic time-series formatting during data loading.
 - `SKTIME_MCP_JOB_MAX_AGE_HOURS`: Hours a finished background job is kept before cleanup (minimum `1`; running and pending jobs are never pruned). Defaults to `24`.

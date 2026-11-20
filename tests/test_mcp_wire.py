@@ -188,7 +188,10 @@ async def test_plot_series_image_survives_response_token_limit(plot_handle, monk
     async with _connected_session() as session:
         result = await session.call_tool("plot_series", {"data_handles": [plot_handle]})
 
-    _, image = result.content
+    text, image = result.content
+    metadata = json.loads(text.text)
+    assert metadata["success"] is True
+    assert "image_base64" not in metadata
     assert base64.b64decode(image.data).startswith(b"\x89PNG")
 
 
