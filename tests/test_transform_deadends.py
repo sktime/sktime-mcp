@@ -86,7 +86,12 @@ class TestJsonRoundTrip:
             saved = save_data_tool(dh, path=str(path), format="json")
             assert saved["success"], saved
             loaded = ex.load_data_source(
-                {"type": "file", "path": path, "time_column": "time", "target_column": "value"}
+                {
+                    "type": "file",
+                    "path": path,
+                    "time_column": saved["time_column"],
+                    "target_column": "value",
+                }
             )
             try:
                 assert loaded["success"], loaded
