@@ -75,51 +75,33 @@ def load_data_source_tool(
     ...     "target_column": "value"
     ... }, run_async=True)
     """
-    if run_async:
-        import asyncio
-
-        from sktime_mcp.runtime.jobs import get_job_manager
-
-        executor = get_executor()
-        job_manager = get_job_manager()
-
-        source_type = config.get("type", "unknown")
-
-        # create a background job for data loading
-        job_id = job_manager.create_job(
-            job_type="data_loading",
-            estimator_handle="",
-            dataset_name=source_type,
-            total_steps=3,  # load, validate, format
-        )
-
-        coro = executor.load_data_source_async(config, job_id)
-
-        # Schedule the async coroutine on the event loop
-        try:
-            loop = asyncio.get_running_loop()
-            task = loop.create_task(coro)
-            job_manager.register_task(job_id, task)
-        except RuntimeError:
-            # No running event loop (e.g. sync test or CLI environment)
-            loop = asyncio.new_event_loop()
-            try:
-                loop.run_until_complete(coro)
-            finally:
-                loop.close()
-
-        return {
-            "success": True,
-            "job_id": job_id,
-            "message": (
-                f"Data loading job started for source type '{source_type}'. "
-                f"Use check_job_status('{job_id}') to monitor progress."
-            ),
-            "source_type": source_type,
-        }
-    else:
-        executor = get_executor()
+    executor = get_executor()
+    if not run_async:
         return executor.load_data_source(config)
+
+    from sktime_mcp.runtime.jobs import get_job_manager, start_background_job
+
+    source_type = config.get("type", "unknown")
+    scheduled = start_background_job(
+        get_job_manager(),
+        lambda job_id: executor.load_data_source_async(config, job_id),
+        job_type="data_loading",
+        estimator_handle="",
+        dataset_name=source_type,
+        total_steps=3,  # load, validate, format
+    )
+    if not scheduled["success"]:
+        return scheduled
+
+    job_id = scheduled["job_id"]
+    return {
+        **scheduled,
+        "message": (
+            f"Data loading job started for source type '{source_type}'. "
+            f"Use check_job_status('{job_id}') to monitor progress."
+        ),
+        "source_type": source_type,
+    }
 
 
 def list_data_sources_tool() -> dict[str, Any]:

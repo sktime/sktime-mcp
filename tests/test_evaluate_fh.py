@@ -112,6 +112,17 @@ class TestValidation:
         assert not result["success"]
         assert "step_length" in result["error"]
 
+    @pytest.mark.parametrize("field", ["initial_window", "cv_folds", "fh", "step_length"])
+    @pytest.mark.parametrize("value", [True, "2", 2.5, float("nan"), float("inf")])
+    def test_invalid_integer_fields_fail_before_job(self, handle, field, value):
+        before = set(get_executor()._job_manager.jobs)
+        result = evaluate_tool(
+            estimator_handle=handle, y="airline", run_async=True, **{field: value}
+        )
+        assert not result["success"]
+        assert field in result["error"]
+        assert set(get_executor()._job_manager.jobs) == before
+
     def test_series_too_short_for_fh_names_minimum_length(self, handle):
         """cv_folds=3, fh=12, step_length=1 needs 12 + 2 + 1 = 15 points; a 10-point series fails."""
         executor = get_executor()
@@ -180,20 +191,69 @@ class TestAsyncParity:
         assert _train_windows(res) == _train_windows(sync) == [120, 126, 132]
         assert res["metrics"] == sync["metrics"]
 
-    async def test_run_async_series_too_short_fails_job(self, handle):
+    async def test_run_async_series_too_short_fails_before_job(self, handle):
         executor = get_executor()
         y = pd.Series(range(10), index=pd.period_range("2000-01", periods=10, freq="M"))
         executor._data_handles["test_short_async_dh"] = {"y": y}
         try:
+            before = set(get_job_manager().jobs)
             started = evaluate_tool(
                 estimator_handle=handle, y="test_short_async_dh", cv_folds=3, fh=12, run_async=True
             )
-            assert started["success"]
-            job = await _wait_for_job(get_job_manager(), started["job_id"])
-            assert job.status is JobStatus.FAILED
-            assert any("at least 15 observations" in e for e in job.errors)
+            assert not started["success"]
+            assert "job_id" not in started
+            assert "at least 15 observations" in started["error"]
+            assert set(get_job_manager().jobs) == before
         finally:
             executor._data_handles.pop("test_short_async_dh", None)
+
+
+@pytest.mark.parametrize("fh", [10**9, [1, 10**9]])
+def test_horizon_cap_rejected_before_range_or_job(handle, monkeypatch, fh):
+    import sktime_mcp.runtime.executor as module
+
+    def forbidden_range(*args):
+        raise AssertionError("invalid horizon allocated a range")
+
+    monkeypatch.setenv("SKTIME_MCP_MAX_HORIZON", "25")
+    monkeypatch.setattr(module, "range", forbidden_range, raising=False)
+    before = set(get_job_manager().jobs)
+    result = evaluate_tool(handle, "airline", fh=fh, run_async=True)
+    assert not result["success"]
+    assert "SKTIME_MCP_MAX_HORIZON=25" in result["error"]
+    assert set(get_job_manager().jobs) == before
+
+
+def test_series_geometry_bounds_allocation_even_with_large_configured_cap(handle, monkeypatch):
+    import sktime_mcp.runtime.executor as module
+
+    def forbidden_range(*args):
+        raise AssertionError("impossible horizon allocated a range")
+
+    monkeypatch.setenv("SKTIME_MCP_MAX_HORIZON", str(10**12))
+    monkeypatch.setattr(module, "range", forbidden_range, raising=False)
+    executor = get_executor()
+    y = pd.Series([float(i) for i in (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)])
+    executor._data_handles["bounded_fh_series"] = {"y": y}
+    try:
+        before = set(get_job_manager().jobs)
+        result = evaluate_tool(handle, "bounded_fh_series", cv_folds=1, fh=10**9, run_async=True)
+        assert not result["success"]
+        assert "at least 1000000001 observations" in result["error"]
+        assert set(get_job_manager().jobs) == before
+        with pytest.raises(ValueError, match="at least 1000000001 observations"):
+            module._run_evaluate(NaiveForecaster(), y, None, 1, None, None, fh=10**9)
+    finally:
+        executor._data_handles.pop("bounded_fh_series", None)
+
+
+def test_integral_json_numbers_are_normalized(handle):
+    result = evaluate_tool(handle, "airline", cv_folds=2.0, fh=[1.0, 3.0], step_length=2.0)
+    assert result["success"], result
+    assert result["fh"] == [1, 3]
+    assert all(type(step) is int for step in result["fh"])
+    assert type(result["cv_folds_requested"]) is int
+    assert type(result["step_length"]) is int
 
 
 async def _wait_for_job(job_manager, job_id: str, timeout: float = 30.0):

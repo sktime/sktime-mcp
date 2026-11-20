@@ -4,19 +4,20 @@ evaluate tool for sktime MCP.
 Cross-validates an estimator on a dataset.
 """
 
-import asyncio
 import logging
 from typing import Any
 
 from sktime_mcp.runtime.executor import (
     _build_evaluate_result,
     _check_step_length,
-    _normalize_fh,
+    _evaluate_window,
+    _positive_integer,
     _resolve_metric_scoring,
     _run_evaluate,
+    _validate_fh,
     get_executor,
 )
-from sktime_mcp.runtime.jobs import get_job_manager
+from sktime_mcp.runtime.jobs import get_job_manager, start_background_job
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,10 @@ def _validate_evaluate_inputs(executor, estimator_handle: str, y: str) -> dict[s
     try:
         instance = executor._handle_manager.get_instance(estimator_handle)
     except KeyError:
-        return {"success": False, "error": executor._handle_manager.describe_missing(estimator_handle)}
+        return {
+            "success": False,
+            "error": executor._handle_manager.describe_missing(estimator_handle),
+        }
 
     get_tag = getattr(instance, "get_class_tag", None)
     obj_type = get_tag("object_type", "") if callable(get_tag) else ""
@@ -112,20 +116,14 @@ def evaluate_tool(
     Set run_async=True to run as a background job.
     """
     try:
-        _normalize_fh(fh)
-        _check_step_length(step_length)
+        horizon = _validate_fh(fh)
+        step_length = _check_step_length(step_length)
+        if initial_window is None:
+            cv_folds = _positive_integer(cv_folds, "cv_folds")
+        else:
+            initial_window = _positive_integer(initial_window, "initial_window")
     except ValueError as e:
         return {"success": False, "error": str(e)}
-    if initial_window is None and cv_folds < 1:
-        return {
-            "success": False,
-            "error": f"cv_folds must be a positive integer, got {cv_folds}",
-        }
-    if initial_window is not None and initial_window < 1:
-        return {
-            "success": False,
-            "error": f"initial_window must be a positive integer, got {initial_window}",
-        }
 
     executor = get_executor()
 
@@ -135,22 +133,31 @@ def evaluate_tool(
     if invalid is not None:
         return invalid
 
+    # X=<handle> resolves to that handle's exogenous columns, a y handle's
+    # stored X is used when X is omitted, and X == y (a handle) is refused as
+    # target leakage (F-05). Resolved here so async calls reject synchronously.
+    sources = executor._resolve_evaluate_sources(y, X)
+    if not sources["success"]:
+        return sources
+    try:
+        _evaluate_window(len(sources["y"]), cv_folds, initial_window, horizon, step_length)
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+
     if run_async:
-        job_manager = get_job_manager()
+        # _validate_evaluate_inputs already rejected a missing handle; this
+        # only guards the window between that check and job creation.
         try:
             estimator_name = executor._handle_manager.get_info(estimator_handle).estimator_name
-        except Exception:
-            estimator_name = "Unknown"
+        except KeyError:
+            return {
+                "success": False,
+                "error": executor._handle_manager.describe_missing(estimator_handle),
+            }
 
-        job_id = job_manager.create_job(
-            job_type="evaluate",
-            estimator_handle=estimator_handle,
-            estimator_name=estimator_name,
-            dataset_name=y,
-            total_steps=3,
-        )
-        task = asyncio.create_task(
-            executor.evaluate_async(
+        return start_background_job(
+            get_job_manager(),
+            lambda job_id: executor.evaluate_async(
                 handle_id=estimator_handle,
                 y=y,
                 X=X,
@@ -160,10 +167,13 @@ def evaluate_tool(
                 fh=fh,
                 step_length=step_length,
                 job_id=job_id,
-            )
+            ),
+            job_type="evaluate",
+            estimator_handle=estimator_handle,
+            estimator_name=estimator_name,
+            dataset_name=y,
+            total_steps=3,
         )
-        job_manager.register_task(job_id, task)
-        return {"success": True, "job_id": job_id, "status": "running"}
 
     try:
         instance = executor._handle_manager.get_instance(estimator_handle)
@@ -173,17 +183,7 @@ def evaluate_tool(
             "error": executor._handle_manager.describe_missing(estimator_handle),
         }
 
-    y_res = executor._resolve_source(y)
-    if not y_res["success"]:
-        return y_res
-    _y = y_res["data"]
-
-    _X = None
-    if X:
-        x_res = executor._resolve_source(X, prefer="X")
-        if not x_res["success"]:
-            return x_res
-        _X = x_res["data"]
+    _y, _X = sources["y"], sources["X"]
 
     scoring = None
     if metric:
@@ -205,4 +205,9 @@ def evaluate_tool(
         logger.exception("Error during evaluate")
         return {"success": False, "error": str(e)}
 
-    return _build_evaluate_result(fold_results, metrics, summary, cv_info, cv_folds, initial_window)
+    result = _build_evaluate_result(
+        fold_results, metrics, summary, cv_info, cv_folds, initial_window
+    )
+    if sources["exogenous"]:
+        result["exogenous"] = sources["exogenous"]
+    return result

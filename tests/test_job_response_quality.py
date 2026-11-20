@@ -37,8 +37,12 @@ def test_eta_available_for_fine_grained_jobs():
 def test_cancel_sets_terminal_step():
     jm = get_job_manager()
     job_id = jm.create_job(job_type="evaluate", estimator_handle="est_x", total_steps=3)
-    jm.update_job(job_id, status=JobStatus.RUNNING, completed_steps=1,
-                  current_step="Running cross-validation...")
+    jm.update_job(
+        job_id,
+        status=JobStatus.RUNNING,
+        completed_steps=1,
+        current_step="Running cross-validation...",
+    )
     try:
         jm.cancel_job(job_id)
         job = jm.get_job(job_id)
