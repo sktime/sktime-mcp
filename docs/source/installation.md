@@ -46,6 +46,13 @@ To install a specific extra, use:
 pip install "sktime-mcp[extra_name]"
 ```
 
+## Development Version
+
+The hosted `latest` docs track repository development. Installing from PyPI with
+`pip` or `uvx` does not guarantee that unreleased changes are present. Use the
+source installation below for current-main features and record the commit SHA
+(`git rev-parse HEAD`) when reproducing a workflow.
+
 ## Developer Installation
 
 If you intend to contribute to the project or run the test suite, install `sktime-mcp` from source in editable mode.

@@ -1,6 +1,6 @@
 # sktime-mcp
 
-**[Read the Documentation](http://sktime.github.io/sktime-mcp/)** | **[PyPI Package](https://pypi.org/project/sktime-mcp/0.1.0/)**
+**[Read the Documentation](https://sktime-mcp.readthedocs.io/en/latest/)** | **[PyPI Package](https://pypi.org/project/sktime-mcp/)**
 
 
 **MCP (Model Context Protocol) layer for sktime - Registry-Driven for LLMs**
@@ -280,7 +280,7 @@ Integer settings are validated on every read. Invalid values produce a warning a
 
 ## 📚 Available Tools
 
-The full tool reference is in the project documentation: https://sktime.github.io/sktime-mcp/
+The full tool reference is in the project documentation: https://sktime-mcp.readthedocs.io/en/latest/
 
 | Need | Tool options | Rough explanation |
 | --- | --- | --- |
@@ -294,7 +294,7 @@ The practical mental model is simple: prompts create tool calls, tool calls crea
 
 ## 🔄 Example LLM Flows
 
-See the [User Guide](https://sktime.github.io/sktime-mcp/en/latest/user-guide.html) for end-to-end workflow examples, including:
+See the [User Guide](https://sktime-mcp.readthedocs.io/en/latest/user-guide.html) for end-to-end workflow examples, including:
 - Discovering sktime coverage
 - Retail forecasting and saving results
 - Cleaning messy business data
