@@ -39,22 +39,17 @@ def list_available_data_tool(is_demo: bool | None = None) -> dict[str, Any]:
         system_demos = {}
         total_demos = 0
     else:
-        # Categorize system demo datasets
-        demos_dict = {
+        # Categorize system demo datasets by the shape each loader returns
+        # (see Executor.dataset_kinds); unloadable ones are reported apart
+        demos_dict: dict[str, list[str]] = {
             "forecasting": [],
             "classification": [],
             "regression": [],
+            "detection": [],
         }
-        classification_names = {"arrow_head", "gunpoint", "basic_motions", "italy_power_demand"}
-        regression_names = {"covid_3month", "cardano_sentiment"}
-
+        kinds = executor.dataset_kinds()
         for name in system_demos_raw:
-            if name in classification_names:
-                demos_dict["classification"].append(name)
-            elif name in regression_names:
-                demos_dict["regression"].append(name)
-            else:
-                demos_dict["forecasting"].append(name)
+            demos_dict.setdefault(kinds.get(name, "forecasting"), []).append(name)
 
         system_demos = demos_dict
         total_demos = len(system_demos_raw)
