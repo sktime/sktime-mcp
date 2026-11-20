@@ -49,7 +49,10 @@ Behaviour:
 | `true` | `{"success": true, "job_id": "..."}` immediately | Training or loading is slow |
 
 When you pass `run_async: true`, the work is scheduled on the server's event loop
-and you get a `job_id` back straight away. Track it with the job tools:
+and you get a `job_id` back straight away. A missing estimator handle is rejected
+before any job is created, and calling a tool function with `run_async=True` from
+plain synchronous Python (no running event loop) returns a structured error instead
+of a job; use `run_async=False` there. Track a job with the job tools:
 
 ```text
 fit(run_async=true)  ->  job_id
@@ -116,7 +119,8 @@ Composition is expressed directly in the spec — sktime validates it.
 | :--- | :--- | :---: | :--- |
 | `spec` | string | ✅ | Craft spec, e.g. `ARIMA(order=(1, 1, 1))` or `Detrender() * ARIMA()`. |
 
-Returns an `est_…` handle.
+Returns an `est_…` handle. The spec must *call* the class: a bare class name
+such as `NaiveForecaster` is rejected with a hint to write `NaiveForecaster()`.
 
 ### `list_handles`
 
@@ -154,17 +158,35 @@ Generate predictions from a fitted estimator.
 | Argument | Type | Required | Default | Description |
 | :--- | :--- | :---: | :--- | :--- |
 | `estimator_handle` | string | ✅ | — | Handle of a **fitted** estimator. |
-| `horizon` | integer | — | `12` | Forecast horizon. |
+| `horizon` | integer | — | `12` | Forecast horizon. At most `SKTIME_MCP_MAX_HORIZON` steps (default 10000); larger requests are rejected before any work, with or without `run_async`. |
 | `mode` | string | — | `predict` | One of `predict`, `predict_interval`, `predict_quantiles`, `predict_proba`, `predict_var`. |
 | `coverage` | float or list | — | `0.9` | Coverage level(s) — used by `predict_interval`. |
 | `alpha` | float or list | — | — | Quantile level(s) — used by `predict_quantiles`. |
 | `X_handle` | string | — | — | Data handle for `X`. |
-| `y_handle` | string | — | — | Data handle for `y` (needed by detectors/annotators). |
+| `y_handle` | string | — | — | Data handle for `y`: the series a detector annotates or a transformer transforms (as in `fit`); forecasters ignore it. |
 | `X_dataset` | string | — | — | Demo dataset name for `X`. |
 | `y_dataset` | string | — | — | Demo dataset name for `y`. |
 | `run_async` | boolean | — | `false` | Run in the background, return a `job_id`. |
 
 Interval and quantile forecasts are **modes of this tool**, not separate tools.
+`predict_proba` returns a numeric summary of the forecast distribution rather
+than the distribution object: `{"distribution": "Normal", "mean": {<period>:
+value}, "var": {<period>: value}, "quantiles": {<period>: {"0.05": v, "0.5": v,
+"0.95": v}}}`. A forecaster without probabilistic support (tag
+`capability:pred_int` false) gets a structured error for every probabilistic
+mode instead of a raw `NotImplementedError`.
+
+The full result is also registered as a **data handle** and returned as
+`prediction_handle` (metadata `source: "prediction"`, plus `estimator_handle`,
+`mode`, `horizon`, `cutoff`). Use it like any other handle: `plot_series` it next
+to the train/test handles, `save_data` it to a file, `inspect_data` it, or score
+it with `call_method` on a metric, e.g.
+`{"y_true_data_handle": "<test handle>", "y_pred_data_handle": "<prediction_handle>"}`.
+Interval/quantile handles hold the flattened columns of the JSON response
+(e.g. `Coverage_0.9_lower`); a `predict_proba` handle holds `<var>_mean`,
+`<var>_var` and `<var>_0.05` / `<var>_0.5` / `<var>_0.95`. When the JSON is truncated (over 500 rows) the
+handle still holds the complete forecast. For `run_async`, the handle is in the
+job result.
 
 ### `update`
 
@@ -256,7 +278,7 @@ Split a series into temporal train/test handles. Provide **exactly one** of
 | Argument | Type | Required | Description |
 | :--- | :--- | :---: | :--- |
 | `data_handle` | string | ✅ | Handle to split. |
-| `test_size` | number | — | Hold-out fraction, exclusive range `(0.0, 1.0)`. Mutually exclusive with `fh`. |
+| `test_size` | number | — | Hold-out fraction, exclusive range `(0.0, 1.0)`. The test count is rounded up, as in sktime, and must leave at least one training observation. Mutually exclusive with `fh`. |
 | `fh` | int or list | — | Integer: hold out that many final steps. List: holds out `max(fh)` steps — `fh=[1,5,10]` reserves 10. Mutually exclusive with `test_size`. |
 
 Returns `train_handle` and `test_handle`.
@@ -300,15 +322,16 @@ Writing to `out.parquet` with the default `format` produces a CSV.
 
 ### `plot_series`
 
-Plot one or more series. Saves a file when `path` is given, otherwise returns
-the image as a base64 string.
+Plot one or more series. Saves a file when `path` is given. Otherwise PNG and
+WebP plots are returned as an MCP image content block next to the JSON metadata,
+and SVG plots as a base64 string in `image_base64`.
 
 | Argument | Type | Required | Default | Description |
 | :--- | :--- | :---: | :--- | :--- |
-| `data_handles` | array of string | ✅ | — | Handles to plot, e.g. train, test, forecast. |
+| `data_handles` | array of string | ✅ | — | Handles to plot, e.g. the train/test handles from `split_data` and the `prediction_handle` from `predict`. |
 | `labels` | array of string | — | — | Legend label per handle. |
 | `title` | string | — | — | Plot title. |
-| `path` | string | — | — | Save location, e.g. `/tmp/plot.png`. Omit to get base64 back. |
+| `path` | string | — | — | Save location, e.g. `/tmp/plot.png`. Omit to get the plot back inline. |
 | `figsize` | array | — | `[12, 6]` | `[width, height]` in inches. |
 | `dpi` | integer | — | `150` | Resolution. |
 | `markers` | string or array | — | — | Marker style(s), e.g. `"o"` or `[".", "x"]`. |
