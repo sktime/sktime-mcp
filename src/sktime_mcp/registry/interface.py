@@ -5,12 +5,20 @@ Thin adapter over sktime's estimator registry.
 Delegates to ``sktime.registry`` functions directly.
 """
 
+import difflib
 import inspect
 import logging
+import re
+import sys
 from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# ``package.module.ClassName``: identifiers joined by dots, nothing else. Used
+# to recognize qualified registry aliases; client input is never imported or
+# evaluated (including calls, brackets and operators).
+_DOTTED_PATH = re.compile(r"^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+$")
 
 
 @dataclass
@@ -73,6 +81,7 @@ class RegistryInterface:
 
     def __init__(self):
         """Initialize the registry interface."""
+        self._index: dict[str, type] | None = None
         try:
             from sktime.registry import all_estimators  # noqa: F401
         except ImportError as e:
@@ -209,25 +218,64 @@ class RegistryInterface:
                 logger.debug(f"Failed to create node for {name}: {e}")
         return results
 
+    def _name_index(self) -> dict[str, type]:
+        """Map every registry class name to its class (built once, then cached)."""
+        if self._index is None:
+            from sktime.registry import all_estimators
+
+            self._index = dict(all_estimators(return_names=True, as_dataframe=False))
+        return self._index
+
+    def _qualified_registry_class(self, dotted_path: str) -> type | None:
+        """Resolve a registered class without importing a client-supplied module.
+
+        Canonical class paths and already-loaded public re-exports are accepted.
+        ``vars`` deliberately avoids triggering a module's ``__getattr__`` hook.
+        """
+        module_name, _, attr = dotted_path.rpartition(".")
+        cls = self._name_index().get(attr)
+        if cls is None:
+            return None
+        if module_name == cls.__module__:
+            return cls
+        module = sys.modules.get(module_name)
+        if module is not None and vars(module).get(attr) is cls:
+            return cls
+        return None
+
     def get_estimator_by_name(self, name: str) -> EstimatorNode | None:
         """
-        Get a specific estimator by its class name.
+        Get a registered component by name or a loaded qualified alias.
 
-        Uses ``sktime.registry.craft`` for direct class resolution
-        instead of scanning all estimators.
+        Resolution order: exact registry name, case-insensitive registry name,
+        then canonical class paths or already-loaded re-exports from the same
+        registry. Names are never evaluated or imported; anything that does
+        not resolve returns ``None``.
 
         Args:
-            name: The class name of the estimator (e.g., "ARIMA").
+            name: The class name of the estimator (e.g., "ARIMA") or its
+                dotted import path (e.g., "sktime.forecasting.arima.ARIMA").
         """
-        from sktime.registry import craft
+        if not isinstance(name, str) or not name.strip():
+            return None
+        name = name.strip()
 
-        try:
-            cls = craft(name)
-            if isinstance(cls, type):
-                return self._create_node(name, cls)
-        except Exception:
-            pass
-        return None
+        index = self._name_index()
+        cls = index.get(name)
+        if cls is None:
+            lowered = name.lower()
+            cls = next((c for n, c in index.items() if n.lower() == lowered), None)
+        if cls is None and _DOTTED_PATH.match(name):
+            cls = self._qualified_registry_class(name)
+        if cls is None:
+            return None
+        return self._create_node(cls.__name__, cls)
+
+    def suggest_names(self, name: str, n: int = 3) -> list[str]:
+        """Return up to *n* registry class names that look like *name* (did-you-mean)."""
+        if not isinstance(name, str) or not name.strip():
+            return []
+        return difflib.get_close_matches(name.strip(), list(self._name_index()), n=n, cutoff=0.6)
 
     def get_available_tasks(self) -> list[str]:
         """Get list of available scitypes from sktime's base class register."""

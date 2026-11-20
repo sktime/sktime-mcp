@@ -413,7 +413,7 @@ def get_tools() -> list[Tool]:
         ),
         Tool(
             name="describe_component",
-            description="Get detailed information about ANY class or component in the sktime ecosystem (estimators, splitters, metrics, transformers)",
+            description="Describe a registered sktime component (estimator, splitter, metric or transformer) by name or a loaded qualified alias. Client input is never evaluated or used to import modules.",
             inputSchema={
                 "type": "object",
                 "properties": {

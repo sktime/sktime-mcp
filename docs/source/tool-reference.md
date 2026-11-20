@@ -91,8 +91,10 @@ Commonly useful tags: `capability:pred_int` (prediction intervals),
 
 ### `describe_component`
 
-Detailed information about any class in the sktime ecosystem — estimators,
-splitters, metrics, transformers.
+Detailed information about registered sktime components — estimators,
+splitters, metrics and transformers. Names and canonical or already-loaded
+qualified aliases are resolved from the registry, without evaluating the input
+or importing a client-supplied module.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :---: | :--- |
