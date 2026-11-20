@@ -1,6 +1,6 @@
 # sktime-mcp
 
-**[Read the Documentation](http://sktime.github.io/sktime-mcp/)** | **[PyPI Package](https://pypi.org/project/sktime-mcp/0.1.0/)**
+**[Read the Documentation](https://sktime-mcp.readthedocs.io/en/latest/)** | **[PyPI Package](https://pypi.org/project/sktime-mcp/)**
 
 
 **MCP (Model Context Protocol) layer for sktime - Registry-Driven for LLMs**
@@ -18,9 +18,9 @@ This MCP is **not** just documentation or static code analysis. It is a **semant
 
 ### Key Principles
 
-1. **sktime as Source of Truth** - No AST parsing, no repo indexing, no heuristics. All structure comes from `all_estimators`, estimator tags, and sktime's API contracts.
+1. **sktime as Source of Truth** - Model metadata comes from `all_estimators`, estimator tags, and sktime's API contracts.
 
-2. **Registry-First** - Instead of `File → Class → Infer Relationships`, we do `Registry → Semantics → Safe Execution`.
+2. **Registry-First** - Instead of `File → Class → Infer Relationships`, we do `Registry → Semantics → Execution`.
 
 3. **Minimal MCP Surface** - Exposes only what an LLM needs: Discovery, Description, Instantiation, Execution, and model persistence.
 
@@ -97,7 +97,7 @@ For a more detailed first-time setup flow, including MCP server verification and
 If you are new to sktime‑mcp or to MCP‑based workflows, this section provides a minimal starting point to help you verify that your setup is working correctly.
 
 ### What is MCP?
-The Model Context Protocol (MCP) allows Large Language Models (LLMs) to discover, reason about, and execute sktime workflows programmatically. This project exposes sktime’s estimator registry and semantics in a structured way so that LLMs can safely compose and run real time‑series pipelines.
+The Model Context Protocol (MCP) allows Large Language Models (LLMs) to discover, reason about, and execute sktime workflows programmatically. This project exposes sktime’s estimator registry and semantics in a structured way so that LLMs can compose and run real time-series pipelines. Execution uses the server account's privileges; tool schemas do not provide a sandbox.
 
 ### Prerequisites
 - Python 3.10 or newer
@@ -280,7 +280,7 @@ Integer settings are validated on every read. Invalid values produce a warning a
 
 ## 📚 Available Tools
 
-The full tool reference is in the project documentation: https://sktime.github.io/sktime-mcp/
+The full tool reference is in the project documentation: https://sktime-mcp.readthedocs.io/en/latest/
 
 | Need | Tool options | Rough explanation |
 | --- | --- | --- |
@@ -294,7 +294,7 @@ The practical mental model is simple: prompts create tool calls, tool calls crea
 
 ## 🔄 Example LLM Flows
 
-See the [User Guide](https://sktime.github.io/sktime-mcp/en/latest/user-guide.html) for end-to-end workflow examples, including:
+See the [User Guide](https://sktime-mcp.readthedocs.io/en/latest/user-guide.html) for end-to-end workflow examples, including:
 - Discovering sktime coverage
 - Retail forecasting and saving results
 - Cleaning messy business data

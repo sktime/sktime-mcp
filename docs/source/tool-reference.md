@@ -100,6 +100,11 @@ or importing a client-supplied module.
 | :--- | :--- | :---: | :--- |
 | `name` | string | ✅ | Class name, e.g. `ARIMA`, `SlidingWindowSplitter`, `MeanAbsolutePercentageError`. |
 
+The response includes `dependencies_available`, `missing_dependencies` and
+`install_hint`, alongside parameters, tags and the docstring. Availability reflects
+the current server environment and package requirements, not model accuracy or a
+guarantee that every workflow will run.
+
 ### `list_available_data`
 
 Lists demo datasets and active user-loaded data handles in one response.
@@ -115,7 +120,7 @@ Lists demo datasets and active user-loaded data handles in one response.
 ### `instantiate`
 
 Create an estimator or pipeline from an sktime **craft** specification string.
-Composition is expressed directly in the spec — sktime validates it.
+Composition is expressed directly in the spec. `craft()` evaluates that specification, so only accept trusted input; registry lookup and result-type checks do not make it a sandbox. Compatibility may be checked during construction or fitting.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :---: | :--- |
@@ -320,6 +325,7 @@ creating parent directories as needed.
 | `data_handle` | string | ✅ | — | Handle to export. |
 | `path` | string | ✅ | — | Destination path. |
 | `format` | string | — | `csv` | `csv`, `parquet`, or `json`. |
+| `overwrite` | boolean | — | `false` | Refuse to replace an existing file unless explicitly enabled. The response reports whether a file was replaced. |
 
 ```{warning}
 The format comes from the `format` argument, **not** the file extension.
@@ -356,7 +362,7 @@ and SVG plots as a base64 string in `image_base64`.
 
 ### `export_code`
 
-Emit standalone, runnable Python that reconstructs the estimator.
+Emit Python that reconstructs the estimator or loads a saved model. This does not capture custom data preparation, fitted state or the complete conversation. The optional fit example uses a demo dataset; review and execute the export in your target environment.
 
 | Argument | Type | Required | Default | Description |
 | :--- | :--- | :---: | :--- | :--- |
@@ -446,8 +452,9 @@ pip install mlflow
 **Treat this as opt-in.** Most MCP clients prompt before each tool call and let
 you allow or deny individual tools — leave `run_command` on ask-every-time, or
 disable it outright, unless you specifically want the assistant installing
-packages and inspecting the filesystem on your behalf. If you need a hard
-guarantee, run the server inside a container (see the Docker option in the
-{doc}`user-guide`) so the blast radius is the container rather than your machine.
+packages and inspecting the filesystem on your behalf. For stronger isolation,
+use a container with restricted mounts and privileges (see the Docker option in
+the {doc}`user-guide`). Its isolation depends on that configuration; host mounts
+and elevated privileges can expose the host.
 
 See {doc}`developer/architecture` for the full trust boundary.

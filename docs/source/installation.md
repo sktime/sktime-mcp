@@ -10,7 +10,7 @@ This guide covers the steps required to install `sktime-mcp` for both end-users 
 
 ## Standard Installation
 
-The recommended way to install `sktime-mcp` is via pip or uv. To enable full functionality, including support for various data formats and forecasting models, use the `[all]` extra.
+The recommended way to install `sktime-mcp` is via pip or uv. The `[all]` extra installs the bundled optional file-format, database and forecasting dependencies. Individual estimators can still require additional packages; check their dependency hints before use.
 
 ### Using pip
 ```bash
@@ -45,6 +45,13 @@ To install a specific extra, use:
 ```bash
 pip install "sktime-mcp[extra_name]"
 ```
+
+## Development Version
+
+The hosted `latest` docs track repository development. Installing from PyPI with
+`pip` or `uvx` does not guarantee that unreleased changes are present. Use the
+source installation below for current-main features and record the commit SHA
+(`git rev-parse HEAD`) when reproducing a workflow.
 
 ## Developer Installation
 
