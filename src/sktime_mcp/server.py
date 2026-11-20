@@ -36,6 +36,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import (
     CallToolRequestParams,
     CallToolResult,
+    ImageContent,
     ListToolsResult,
     PaginatedRequestParams,
     TextContent,
@@ -148,6 +149,19 @@ def _apply_response_token_limit(tool_name: str, text: str) -> str:
     if budget < 0:
         budget = 0
     return text[:budget] + notice
+
+
+# SVG is left as base64 in the JSON body: MCP clients generally render raster images only.
+_IMAGE_MIME_TYPES = {"png": "image/png", "webp": "image/webp"}
+
+
+def _split_image(result: dict) -> tuple[dict, ImageContent | None]:
+    """Move an inline raster plot out of the JSON body into an MCP image block."""
+    mime_type = _IMAGE_MIME_TYPES.get(result.get("image_format"))
+    if mime_type is None or "image_base64" not in result:
+        return result, None
+    body = {k: v for k, v in result.items() if k != "image_base64"}
+    return body, ImageContent(type="image", data=result["image_base64"], mime_type=mime_type)
 
 
 def sanitize_for_json(obj, _seen=None):
@@ -838,7 +852,8 @@ def get_tools() -> list[Tool]:
             description=(
                 "Plot one or more time series natively, e.g. the train and test handles from "
                 "split_data together with the prediction_handle returned by predict. "
-                "Can save the plot to a specified path as a PNG file or return it as a base64 string."
+                "Saves the plot to `path` when given. Otherwise PNG and WebP plots are "
+                "returned as an MCP image content block, and SVG as a base64 string."
             ),
             inputSchema={
                 "type": "object",
@@ -860,7 +875,7 @@ def get_tools() -> list[Tool]:
                     },
                     "path": {
                         "type": "string",
-                        "description": "Optional local file path to save the plot (e.g., '/tmp/plot.png'). If omitted, returns base64.",
+                        "description": "Optional local file path to save the plot (e.g., '/tmp/plot.png'). If omitted, the plot is returned inline.",
                     },
                     "figsize": {
                         "type": "array",
@@ -1297,6 +1312,10 @@ async def call_tool(ctx: ServerRequestContext, params: CallToolRequestParams) ->
         else:
             result = {"error": f"Unknown tool: {name}"}
 
+        image = None
+        if name == "plot_series":
+            result, image = _split_image(result)
+
         logger.info(f"=== Result for {name} ===")
 
         sanitized_result = sanitize_for_json(result)
@@ -1305,7 +1324,10 @@ async def call_tool(ctx: ServerRequestContext, params: CallToolRequestParams) ->
         response_text = json.dumps(sanitized_result, indent=2, default=str)
         truncated_text = _apply_response_token_limit(name, response_text)
 
-        return CallToolResult(content=[TextContent(type="text", text=truncated_text)])
+        content: list[TextContent | ImageContent] = [TextContent(type="text", text=truncated_text)]
+        if image is not None:
+            content.append(image)
+        return CallToolResult(content=content)
     except Exception as e:
         logger.exception(f"Error in tool {name}")
         return _error_result(str(e))

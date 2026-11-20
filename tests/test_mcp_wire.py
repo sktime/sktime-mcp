@@ -5,6 +5,7 @@ MCP layer itself (handler wiring, ``inputSchema`` serialization, argument
 validation, the ``isError`` flag, stdio hygiene). These tests do.
 """
 
+import base64
 import json
 import os
 import socket
@@ -17,6 +18,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import anyio
+import pandas as pd
 import pytest
 from mcp.client.session import ClientSession
 from mcp.client.sse import sse_client
@@ -24,6 +26,7 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.shared.memory import create_client_server_memory_streams
 
 import sktime_mcp
+from sktime_mcp.runtime.executor import get_executor
 from sktime_mcp.server import get_tools, server
 
 EXPECTED_TOOL_COUNT = 26
@@ -113,6 +116,80 @@ async def test_tool_exception_becomes_structured_error(monkeypatch):
 
     assert result.is_error is True
     assert _body(result) == {"success": False, "error": "boom"}
+
+
+@pytest.fixture
+def plot_handle():
+    executor = get_executor()
+    idx = pd.date_range("2020-01", periods=12, freq="MS")
+    executor._data_handles["wire_plot"] = {"y": pd.Series(range(12), index=idx)}
+    yield "wire_plot"
+    executor._data_handles.pop("wire_plot", None)
+
+
+@pytest.mark.parametrize(
+    ("image_format", "mime_type", "magic"),
+    [("png", "image/png", b"\x89PNG"), ("webp", "image/webp", b"RIFF")],
+)
+async def test_plot_series_returns_native_image_content(
+    plot_handle, image_format, mime_type, magic
+):
+    async with _connected_session() as session:
+        result = await session.call_tool(
+            "plot_series", {"data_handles": [plot_handle], "image_format": image_format}
+        )
+
+    assert result.is_error is False
+    text, image = result.content
+    body = json.loads(text.text)
+    assert body["success"] is True
+    assert body["image_format"] == image_format
+    assert "image_base64" not in body
+    assert image.type == "image"
+    assert image.mime_type == mime_type
+    assert base64.b64decode(image.data).startswith(magic)
+
+
+async def test_plot_series_svg_stays_base64_text(plot_handle):
+    async with _connected_session() as session:
+        result = await session.call_tool(
+            "plot_series", {"data_handles": [plot_handle], "image_format": "svg"}
+        )
+
+    body = _body(result)
+    assert body["success"] is True
+    assert b"<svg" in base64.b64decode(body["image_base64"])
+
+
+async def test_plot_series_path_mode_returns_text_only(plot_handle, tmp_path: Path):
+    path = tmp_path / "plot.png"
+    async with _connected_session() as session:
+        result = await session.call_tool(
+            "plot_series", {"data_handles": [plot_handle], "path": str(path)}
+        )
+
+    body = _body(result)
+    assert body["path"] == str(path)
+    assert "image_base64" not in body
+    assert path.read_bytes().startswith(b"\x89PNG")
+
+
+async def test_plot_series_failure_returns_text_only():
+    async with _connected_session() as session:
+        result = await session.call_tool("plot_series", {"data_handles": ["missing_handle"]})
+
+    body = _body(result)
+    assert body["success"] is False
+    assert "missing_handle" in body["error"]
+
+
+async def test_plot_series_image_survives_response_token_limit(plot_handle, monkeypatch):
+    monkeypatch.setenv("SKTIME_MCP_MAX_RESPONSE_TOKENS", "100")
+    async with _connected_session() as session:
+        result = await session.call_tool("plot_series", {"data_handles": [plot_handle]})
+
+    _, image = result.content
+    assert base64.b64decode(image.data).startswith(b"\x89PNG")
 
 
 _NOISY_SERVER = """
