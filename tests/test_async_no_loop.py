@@ -9,6 +9,7 @@
 * no coroutine in ``src/`` uses ``asyncio.get_event_loop()``.
 """
 
+import ast
 import asyncio
 import gc
 import warnings
@@ -196,6 +197,47 @@ def test_no_get_event_loop_in_src():
     offenders = [
         str(p.relative_to(root))
         for p in root.rglob("*.py")
-        if "get_event_loop" in p.read_text(encoding="utf-8")
+        if any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get_event_loop"
+            for node in ast.walk(ast.parse(p.read_text(encoding="utf-8")))
+        )
     ]
     assert offenders == []
+
+
+async def test_factory_failure_removes_job():
+    def fail_factory(job_id):
+        raise ValueError("factory failed")
+
+    before = _job_ids()
+    result = start_background_job(
+        get_job_manager(), fail_factory, job_type="fit", estimator_handle="est_x"
+    )
+    assert not result["success"]
+    assert "factory failed" in result["error"]
+    assert _job_ids() == before
+
+
+async def test_task_creation_failure_closes_coroutine_and_removes_job(monkeypatch):
+    import inspect
+
+    async def work():
+        return None
+
+    coro = work()
+    before = _job_ids()
+
+    def fail_task(coroutine):
+        raise ValueError("task creation failed")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(asyncio.get_running_loop(), "create_task", fail_task)
+        result = start_background_job(
+            get_job_manager(), lambda job_id: coro, job_type="fit", estimator_handle="est_x"
+        )
+    assert not result["success"]
+    assert "task creation failed" in result["error"]
+    assert _job_ids() == before
+    assert inspect.getcoroutinestate(coro) == inspect.CORO_CLOSED

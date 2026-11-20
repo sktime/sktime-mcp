@@ -65,11 +65,13 @@ class TestResolveModelPath:
     """Path resolution: local paths expand and absolutize; MLflow URIs pass through."""
 
     def test_tilde_expanded(self):
+        from pathlib import Path
+
         from sktime_mcp.tools.save_model import resolve_model_path
 
         resolved = resolve_model_path("~/some_model_dir")
         assert "~" not in resolved
-        assert resolved.startswith("/")
+        assert Path(resolved).is_absolute()
 
     def test_relative_path_absolutized(self):
         from pathlib import Path

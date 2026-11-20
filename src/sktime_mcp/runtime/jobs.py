@@ -447,11 +447,13 @@ def start_background_job(
         horizon=horizon,
         total_steps=total_steps,
     )
-    coro = make_coro(job_id)
+    coro = None
     try:
+        coro = make_coro(job_id)
         task = loop.create_task(coro)
     except Exception as exc:
-        coro.close()
+        if coro is not None:
+            coro.close()
         job_manager.delete_job(job_id)
         return {"success": False, "error": f"Could not schedule background job: {exc}"}
     job_manager.register_task(job_id, task)
