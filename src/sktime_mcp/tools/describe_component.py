@@ -11,12 +11,12 @@ from sktime_mcp.registry.tag_resolver import get_tag_resolver
 
 def describe_component_tool(name: str) -> dict[str, Any]:
     """
-    Get detailed information about ANY class or component in the sktime ecosystem
+    Get detailed information about a registered component in the sktime ecosystem
     (estimators, transformers, splitters, metrics, aligners).
 
     Args:
         name: Name of the component class (e.g., "ARIMA", "SlidingWindowSplitter",
-            "MeanAbsolutePercentageError") or its dotted import path
+            "MeanAbsolutePercentageError") or its canonical/loaded qualified alias
             (e.g., "sktime.forecasting.arima.ARIMA").
 
     Returns:
@@ -40,8 +40,8 @@ def describe_component_tool(name: str) -> dict[str, Any]:
     registry = get_registry()
     tag_resolver = get_tag_resolver()
 
-    # Registry lookup (exact, then case-insensitive) or a dotted import path of a
-    # BaseObject subclass; the name is never evaluated as an expression.
+    # Registry names and loaded qualified aliases only; client input is never
+    # evaluated or used to import a module.
     node = registry.get_estimator_by_name(name)
     if node is None:
         error: dict[str, Any] = {

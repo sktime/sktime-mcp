@@ -6,6 +6,7 @@ and running fit/predict operations.
 """
 
 import asyncio
+import contextlib
 import inspect
 import logging
 import uuid
@@ -13,6 +14,7 @@ from collections import deque
 from typing import Any
 
 import pandas as pd
+from pandas.tseries.frequencies import to_offset as _to_offset
 
 from sktime_mcp.registry.interface import get_registry
 from sktime_mcp.runtime.handles import get_handle_manager
@@ -81,10 +83,94 @@ def _to_period_index_if_possible(obj: Any) -> Any:
                 return obj
             idx = pd.DatetimeIndex(idx, freq=inferred)
         converted = obj.copy()
-        converted.index = idx.to_period()
+        months = _anchored_months(idx.freq)
+        if months is not None:
+            # Monthly data anchored mid-month (e.g. the 15th) carries a plain
+            # DateOffset(months=n) which has no period alias; map it to "M".
+            converted.index = idx.to_period("M" if months == 1 else f"{months}M")
+        else:
+            converted.index = idx.to_period()
         return converted
     except (ValueError, TypeError):
         return obj
+
+
+def _anchored_months(freq: Any) -> int | None:
+    """Number of months in a plain ``pd.DateOffset(months=n)``; None for any other offset."""
+    if type(freq) is pd.DateOffset and set(freq.kwds) == {"months"}:
+        return int(freq.kwds["months"]) * int(freq.n)
+    return None
+
+
+def _infer_freq_from_regular_window(index: pd.DatetimeIndex, max_windows: int = 50) -> str | None:
+    """``pd.infer_freq`` over sliding 3-point windows; first recognised alias wins.
+
+    ``pd.infer_freq`` needs the whole index to be regular, so a single gap
+    defeats it. A 3-point window of consecutive timestamps is enough for pandas
+    to name anchored aliases such as ``W-MON``, ``30min``, ``QS-OCT`` or ``B``.
+    The caller still verifies the alias against the full index.
+    """
+    for start in range(0, min(max_windows, len(index) - 2)):
+        try:
+            inferred = pd.infer_freq(index[start : start + 3])
+        except (ValueError, TypeError):
+            inferred = None
+        if inferred is not None:
+            return inferred
+    return None
+
+
+def _step_matches_interval(index: pd.DatetimeIndex, freq: Any, interval: pd.Timedelta) -> bool:
+    """True if one *freq* step from the first timestamp is within 15% of *interval*.
+
+    Guards the window-inferred alias: three points one minute apart inside
+    30-minute data would otherwise suggest "min", and every timestamp *is* on a
+    minute boundary, so the subset check alone would let the series be blown
+    up 30-fold. Anchored offsets vary a little (28-31 days per month, 90-92 per
+    quarter), hence the tolerance.
+    """
+    try:
+        step = (index.min() + _to_offset(freq)) - index.min()
+    except (ValueError, TypeError, OverflowError):
+        return False
+    return abs(step - interval) <= 0.15 * interval
+
+
+def _candidate_frequencies(index: pd.DatetimeIndex, most_common_diff: pd.Timedelta) -> list[Any]:
+    """Frequencies worth trying for *index*, most specific first.
+
+    Every candidate is later checked with ``index.isin(pd.date_range(...))``;
+    nothing here is trusted on its own.
+    """
+    candidates: list[Any] = []
+    inferred = _infer_freq_from_regular_window(index)
+    if inferred is not None and _step_matches_interval(index, inferred, most_common_diff):
+        candidates.append(inferred)
+    days = most_common_diff.days
+    if most_common_diff == pd.Timedelta(days=7):
+        # Weekly anchored on the weekday of the first timestamp, not "W" (= W-SUN).
+        candidates.append(f"W-{index.min().strftime('%a').upper()}")
+    elif 28 <= days <= 31 and most_common_diff == pd.Timedelta(days=days):
+        # Monthly on an arbitrary day of the month (e.g. the 15th): pandas has
+        # no alias, but a DateOffset anchored on the first timestamp walks it.
+        candidates.append(pd.DateOffset(months=1))
+    elif most_common_diff > pd.Timedelta(0):
+        candidates.append(_to_offset(most_common_diff))
+    return candidates
+
+
+def _missing_values_report(y: Any, X: Any) -> dict[str, int]:
+    """Per-column NaN counts of the stored data, as plain ints (load-response shape)."""
+    report: dict[str, int] = {}
+    for obj in (y, X):
+        if obj is None:
+            continue
+        if isinstance(obj, pd.DataFrame):
+            report.update({str(col): int(n) for col, n in obj.isna().sum().items()})
+        else:
+            name = obj.name if getattr(obj, "name", None) is not None else "target"
+            report[str(name)] = int(obj.isna().sum())
+    return report
 
 
 # Max forecast rows returned inline before truncation (NB-22). Normal horizons
@@ -104,8 +190,11 @@ def _is_sktime_object(obj: Any) -> bool:
     craft evaluates arbitrary specs, so a spec like "42" returns an int. Such
     non-objects should not receive an estimator handle (BUG-10). We accept
     anything deriving from skbase's BaseObject, falling back to a duck-typed
-    check for get_params + a scitype tag.
+    check for get_params + a scitype tag. A bare class (spec "NaiveForecaster"
+    without parentheses) has both attributes but is not an instance.
     """
+    if isinstance(obj, type):
+        return False
     try:
         from skbase.base import BaseObject
 
@@ -116,21 +205,118 @@ def _is_sktime_object(obj: Any) -> bool:
     return hasattr(obj, "get_params") and hasattr(obj, "get_class_tag")
 
 
-def _cap_prediction_rows(result: dict) -> tuple[dict, dict | None]:
+def _column_names(X: Any) -> list[str]:
+    """Column names of an exogenous frame, for the ``exogenous`` response entry."""
+    if isinstance(X, pd.DataFrame):
+        return [str(c) for c in X.columns]
+    name = getattr(X, "name", None)
+    return [str(name)] if name is not None else []
+
+
+def _index_to_str(index: pd.Index) -> pd.Index:
+    """Stringify an index for JSON keys.
+
+    ``index.astype(str)`` raises on a MultiIndex (panel/hierarchical
+    forecasts, F-11); its levels are joined with "_", like the flattened
+    interval/quantile columns.
+    """
+    if isinstance(index, pd.MultiIndex):
+        return pd.Index(["_".join(map(str, key)) for key in index])
+    return index.astype(str)
+
+
+def _cap_prediction_rows(
+    result: dict, prediction_handle: str | None = None
+) -> tuple[dict, dict | None]:
     """Cap an index-keyed prediction dict, returning (capped, truncation_note)."""
     if not isinstance(result, dict) or len(result) <= _MAX_PREDICTION_ROWS:
         return result, None
     total = len(result)
     kept = dict(list(result.items())[:_MAX_PREDICTION_ROWS])
+    if prediction_handle:
+        hint = (
+            f"the full forecast is stored in data handle '{prediction_handle}' "
+            "(prediction_handle): use save_data to write it to a file, plot_series to "
+            "plot it, or call_method on a metric with y_pred_data_handle to score it"
+        )
+    else:
+        hint = "request a smaller horizon"
     note = {
         "shown": _MAX_PREDICTION_ROWS,
         "total": total,
-        "note": (
-            "forecast truncated; request a smaller horizon or use save_data to write "
-            "the full series to a file"
-        ),
+        "note": f"forecast truncated; {hint}",
     }
     return kept, note
+
+
+_PROBA_QUANTILES = [0.05, 0.5, 0.95]
+
+
+def _is_distribution(obj: Any) -> bool:
+    """True for a probability distribution as returned by predict_proba.
+
+    skpro and sktime (vendored ``sktime.base._proba``) both derive from a
+    ``BaseDistribution``; fall back to duck typing on mean/var/quantile,
+    excluding pandas objects which also have those methods.
+    """
+    if isinstance(obj, (pd.Series, pd.DataFrame)):
+        return False
+    for module in ("skpro.distributions.base", "sktime.base._proba._base"):
+        try:
+            base = __import__(module, fromlist=["BaseDistribution"]).BaseDistribution
+        except Exception:
+            continue
+        if isinstance(obj, base):
+            return True
+    return all(callable(getattr(obj, m, None)) for m in ("mean", "var", "quantile"))
+
+
+def _summarize_distribution(dist: Any) -> tuple[dict[str, Any], pd.DataFrame]:
+    """Numeric summary of a predict_proba distribution (F-23).
+
+    Returns the JSON-ready summary (``distribution`` class name, ``mean`` and
+    ``var`` keyed by time point, ``quantiles`` keyed by time point then level)
+    and a frame with the same values, columns flattened like interval
+    forecasts (``<var>_mean``, ``<var>_var``, ``<var>_0.05`` ...), for the
+    prediction handle. ``sanitize_for_json`` used to send back ``repr(dist)``.
+    """
+    mean = pd.DataFrame(dist.mean())
+    var = pd.DataFrame(dist.var())
+    if var.shape == mean.shape:
+        var.columns = mean.columns
+    quantiles = pd.DataFrame(dist.quantile(_PROBA_QUANTILES))
+    univariate = mean.shape[1] == 1
+
+    if isinstance(quantiles.columns, pd.MultiIndex):
+        levels = [str(col[-1]) for col in quantiles.columns.values]
+        flat = ["_".join(map(str, col)) for col in quantiles.columns.values]
+    else:
+        levels = flat = [str(col) for col in quantiles.columns]
+
+    frame = pd.concat([mean.add_suffix("_mean"), var.add_suffix("_var"), quantiles], axis=1)
+    frame.columns = [
+        *mean.add_suffix("_mean").columns,
+        *var.add_suffix("_var").columns,
+        *flat,
+    ]
+
+    index = list(_index_to_str(mean.index))
+    quantiles_json = quantiles.copy()
+    quantiles_json.columns = levels if univariate else flat
+    quantiles_json.index = index
+    if univariate:
+        mean_json = dict(zip(index, mean.iloc[:, 0].tolist(), strict=True))
+        var_json = dict(zip(index, var.iloc[:, 0].tolist(), strict=True))
+    else:
+        mean_json = mean.set_axis(index).to_dict(orient="index")
+        var_json = var.set_axis(index).to_dict(orient="index")
+    summary = {
+        "distribution": type(dist).__name__,
+        "mean": mean_json,
+        "var": var_json,
+        "quantiles": quantiles_json.to_dict(orient="index"),
+    }
+    return summary, frame
 
 
 def _get_index_frequency_metadata(
@@ -304,6 +490,52 @@ class Executor:
             self._cleanup_oldest_data(count=max(1, self._max_data_handles // 5))
         self._data_handles[handle_id] = data
 
+    def _register_prediction_handle(
+        self,
+        predictions: pd.Series | pd.DataFrame,
+        *,
+        estimator_handle: str,
+        mode: str,
+        horizon: int | None,
+        instance: Any,
+    ) -> str:
+        """Store a predict result as a data handle so it can be plotted, saved or scored (F-06).
+
+        Interval/quantile frames get the same flattened columns the JSON
+        response uses; the time index is kept as-is (not stringified) so the
+        handle plots and scores against a test split.
+        """
+        y = predictions.copy()
+        if isinstance(y, pd.DataFrame) and isinstance(y.columns, pd.MultiIndex):
+            y.columns = ["_".join(map(str, col)) for col in y.columns.values]
+
+        cutoff = getattr(instance, "cutoff", None)
+        if cutoff is not None and hasattr(cutoff, "__len__") and len(cutoff) == 1:
+            cutoff = cutoff[0]
+        if isinstance(y, pd.DataFrame):
+            columns = [str(c) for c in y.columns]
+        else:
+            columns = [str(y.name) if y.name is not None else "target"]
+
+        metadata: dict[str, Any] = {
+            "source": "prediction",
+            "estimator_handle": estimator_handle,
+            "mode": mode,
+            "horizon": horizon,
+            "cutoff": str(cutoff) if cutoff is not None else None,
+            "columns": columns,
+            "rows": len(y),
+            "start_date": str(y.index[0]) if len(y) else None,
+            "end_date": str(y.index[-1]) if len(y) else None,
+            "frequency": _get_index_frequency_metadata(y.index),
+        }
+        handle_id = f"data_{uuid.uuid4().hex[:8]}"
+        self._register_data_handle(
+            handle_id,
+            {"y": y, "X": None, "metadata": metadata, "validation": {}, "config": {}},
+        )
+        return handle_id
+
     def summarize_available_handles(self, limit: int = 5) -> dict[str, Any]:
         """Capped view of data-handle ids for not-found error responses.
 
@@ -317,21 +549,185 @@ class Executor:
             "n_available_handles": len(handle_ids),
         }
 
+    def _no_exog_error(self, handle_id: str) -> dict[str, Any]:
+        """Error body for a data handle used as X that carries no exogenous columns."""
+        return {
+            "success": False,
+            "error": (
+                f"Data handle '{handle_id}' has no exogenous columns: it holds only the "
+                "target series. Load the source with exog_columns=[...] in "
+                "load_data_source to attach exogenous features, or omit the X argument."
+            ),
+        }
+
+    def _no_dataset_exog_error(self, name: str) -> dict[str, Any]:
+        """Error body for a demo dataset used as X that carries no exogenous data."""
+        return {
+            "success": False,
+            "error": (
+                f"Demo dataset '{name}' has no exogenous data: it is a target series only "
+                "and cannot be used as X. Omit the X argument, or pick a dataset that "
+                "ships exogenous features (e.g. 'longley')."
+            ),
+        }
+
+    @staticmethod
+    def _ambiguous_slot_error(slot: str, handle: str, dataset: str) -> dict[str, Any]:
+        """Error body when both a data handle and a demo dataset name the same slot."""
+        return {
+            "success": False,
+            "error": (
+                f"Ambiguous {slot} input: both {slot}_handle='{handle}' and "
+                f"{slot}_dataset='{dataset}' were given. Pass exactly one of them."
+            ),
+        }
+
     def _resolve_source(self, source: str, prefer: str = "y") -> dict[str, Any]:
         """Resolve a source id to a series, trying data_handle then demo dataset.
 
-        ``prefer`` selects which component of a demo dataset to return
-        ("y" or "X"); the other is the fallback when the preferred one is
-        absent. Data handles always resolve to their primary series.
+        ``prefer`` selects which component to return ("y" or "X"). "X" is the
+        stored exogenous frame of a data handle or the exogenous data of a
+        demo dataset — an error if the source has none (F-05 / #556 item 6:
+        it used to fall through to the target, so X == y silently regressed
+        the target on itself).
         """
         if source in self._data_handles:
+            if prefer == "X":
+                X = self._data_handles[source].get("X")
+                if X is None:
+                    return self._no_exog_error(source)
+                return {"success": True, "data": X}
             return {"success": True, "data": self._data_handles[source]["y"]}
         res = self.load_dataset(source)
         if res["success"]:
-            first, second = ("X", "y") if prefer == "X" else ("y", "X")
-            data = res[first] if res[first] is not None else res[second]
+            if prefer == "X":
+                if res["X"] is None:
+                    return self._no_dataset_exog_error(source)
+                return {"success": True, "data": res["X"]}
+            data = res["y"] if res["y"] is not None else res["X"]
             return {"success": True, "data": data}
         return res
+
+    def _resolve_xy_inputs(
+        self,
+        *,
+        X_dataset: str | None = None,
+        y_dataset: str | None = None,
+        X_handle: str | None = None,
+        y_handle: str | None = None,
+        auto_X: bool = True,
+    ) -> dict[str, Any]:
+        """Resolve the fit/predict/update data arguments to ``X`` and ``y``.
+
+        ``X_handle`` resolves to the handle's exogenous frame, never its
+        target. With ``auto_X``, a ``y_handle`` that carries X supplies it when
+        no explicit X source is given (predict passes ``auto_X=False`` because
+        it needs *future* X). The result's ``exogenous`` entry
+        ({"handle", "columns"}) records X taken from a data handle, or is None.
+
+        A handle and a dataset for the same slot (``y_handle`` + ``y_dataset``,
+        ``X_handle`` + ``X_dataset``) is ambiguous and refused (#556 item 6:
+        the dataset used to win silently).
+        """
+        if y_handle and y_dataset:
+            return self._ambiguous_slot_error("y", y_handle, y_dataset)
+        if X_handle and X_dataset:
+            return self._ambiguous_slot_error("X", X_handle, X_dataset)
+        if X_handle and X_handle == y_handle:
+            return {
+                "success": False,
+                "error": (
+                    f"X_handle and y_handle name the same data handle '{X_handle}'. Pass "
+                    "only y_handle: the handle's stored exogenous columns are used as X "
+                    "automatically."
+                ),
+            }
+
+        X = None
+        y = None
+        exogenous = None
+
+        if X_handle:
+            if X_handle not in self._data_handles:
+                return {"success": False, **self.data_handle_missing(X_handle)}
+            x_res = self._resolve_source(X_handle, prefer="X")
+            if not x_res["success"]:
+                return x_res
+            X = x_res["data"]
+            exogenous = {"handle": X_handle, "columns": _column_names(X)}
+
+        if y_handle:
+            if y_handle not in self._data_handles:
+                return {"success": False, **self.data_handle_missing(y_handle)}
+            y = self._data_handles[y_handle]["y"]
+
+        if X_dataset and X_dataset == y_dataset:
+            data_res = self.load_dataset(X_dataset)
+            if not data_res["success"]:
+                return data_res
+            if data_res["X"] is None:
+                return self._no_dataset_exog_error(X_dataset)
+            y = data_res["y"]
+            X = data_res["X"]
+        else:
+            if X_dataset:
+                data_res = self.load_dataset(X_dataset)
+                if not data_res["success"]:
+                    return data_res
+                if data_res["X"] is None:
+                    return self._no_dataset_exog_error(X_dataset)
+                X = data_res["X"]
+
+            if y_dataset:
+                data_res = self.load_dataset(y_dataset)
+                if not data_res["success"]:
+                    return data_res
+                y = data_res["y"]
+
+        if auto_X and X is None and y_handle and not X_dataset:
+            stored = self._data_handles[y_handle].get("X")
+            if stored is not None:
+                X = stored
+                exogenous = {"handle": y_handle, "columns": _column_names(X)}
+
+        return {"success": True, "X": X, "y": y, "exogenous": exogenous}
+
+    def _resolve_evaluate_sources(self, y: str, X: str | None) -> dict[str, Any]:
+        """Resolve evaluate's ``y``/``X`` source ids (data handle or demo dataset).
+
+        Refuses ``X == y`` for a data handle (the target would be regressed on
+        itself) and, when ``X`` is omitted, uses the exogenous columns stored
+        on a ``y`` data handle. A demo dataset used as ``X`` must ship exogenous
+        data; it never falls back to its target (so ``X == y`` on a
+        target-only dataset such as 'airline' is refused too).
+        """
+        if X and y == X and y in self._data_handles:
+            return {
+                "success": False,
+                "error": (
+                    f"y and X name the same data handle '{y}', which would regress the "
+                    "target on itself (target leakage). Pass only y: the handle's stored "
+                    "exogenous columns are used as X automatically."
+                ),
+            }
+        y_res = self._resolve_source(y)
+        if not y_res["success"]:
+            return y_res
+        _X = None
+        exogenous = None
+        if X:
+            x_res = self._resolve_source(X, prefer="X")
+            if not x_res["success"]:
+                return x_res
+            _X = x_res["data"]
+            if X in self._data_handles:
+                exogenous = {"handle": X, "columns": _column_names(_X)}
+        elif y in self._data_handles:
+            stored = self._data_handles[y].get("X")
+            if stored is not None:
+                _X = stored
+                exogenous = {"handle": y, "columns": _column_names(_X)}
+        return {"success": True, "y": y_res["data"], "X": _X, "exogenous": exogenous}
 
     def instantiate(
         self,
@@ -375,6 +771,20 @@ class Executor:
                 instance = craft(spec)
             finally:
                 _craft_module.all_estimators = original_all
+
+            # A bare class name ("NaiveForecaster") evaluates to the class;
+            # wrapping it in a handle made fit fail with "missing 1 required
+            # positional argument: 'y'" (#556 item 25).
+            if isinstance(instance, type):
+                name = instance.__name__
+                return {
+                    "success": False,
+                    "error": (
+                        f"Spec '{spec}' names the class {name} but does not "
+                        f"instantiate it. Call it with its parameters, e.g. "
+                        f"'{name}()' or '{name}(sp=12)'."
+                    ),
+                }
 
             # Reject specs that don't produce an sktime object — e.g. "42",
             # "[1,2,3]", "None" otherwise got est_ handles that failed
@@ -508,6 +918,7 @@ class Executor:
             elif obj_type == "transformer":
                 is_transformer = True
 
+        warnings_out = []
         try:
             if is_classifier_or_regressor:
                 # With decoupled X and y handles, X is features and y is labels
@@ -517,13 +928,35 @@ class Executor:
                     instance.fit(y, X)
                 else:
                     instance.fit(y)
+            elif obj_type == "detector":
+                # A detector annotates one series, which sktime calls X. It is
+                # the MCP target slot (y_handle/y_dataset), or the X slot when
+                # no target was given. fit(y, X=X) collided on X (F-10).
+                if y is not None:
+                    instance.fit(y)
+                    if X is not None:
+                        warnings_out.append(
+                            "X was ignored: a detector annotates a single series (y); "
+                            "it takes no exogenous data."
+                        )
+                else:
+                    instance.fit(X)
             elif obj_type == "clusterer":
                 if y is not None:
                     instance.fit(X, y)
                 else:
                     instance.fit(X)
             else:
-                # Assume forecaster or similar default
+                # Assume forecaster or similar default.
+                # sktime 1.3 flips the ``remember_data`` config default to
+                # False, after which ``update`` on forecasters without a
+                # native update no longer refits on the accumulated data.
+                # Pin the current semantics so the ``update`` tool keeps
+                # behaving the same across sktime versions.
+                _set_config = getattr(instance, "set_config", None)
+                if callable(_set_config):
+                    with contextlib.suppress(Exception):  # older sktime lacks the key
+                        _set_config(remember_data=True)
                 if fh is not None:
                     instance.fit(y, X=X, fh=fh)
                 elif X is not None:
@@ -532,7 +965,10 @@ class Executor:
                     instance.fit(y)
 
             self._handle_manager.mark_fitted(handle_id)
-            return {"success": True, "handle": handle_id, "fitted": True}
+            out = {"success": True, "handle": handle_id, "fitted": True}
+            if warnings_out:
+                out["warnings"] = warnings_out
+            return out
         except Exception as e:
             logger.error("%s failed: %s", type(e).__name__, e, exc_info=True)
             return {"success": False, "error": str(e)}
@@ -575,23 +1011,38 @@ class Executor:
                 is_classifier_or_regressor = True
             elif obj_type in ("transformer", "clusterer"):
                 is_transformer = True
+        is_detector = obj_type == "detector"
+
+        # A forecaster fitted with X needs future X at predict; sktime otherwise
+        # raises an opaque KeyError on the horizon index (F-05).
+        if X is None and obj_type == "forecaster" and getattr(instance, "_X", None) is not None:
+            return {
+                "success": False,
+                "error": (
+                    "This forecaster was fitted with exogenous data (X) but predict got "
+                    "none. Future X covering the forecast horizon is required: pass "
+                    "X_handle (e.g. the test half from split_data) or X_dataset."
+                ),
+            }
 
         dropped_y_warning = None
         try:
-            if fh is None and not (is_classifier_or_regressor or is_transformer):
+            if fh is None and not (is_classifier_or_regressor or is_transformer or is_detector):
                 fh = list(range(1, 13))
 
             kwargs = {}
             if X is not None:
                 kwargs["X"] = X
-            if y is not None:
-                # y at predict is only for annotators; forwarding it to a
-                # forecaster raised a raw "unexpected keyword argument 'y'"
-                # TypeError (NB-18). Only pass it when predict accepts it.
+            if y is not None and obj_type not in ("transformer", "detector"):
+                # For transformers and detectors y is the series itself (handled
+                # in their branches below). Forwarding it to a forecaster raised
+                # a raw "unexpected keyword argument 'y'" TypeError (NB-18):
+                # only pass it when predict accepts it. A transformer has no
+                # predict at all, so the signature lookup must not raise (F-31).
                 accepts_y = False
                 try:
                     accepts_y = "y" in inspect.signature(instance.predict).parameters
-                except (ValueError, TypeError):
+                except (ValueError, TypeError, AttributeError):
                     accepts_y = False
                 if accepts_y:
                     kwargs["y"] = y
@@ -614,18 +1065,82 @@ class Executor:
             elif is_transformer:
                 if mode == "predict":
                     if obj_type == "clusterer":
-                        predictions = (
-                            instance.predict(X) if X is not None else instance.predict(fh=fh)
-                        )  # some clusterers might use predict(X)
+                        # predict(fh=...) on a clusterer raised a raw TypeError (F-54)
+                        if X is None:
+                            return {
+                                "success": False,
+                                "error": (
+                                    "Clusterer predict needs the panel to assign clusters "
+                                    "to: pass X_handle or X_dataset."
+                                ),
+                            }
+                        predictions = instance.predict(X)
                     else:
-                        # For transformer, transform is basically the predict equivalent if X is passed
-                        if X is not None:
+                        # predict for a transformer is transform. The series is y
+                        # (as in fit, with X as extra data) or X alone; only the
+                        # X route used to work (F-31).
+                        if y is not None:
+                            predictions = (
+                                instance.transform(y, X) if X is not None else instance.transform(y)
+                            )
+                        elif X is not None:
                             predictions = instance.transform(X)
                         else:
-                            return {"success": False, "error": "Transform requires X"}
+                            return {
+                                "success": False,
+                                "error": (
+                                    "Transformer predict (transform) needs the series to "
+                                    "transform: pass y_handle (as in fit) or X_handle."
+                                ),
+                            }
                 else:
                     return {"success": False, "error": f"Mode {mode} not supported for {obj_type}"}
+            elif is_detector:
+                # Detectors have predict(X): the series to annotate, no fh (F-10).
+                if mode != "predict":
+                    return {
+                        "success": False,
+                        "error": (
+                            f"Mode {mode} not supported for detector. Use mode='predict' "
+                            "for the detection frame, or call_method with predict_points, "
+                            "predict_segments, predict_scores or transform."
+                        ),
+                    }
+                series = y if y is not None else X
+                if series is None:
+                    return {
+                        "success": False,
+                        "error": (
+                            "Detector predict needs the series to annotate: pass y_handle "
+                            "or y_dataset (as in fit; X_handle/X_dataset also work)."
+                        ),
+                    }
+                predictions = instance.predict(series)
             else:
+                proba_modes = (
+                    "predict_interval",
+                    "predict_quantiles",
+                    "predict_proba",
+                    "predict_var",
+                )
+                get_tag = getattr(instance, "get_tag", None)
+                if (
+                    mode in proba_modes
+                    and get_tag is not None
+                    and not get_tag("capability:pred_int", True, raise_error=False)
+                ):
+                    # sktime raises "does not have the capability to return
+                    # fully probabilistic predictions ... open an issue" (F-23)
+                    return {
+                        "success": False,
+                        "error": (
+                            f"{type(instance).__name__} does not support {mode}: it has no "
+                            "probabilistic forecasting capability (capability:pred_int is "
+                            "False). Use mode='predict' for point forecasts, or a "
+                            "forecaster with interval support such as NaiveForecaster, "
+                            "ThetaForecaster or ARIMA."
+                        ),
+                    }
                 if mode == "predict":
                     predictions = instance.predict(fh=fh, **kwargs)
                 elif mode == "predict_interval":
@@ -633,7 +1148,17 @@ class Executor:
                 elif mode == "predict_quantiles":
                     predictions = instance.predict_quantiles(fh=fh, alpha=alpha, **kwargs)
                 elif mode == "predict_proba":
-                    predictions = instance.predict_proba(fh=fh, **kwargs)
+                    try:
+                        predictions = instance.predict_proba(fh=fh, **kwargs)
+                    except NotImplementedError as e:
+                        return {
+                            "success": False,
+                            "error": (
+                                f"{type(instance).__name__} does not support predict_proba "
+                                f"here: {e}. Use mode='predict_interval' or "
+                                "'predict_quantiles' for its probabilistic forecasts."
+                            ),
+                        }
                 elif mode == "predict_var":
                     predictions = instance.predict_var(fh=fh, **kwargs)
                 else:
@@ -641,14 +1166,47 @@ class Executor:
 
             from sktime_mcp.server import sanitize_for_json
 
+            is_forecast = not (is_classifier_or_regressor or is_transformer or is_detector)
+            # horizon is only meaningful for forecasters; echoing it for
+            # classifiers/regressors/transformers implied a truncation that
+            # didn't happen (N-01).
+            horizon = (len(fh) if hasattr(fh, "__len__") else fh) if is_forecast else None
+
+            # predict_proba returns a distribution object whose repr() was
+            # all the response carried (F-23): summarise it numerically; the
+            # summary frame is what the prediction handle stores.
+            distribution = None
+            if _is_distribution(predictions):
+                distribution, predictions = _summarize_distribution(predictions)
+
+            # Register the forecast as a data handle so it can be plotted,
+            # saved and scored (F-06). Non-frame results (ndarray from a
+            # classifier) are not handles.
+            prediction_handle = None
+            if isinstance(predictions, (pd.Series, pd.DataFrame)):
+                prediction_handle = self._register_prediction_handle(
+                    predictions,
+                    estimator_handle=handle_id,
+                    mode=mode,
+                    horizon=horizon,
+                    instance=instance,
+                )
+
             truncated_note = None
-            if isinstance(predictions, pd.Series):
+            if distribution is not None:
+                result = distribution
+                for key in ("mean", "var", "quantiles"):
+                    result[key], note = _cap_prediction_rows(result[key], prediction_handle)
+                    truncated_note = truncated_note or note
+            elif isinstance(predictions, pd.Series):
                 predictions_copy = predictions.copy()
-                predictions_copy.index = predictions_copy.index.astype(str)
-                result, truncated_note = _cap_prediction_rows(predictions_copy.to_dict())
+                predictions_copy.index = _index_to_str(predictions_copy.index)
+                result, truncated_note = _cap_prediction_rows(
+                    predictions_copy.to_dict(), prediction_handle
+                )
             elif isinstance(predictions, pd.DataFrame):
                 predictions_copy = predictions.copy()
-                predictions_copy.index = predictions_copy.index.astype(str)
+                predictions_copy.index = _index_to_str(predictions_copy.index)
                 # Flatten multiindex columns (predict_interval/quantiles) for JSON.
                 if isinstance(predictions_copy.columns, pd.MultiIndex):
                     predictions_copy.columns = [
@@ -658,7 +1216,7 @@ class Executor:
                 # variance values map to time points, consistent with predict
                 # (NB-21). orient="list" dropped the index entirely.
                 result, truncated_note = _cap_prediction_rows(
-                    predictions_copy.to_dict(orient="index")
+                    predictions_copy.to_dict(orient="index"), prediction_handle
                 )
             else:
                 result = sanitize_for_json(predictions)
@@ -667,11 +1225,10 @@ class Executor:
                 "success": True,
                 "mode": mode,
             }
-            # horizon is only meaningful for forecasters; echoing it for
-            # classifiers/regressors/transformers implied a truncation that
-            # didn't happen (N-01).
-            if not (is_classifier_or_regressor or is_transformer):
-                out["horizon"] = len(fh) if hasattr(fh, "__len__") else fh
+            if is_forecast:
+                out["horizon"] = horizon
+            if prediction_handle:
+                out["prediction_handle"] = prediction_handle
             if mode == "predict":
                 out["predictions"] = result
             elif mode == "predict_interval":
@@ -712,36 +1269,17 @@ class Executor:
             self._job_manager.update_job(job_id, completed_steps=0, current_step="Loading data...")
             await asyncio.sleep(0.01)
 
-            X = None
-            y = None
-
-            if X_handle:
-                if X_handle not in self._data_handles:
-                    raise ValueError(f"Unknown X data handle: {X_handle}")
-                X = self._data_handles[X_handle]["y"]
-
-            if y_handle:
-                if y_handle not in self._data_handles:
-                    raise ValueError(f"Unknown y data handle: {y_handle}")
-                y = self._data_handles[y_handle]["y"]
-
-            if X_dataset and X_dataset == y_dataset:
-                data_res = self.load_dataset(X_dataset)
-                if not data_res["success"]:
-                    raise ValueError(data_res.get("error", "Failed to load dataset"))
-                y = data_res["y"]
-                X = data_res["X"]
-            else:
-                if X_dataset:
-                    data_res = self.load_dataset(X_dataset)
-                    if not data_res["success"]:
-                        raise ValueError(data_res.get("error", "Failed to load dataset"))
-                    X = data_res["X"] if data_res["X"] is not None else data_res["y"]
-                if y_dataset:
-                    data_res = self.load_dataset(y_dataset)
-                    if not data_res["success"]:
-                        raise ValueError(data_res.get("error", "Failed to load dataset"))
-                    y = data_res["y"]
+            # predict needs *future* X, so the y_handle's stored X is not reused
+            resolved = self._resolve_xy_inputs(
+                X_dataset=X_dataset,
+                y_dataset=y_dataset,
+                X_handle=X_handle,
+                y_handle=y_handle,
+                auto_X=False,
+            )
+            if not resolved["success"]:
+                raise ValueError(resolved["error"])
+            X, y = resolved["X"], resolved["y"]
 
             fh = list(range(1, horizon + 1))
 
@@ -839,7 +1377,9 @@ class Executor:
                     # the prefix selects the dataset component
                     actual_key = k.replace("_dataset", "")
                     if actual_key == "X":
-                        value = data_res["X"] if data_res["X"] is not None else data_res["y"]
+                        if data_res["X"] is None:
+                            return self._no_dataset_exog_error(v)
+                        value = data_res["X"]
                     else:
                         value = data_res["y"]
                     kwargs[actual_key] = value
@@ -865,14 +1405,13 @@ class Executor:
                 if isinstance(result, __import__("pandas").DataFrame) and isinstance(
                     result.columns, __import__("pandas").MultiIndex
                 ):
+                    result = result.copy()
                     result.columns = ["_".join(map(str, col)) for col in result.columns.values]
-                    sanitized = result.to_dict(orient="list")
+                    result = result.to_dict(orient="list")
                 else:
-                    sanitized = result.to_dict()
-            else:
-                sanitized = sanitize_for_json(result)
+                    result = result.to_dict()
 
-            return {"success": True, "result": sanitized}
+            return {"success": True, "result": sanitize_for_json(result)}
         except Exception as e:
             logger.error("%s failed: %s", type(e).__name__, e, exc_info=True)
             return {"success": False, "error": str(e)}
@@ -968,37 +1507,12 @@ class Executor:
             )
             await asyncio.sleep(0.01)
 
-            X = None
-            y = None
-
-            if X_handle:
-                if X_handle not in self._data_handles:
-                    raise ValueError(f"Unknown X data handle: {X_handle}")
-                X = self._data_handles[X_handle]["y"]
-
-            if y_handle:
-                if y_handle not in self._data_handles:
-                    raise ValueError(f"Unknown y data handle: {y_handle}")
-                y = self._data_handles[y_handle]["y"]
-
-            if X_dataset and X_dataset == y_dataset:
-                data_res = self.load_dataset(X_dataset)
-                if not data_res["success"]:
-                    raise ValueError(data_res["error"])
-                y = data_res["y"]
-                X = data_res["X"]
-            else:
-                if X_dataset:
-                    data_res = self.load_dataset(X_dataset)
-                    if not data_res["success"]:
-                        raise ValueError(data_res["error"])
-                    X = data_res["X"] if data_res["X"] is not None else data_res["y"]
-
-                if y_dataset:
-                    data_res = self.load_dataset(y_dataset)
-                    if not data_res["success"]:
-                        raise ValueError(data_res["error"])
-                    y = data_res["y"]
+            resolved = self._resolve_xy_inputs(
+                X_dataset=X_dataset, y_dataset=y_dataset, X_handle=X_handle, y_handle=y_handle
+            )
+            if not resolved["success"]:
+                raise ValueError(resolved["error"])
+            X, y = resolved["X"], resolved["y"]
 
             # Step 2: Fit model
             self._job_manager.update_job(
@@ -1033,7 +1547,13 @@ class Executor:
                 status=JobStatus.COMPLETED,
                 completed_steps=2,
                 current_step="Training completed successfully.",
-                result={"success": True, "handle": handle_id, "fitted": True},
+                result={
+                    "success": True,
+                    "handle": handle_id,
+                    "fitted": True,
+                    **({"exogenous": resolved["exogenous"]} if resolved["exogenous"] else {}),
+                    **({"warnings": fit_result["warnings"]} if fit_result.get("warnings") else {}),
+                },
             )
             return {"success": True, "handle": handle_id}
 
@@ -1072,17 +1592,10 @@ class Executor:
             except KeyError as err:
                 raise ValueError(self._handle_manager.describe_missing(handle_id)) from err
 
-            y_res = self._resolve_source(y)
-            if not y_res["success"]:
-                raise ValueError(y_res["error"])
-            _y = y_res["data"]
-
-            _X = None
-            if X:
-                x_res = self._resolve_source(X, prefer="X")
-                if not x_res["success"]:
-                    raise ValueError(x_res["error"])
-                _X = x_res["data"]
+            sources = self._resolve_evaluate_sources(y, X)
+            if not sources["success"]:
+                raise ValueError(sources["error"])
+            _y, _X = sources["y"], sources["X"]
 
             scoring = None
             if metric:
@@ -1119,6 +1632,8 @@ class Executor:
                 "cv_folds_run": len(fold_results),
                 "cv_folds_requested": cv_folds,
             }
+            if sources["exogenous"]:
+                result["exogenous"] = sources["exogenous"]
             self._job_manager.update_job(
                 job_id,
                 status=JobStatus.COMPLETED,
@@ -1292,7 +1807,7 @@ class Executor:
 
             from sktime_mcp.data import DataSourceRegistry
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             adapter = DataSourceRegistry.create_adapter(config)
             data = await loop.run_in_executor(None, adapter.load)
 
@@ -1416,7 +1931,7 @@ class Executor:
 
         # 1. Remove duplicates
         if remove_duplicates and y.index.duplicated().any():
-            n_duplicates = y.index.duplicated().sum()
+            n_duplicates = int(y.index.duplicated().sum())
             y = y[~y.index.duplicated(keep="first")]
             if X is not None:
                 X = X[~X.index.duplicated(keep="first")]
@@ -1429,65 +1944,82 @@ class Executor:
         if X is not None:
             X = X.sort_index()
 
-        # 3. Infer and set frequency
-        if auto_infer_freq:
-            freq = getattr(y.index, "freq", None)
+        # 3. Infer and set frequency. Only a DatetimeIndex without a freq needs
+        # this (a PeriodIndex always carries one). Every candidate frequency is
+        # verified against the observed timestamps before reindexing: reindexing
+        # onto a mis-anchored range (monthly data on the 15th -> "MS", weekly
+        # Mondays -> "W" = W-SUN) used to replace every value with NaN (#556).
+        freq_to_set: Any = None
+        if (
+            auto_infer_freq
+            and isinstance(y.index, pd.DatetimeIndex)
+            and y.index.freq is None
+            and len(y) > 1
+        ):
+            most_common_diff = y.index.to_series().diff().dropna().mode()[0]
+            full_range = None
+            rejected: Any = None
+            for candidate in _candidate_frequencies(y.index, most_common_diff):
+                try:
+                    candidate_range = pd.date_range(
+                        start=y.index.min(), end=y.index.max(), freq=candidate
+                    )
+                except (ValueError, TypeError):
+                    continue
+                if y.index.isin(candidate_range).all():
+                    freq_to_set = candidate
+                    full_range = candidate_range
+                    break
+                if rejected is None:
+                    rejected = candidate
 
-            if freq is None and isinstance(y.index, (pd.DatetimeIndex, pd.PeriodIndex)):
-                # Try to infer
-                freq = pd.infer_freq(y.index)
-
-                if freq is None:
-                    # Manual inference
-                    time_diffs = y.index.to_series().diff().dropna()
-                    if len(time_diffs) > 0:
-                        most_common_diff = time_diffs.mode()[0]
-
-                        if most_common_diff == pd.Timedelta(days=1):
-                            freq = "D"
-                        elif most_common_diff == pd.Timedelta(hours=1):
-                            freq = "h"
-                        elif most_common_diff == pd.Timedelta(minutes=1):
-                            freq = "min"
-                        elif most_common_diff == pd.Timedelta(seconds=1):
-                            freq = "s"
-                        elif most_common_diff == pd.Timedelta(days=7):
-                            freq = "W"
-                        elif most_common_diff.days >= 28 and most_common_diff.days <= 31:
-                            freq = "MS"
-                        else:
-                            changes_made["frequency_warning"] = (
-                                f"Could not determine frequency from most common interval "
-                                f"({most_common_diff}). Reindexing skipped."
-                            )
-
-                # Create complete date range
-                if freq:
-                    full_range = pd.date_range(start=y.index.min(), end=y.index.max(), freq=freq)
-
-                    n_gaps = len(full_range) - len(y)
-
-                    y = y.reindex(full_range)
-                    if X is not None:
-                        X = X.reindex(full_range)
-
-                    changes_made["gaps_filled"] = n_gaps
-                    changes_made["frequency_set"] = True
-                    changes_made["frequency"] = freq
+            if full_range is not None:
+                # index is a subset of full_range, so this never drops a value
+                # and n_gaps is never negative.
+                n_gaps = int(len(full_range) - len(y))
+                y = y.reindex(full_range)
+                if X is not None:
+                    X = X.reindex(full_range)
+                changes_made["gaps_filled"] = n_gaps
+                changes_made["frequency_set"] = True
+                months = _anchored_months(freq_to_set)
+                if months is not None:
+                    changes_made["frequency"] = "M" if months == 1 else f"{months}M"
+                    changes_made["frequency_warning"] = (
+                        f"Monthly timestamps fall on day {y.index.min().day} of the month, "
+                        f"which pandas cannot express as a frequency; the index was aligned "
+                        f"to monthly periods ('{changes_made['frequency']}'). "
+                        f"Values were kept; {n_gaps} gap(s) filled."
+                    )
+                else:
+                    changes_made["frequency"] = getattr(freq_to_set, "freqstr", freq_to_set)
+            elif rejected is not None:
+                changes_made["frequency_warning"] = (
+                    f"Inferred frequency '{getattr(rejected, 'freqstr', rejected)}' "
+                    f"(most common interval {most_common_diff}) does not align with the "
+                    f"observed timestamps. Reindexing skipped; the series was left unchanged."
+                )
+            else:
+                changes_made["frequency_warning"] = (
+                    f"Could not determine frequency from most common interval "
+                    f"({most_common_diff}). Reindexing skipped."
+                )
 
         # 4. Fill missing values
-        if fill_missing and y.isna().any():
-            n_missing = y.isna().sum()
+        if fill_missing and y.isna().any(axis=None):
+            n_missing = (
+                int(y.isna().sum().sum()) if isinstance(y, pd.DataFrame) else int(y.isna().sum())
+            )
             y = y.ffill().bfill()
             if X is not None:
                 X = X.ffill().bfill()
             changes_made["missing_filled"] = n_missing
 
-        # 5. Set frequency explicitly on index
-        if hasattr(y.index, "freq") and changes_made.get("frequency"):
-            y.index.freq = changes_made["frequency"]
+        # 5. Set frequency explicitly on index (reindex already did; ffill/bfill keep it)
+        if freq_to_set is not None and isinstance(y.index, pd.DatetimeIndex):
+            y.index.freq = freq_to_set
             if X is not None:
-                X.index.freq = changes_made["frequency"]
+                X.index.freq = freq_to_set
 
         # 6. Normalise a regular DatetimeIndex to PeriodIndex so seasonal
         # forecasters can predict on handle-loaded data (#531).
@@ -1511,6 +2043,7 @@ class Executor:
                 "rows": len(y),
                 "start_date": str(y.index.min()),
                 "end_date": str(y.index.max()),
+                "missing_values": _missing_values_report(y, X),
             },
             "validation": data_info.get("validation", {}),
             "config": data_info.get("config", {}),

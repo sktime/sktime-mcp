@@ -7,9 +7,26 @@ Executes complete forecasting workflows.
 import logging
 from typing import Any
 
+from sktime_mcp.config import settings
 from sktime_mcp.runtime.executor import get_executor
 
 logger = logging.getLogger(__name__)
+
+
+def horizon_cap_error(requested: int) -> str | None:
+    """Error text when *requested* steps exceed ``SKTIME_MCP_MAX_HORIZON``, else None.
+
+    predict(horizon=100000) used to forecast every step before truncating the
+    response to 500 rows (F-24); the cap rejects such requests before any work.
+    """
+    cap = settings.max_horizon
+    if requested <= cap:
+        return None
+    return (
+        f"horizon={requested} exceeds the server's maximum forecast horizon of "
+        f"{cap} steps (SKTIME_MCP_MAX_HORIZON). Request at most {cap} steps, or "
+        "raise SKTIME_MCP_MAX_HORIZON in the server environment."
+    )
 
 
 def _validate_horizon(horizon: Any) -> dict[str, Any]:
@@ -17,6 +34,7 @@ def _validate_horizon(horizon: Any) -> dict[str, Any]:
     Validate the horizon parameter.
     Checks if the horizon parameter is strictly integer or not
     Checks if the horizon parameter is greater than 0 or not
+    Checks that it does not exceed ``SKTIME_MCP_MAX_HORIZON`` (F-24)
     """
     warnings = []
     if not isinstance(horizon, int):
@@ -34,6 +52,9 @@ def _validate_horizon(horizon: Any) -> dict[str, Any]:
             "error": f"Invalid horizon={horizon}. horizon must be a positive integer greater than 0.",
             "warnings": warnings,
         }
+    cap_error = horizon_cap_error(horizon)
+    if cap_error:
+        return {"valid": False, "error": cap_error, "warnings": warnings}
     return {"valid": True, "warnings": warnings}
 
 
@@ -48,64 +69,37 @@ def fit_tool(
 ) -> dict[str, Any]:
     """
     Fit an estimator on data.
+
+    X_handle resolves to a data handle's exogenous columns; when only
+    y_handle is given and that handle carries X, it is used automatically.
     """
     executor = get_executor()
 
-    # We must resolve y and X from the provided handles/datasets
-    X = None
-    y = None
-
-    if X_handle:
-        if X_handle not in executor._data_handles:
-            return {"success": False, "error": f"Unknown X data handle: {X_handle}"}
-        X = executor._data_handles[X_handle]["y"]  # 'y' stores the primary object
-
-    if y_handle:
-        if y_handle not in executor._data_handles:
-            return {"success": False, "error": f"Unknown y data handle: {y_handle}"}
-        y = executor._data_handles[y_handle]["y"]
-
-    if X_dataset and X_dataset == y_dataset:
-        data_res = executor.load_dataset(X_dataset)
-        if not data_res["success"]:
-            return data_res
-        y = data_res["y"]
-        X = data_res["X"]
-    else:
-        if X_dataset:
-            data_res = executor.load_dataset(X_dataset)
-            if not data_res["success"]:
-                return data_res
-            X = data_res["X"] if data_res["X"] is not None else data_res["y"]
-
-        if y_dataset:
-            data_res = executor.load_dataset(y_dataset)
-            if not data_res["success"]:
-                return data_res
-            y = data_res["y"]
+    # Resolve up front so bad inputs fail synchronously even with run_async.
+    resolved = executor._resolve_xy_inputs(
+        X_dataset=X_dataset, y_dataset=y_dataset, X_handle=X_handle, y_handle=y_handle
+    )
+    if not resolved["success"]:
+        return resolved
+    X, y = resolved["X"], resolved["y"]
 
     if run_async:
-        import asyncio
+        from sktime_mcp.runtime.jobs import get_job_manager, start_background_job
 
-        from sktime_mcp.runtime.jobs import get_job_manager
-
-        job_manager = get_job_manager()
+        # Resolve the handle before creating a job so a missing/evicted handle
+        # fails fast instead of producing a job that fails a second later.
         try:
-            handle_info = executor._handle_manager.get_info(estimator_handle)
-            estimator_name = handle_info.estimator_name
-        except Exception:
-            estimator_name = "Unknown"
+            estimator_name = executor._handle_manager.get_info(estimator_handle).estimator_name
+        except KeyError:
+            return {
+                "success": False,
+                "error": executor._handle_manager.describe_missing(estimator_handle),
+            }
 
         source_name = y_dataset if y_dataset else (y_handle if y_handle else "data")
-        job_id = job_manager.create_job(
-            job_type="fit",
-            estimator_handle=estimator_handle,
-            estimator_name=estimator_name,
-            dataset_name=source_name,
-            total_steps=2,
-        )
-        task = asyncio.create_task(
-            executor.fit_async(
+        return start_background_job(
+            get_job_manager(),
+            lambda job_id: executor.fit_async(
                 handle_id=estimator_handle,
                 X_dataset=X_dataset,
                 y_dataset=y_dataset,
@@ -113,10 +107,13 @@ def fit_tool(
                 y_handle=y_handle,
                 fh=fh,
                 job_id=job_id,
-            )
+            ),
+            job_type="fit",
+            estimator_handle=estimator_handle,
+            estimator_name=estimator_name,
+            dataset_name=source_name,
+            total_steps=2,
         )
-        job_manager.register_task(job_id, task)
-        return {"success": True, "job_id": job_id, "status": "running"}
     fit_result = executor.fit(estimator_handle, y=y, X=X, fh=fh)
 
     if fit_result.get("success") and y_dataset:
@@ -125,6 +122,9 @@ def fit_tool(
             handle_info.metadata["training_dataset"] = y_dataset
         except Exception as e:
             logger.warning(f"Could not record training dataset: {e}")
+
+    if fit_result.get("success") and resolved["exogenous"]:
+        fit_result["exogenous"] = resolved["exogenous"]
 
     return fit_result
 
@@ -144,6 +144,12 @@ def predict_tool(
     """
     Generate predictions from a fitted estimator.
 
+    The result is also registered as a data handle and returned as
+    ``prediction_handle`` so it can be plotted (plot_series), written to a
+    file (save_data) or scored against a test split (call_method on a metric
+    with ``y_true_data_handle``/``y_pred_data_handle``).
+    A forecaster fitted with X needs *future* X here: pass X_handle (the
+    handle's exogenous columns) or X_dataset explicitly.
     Set run_async=True to run as a background job and return a job_id.
     """
     validation = _validate_horizon(horizon)
@@ -155,28 +161,34 @@ def predict_tool(
 
     executor = get_executor()
 
+    # Resolve up front so bad inputs fail synchronously even with run_async.
+    resolved = executor._resolve_xy_inputs(
+        X_dataset=X_dataset,
+        y_dataset=y_dataset,
+        X_handle=X_handle,
+        y_handle=y_handle,
+        auto_X=False,
+    )
+    if not resolved["success"]:
+        return resolved
+    X, y = resolved["X"], resolved["y"]
+
     if run_async:
-        import asyncio
+        from sktime_mcp.runtime.jobs import get_job_manager, start_background_job
 
-        from sktime_mcp.runtime.jobs import get_job_manager
-
-        job_manager = get_job_manager()
+        # Resolve the handle before creating a job (see fit_tool).
         try:
             estimator_name = executor._handle_manager.get_info(estimator_handle).estimator_name
-        except Exception:
-            estimator_name = "Unknown"
+        except KeyError:
+            return {
+                "success": False,
+                "error": executor._handle_manager.describe_missing(estimator_handle),
+            }
 
         source_name = y_dataset or y_handle or "data"
-        job_id = job_manager.create_job(
-            job_type="predict",
-            estimator_handle=estimator_handle,
-            estimator_name=estimator_name,
-            dataset_name=source_name,
-            horizon=horizon,
-            total_steps=2,
-        )
-        task = asyncio.create_task(
-            executor.predict_async(
+        return start_background_job(
+            get_job_manager(),
+            lambda job_id: executor.predict_async(
                 handle_id=estimator_handle,
                 horizon=horizon,
                 mode=mode,
@@ -187,42 +199,14 @@ def predict_tool(
                 X_handle=X_handle,
                 y_handle=y_handle,
                 job_id=job_id,
-            )
+            ),
+            job_type="predict",
+            estimator_handle=estimator_handle,
+            estimator_name=estimator_name,
+            dataset_name=source_name,
+            horizon=horizon,
+            total_steps=2,
         )
-        job_manager.register_task(job_id, task)
-        return {"success": True, "job_id": job_id, "status": "running"}
-
-    X = None
-    y = None
-
-    if X_handle:
-        if X_handle not in executor._data_handles:
-            return {"success": False, "error": f"Unknown X data handle: {X_handle}"}
-        X = executor._data_handles[X_handle]["y"]
-
-    if y_handle:
-        if y_handle not in executor._data_handles:
-            return {"success": False, "error": f"Unknown y data handle: {y_handle}"}
-        y = executor._data_handles[y_handle]["y"]
-
-    if X_dataset and X_dataset == y_dataset:
-        data_res = executor.load_dataset(X_dataset)
-        if not data_res["success"]:
-            return data_res
-        y = data_res["y"]
-        X = data_res["X"]
-    else:
-        if X_dataset:
-            data_res = executor.load_dataset(X_dataset)
-            if not data_res["success"]:
-                return data_res
-            X = data_res["X"] if data_res["X"] is not None else data_res["y"]
-
-        if y_dataset:
-            data_res = executor.load_dataset(y_dataset)
-            if not data_res["success"]:
-                return data_res
-            y = data_res["y"]
 
     fh = list(range(1, horizon + 1))
 
@@ -258,39 +242,17 @@ def update_tool(
 ) -> dict[str, Any]:
     executor = get_executor()
 
-    X = None
-    y = None
+    resolved = executor._resolve_xy_inputs(
+        X_dataset=X_dataset, y_dataset=y_dataset, X_handle=X_handle, y_handle=y_handle
+    )
+    if not resolved["success"]:
+        return resolved
+    X, y = resolved["X"], resolved["y"]
 
-    if X_handle:
-        if X_handle not in executor._data_handles:
-            return {"success": False, "error": f"Unknown X data handle: {X_handle}"}
-        X = executor._data_handles[X_handle]["y"]
-
-    if y_handle:
-        if y_handle not in executor._data_handles:
-            return {"success": False, "error": f"Unknown y data handle: {y_handle}"}
-        y = executor._data_handles[y_handle]["y"]
-
-    if X_dataset and X_dataset == y_dataset:
-        data_res = executor.load_dataset(X_dataset)
-        if not data_res["success"]:
-            return data_res
-        y = data_res["y"]
-        X = data_res["X"]
-    else:
-        if X_dataset:
-            data_res = executor.load_dataset(X_dataset)
-            if not data_res["success"]:
-                return data_res
-            X = data_res["X"] if data_res["X"] is not None else data_res["y"]
-
-        if y_dataset:
-            data_res = executor.load_dataset(y_dataset)
-            if not data_res["success"]:
-                return data_res
-            y = data_res["y"]
-
-    return executor.update(estimator_handle, y=y, X=X)
+    result = executor.update(estimator_handle, y=y, X=X)
+    if result.get("success") and resolved["exogenous"]:
+        result["exogenous"] = resolved["exogenous"]
+    return result
 
 
 def get_fitted_params_tool(estimator_handle: str) -> dict[str, Any]:

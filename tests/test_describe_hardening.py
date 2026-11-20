@@ -3,8 +3,8 @@
 ``describe_component`` used to resolve ``name`` through ``sktime.registry.craft``
 (an ``eval``), so ``describe_component("int")`` succeeded with module
 ``builtins.int`` and an expression with side effects was executed. Resolution
-is now restricted to registry names and dotted import paths of
-``skbase``/``sktime`` ``BaseObject`` subclasses; everything else is a
+is now restricted to registry names and their canonical or already-loaded
+qualified aliases; client-supplied modules are never imported. Everything else is a
 structured error with a did-you-mean suggestion. Non-string / empty names get
 a structured error instead of an ``AttributeError``.
 """
@@ -94,8 +94,29 @@ def test_case_insensitive_lookup_still_works():
 def test_non_forecaster_components_resolve():
     for name, task in [
         ("SlidingWindowSplitter", "splitter"),
-        ("MeanAbsolutePercentageError", "metric"),
+        ("MeanAbsolutePercentageError", "metric_forecasting"),
     ]:
         result = describe_component_tool(name)
         assert result["success"] is True, result
         assert result["task"] == task
+
+
+def test_untrusted_module_is_not_imported_even_for_registered_class(tmp_path, monkeypatch):
+    marker = tmp_path / "imported"
+    module = tmp_path / "component_import_canary.py"
+    module.write_text(
+        f"from pathlib import Path\nPath({str(marker)!r}).write_text('executed')\n"
+        "from sktime.forecasting.naive import NaiveForecaster\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    result = describe_component_tool("component_import_canary.NaiveForecaster")
+    _assert_structured_error(result)
+    assert not marker.exists()
+
+
+def test_public_metric_reexport_resolves():
+    result = describe_component_tool(
+        "sktime.performance_metrics.forecasting.MeanAbsolutePercentageError"
+    )
+    assert result["success"], result
+    assert result["name"] == "MeanAbsolutePercentageError"
