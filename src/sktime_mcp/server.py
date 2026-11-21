@@ -39,13 +39,24 @@ from mcp.types import (
     CallToolRequestParams,
     CallToolResult,
     ImageContent,
+    ListResourcesResult,
+    ListResourceTemplatesResult,
     ListToolsResult,
     PaginatedRequestParams,
+    ReadResourceRequestParams,
+    ReadResourceResult,
     TextContent,
+    TextResourceContents,
     Tool,
 )
 
 from sktime_mcp.config import settings
+from sktime_mcp.resources import (
+    JSON_MIME_TYPE,
+    get_resource_templates,
+    get_resources,
+    read_resource,
+)
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_tool,
@@ -1495,12 +1506,40 @@ async def call_tool(ctx: ServerRequestContext, params: CallToolRequestParams) ->
         return _error_result(str(e))
 
 
+async def list_resources(
+    ctx: ServerRequestContext, params: PaginatedRequestParams | None
+) -> ListResourcesResult:
+    """MCP ``resources/list`` handler."""
+    return ListResourcesResult(resources=get_resources())
+
+
+async def list_resource_templates(
+    ctx: ServerRequestContext, params: PaginatedRequestParams | None
+) -> ListResourceTemplatesResult:
+    """MCP ``resources/templates/list`` handler."""
+    return ListResourceTemplatesResult(resource_templates=get_resource_templates())
+
+
+async def read_resource_handler(
+    ctx: ServerRequestContext, params: ReadResourceRequestParams
+) -> ReadResourceResult:
+    """MCP ``resources/read`` handler; failures surface as JSON-RPC errors."""
+    body = sanitize_for_json(read_resource(params.uri))
+    text = json.dumps(body, indent=2, default=str)
+    return ReadResourceResult(
+        contents=[TextResourceContents(uri=params.uri, mime_type=JSON_MIME_TYPE, text=text)]
+    )
+
+
 # Constructed after the handlers it binds; ``sktime_mcp.app`` imports this instance.
 server = Server(
     "sktime-mcp",
     version=__version__,
     on_list_tools=list_tools,
     on_call_tool=call_tool,
+    on_list_resources=list_resources,
+    on_list_resource_templates=list_resource_templates,
+    on_read_resource=read_resource_handler,
 )
 
 
