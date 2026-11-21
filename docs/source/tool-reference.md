@@ -458,3 +458,22 @@ the {doc}`user-guide`). Its isolation depends on that configuration; host mounts
 and elevated privileges can expose the host.
 
 See {doc}`developer/architecture` for the full trust boundary.
+
+---
+
+## Resources
+
+Besides tools, the server exposes read-only MCP resources. A client can read
+them directly, without a tool call. Each returns `application/json` text with
+the same JSON as the tool it is built on, and creates no handles or jobs.
+
+| URI | Same JSON as | Content |
+| :--- | :--- | :--- |
+| `sktime://tags` | `query_registry` with `task="tag"` | Every capability tag, all pages merged into one `results` list. |
+| `sktime://datasets` | `list_available_data` with `is_demo=true` | Built-in demo datasets grouped by task. |
+| `sktime://components/{name}` | `describe_component` | Description of one registered component class. |
+
+`{name}` must be a class name or a dotted alias such as
+`sktime.forecasting.arima.ARIMA`. Anything else is rejected before any lookup.
+A malformed or unregistered name, or an unknown URI, returns a JSON-RPC error
+with code `-32602` (invalid params).
