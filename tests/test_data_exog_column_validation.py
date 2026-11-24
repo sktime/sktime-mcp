@@ -79,4 +79,3 @@ def test_to_sktime_format_keeps_all_valid_explicit_exog_columns():
 
     assert y.name == "value"
     assert list(X.columns) == ["promo", "price"]
-

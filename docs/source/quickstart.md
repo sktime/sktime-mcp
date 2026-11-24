@@ -2,6 +2,13 @@
 
 This guide provides the fastest route to running the `sktime-mcp` server and connecting it to a client.
 
+```{note}
+The `latest` documentation follows the repository development branch. `pip` and
+`uvx` install the published release, which can lag behind development features.
+For current-main installation and an explicit Python environment, see
+{doc}`installation`.
+```
+
 ## 1. Start the Server
 
 Once installed, you can start the MCP server directly from your terminal:
@@ -20,7 +27,8 @@ To use `sktime-mcp` with an AI assistant, you must configure the client to launc
 
 Add the following configuration to your `claude_desktop_config.json`:
 
-**Linux**: `~/.config/Claude/claude_desktop_config.json`  
+**Linux**: follow your MCP client's Linux configuration guide.
+
 **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`  
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 

@@ -12,6 +12,7 @@ next to loaders that need a network download.
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from sktime_mcp.runtime.executor import (
     _classify_dataset,
@@ -29,6 +30,35 @@ def _nested_panel(n: int, n_cols: int = 1) -> pd.DataFrame:
 
 
 class TestSplitByShape:
+    @pytest.mark.parametrize("as_series", [False, True])
+    def test_multiindex_panel_counts_instances_not_timepoints(self, as_series):
+        index = pd.MultiIndex.from_tuples(
+            [("a", 0), ("a", 1), ("a", 2), ("b", 0), ("b", 1)],
+            names=["instance", "time"],
+        )
+        panel = pd.DataFrame({"value": np.arange(5.0)}, index=index)
+        labels = pd.Series(["yes", "no"]) if as_series else np.array(["yes", "no"])
+        y, X = _split_dataset_tuple((panel, labels))
+        assert X is panel and y is labels
+
+    def test_small_continuous_target_is_regression(self):
+        panel = np.ones((3, 1, 5))
+        labels = np.array([0.1, 0.25, 0.8])
+        assert _classify_dataset(labels, panel, (panel, labels)) == "regression"
+
+    def test_integral_float_class_labels_are_classification(self):
+        panel = np.ones((30, 1, 5))
+        labels = np.arange(30, dtype=float)
+        assert _classify_dataset(labels, panel, (panel, labels)) == "classification"
+
+    @pytest.mark.parametrize(
+        "name, kind", [("tecator", "regression"), ("gunpoint", "classification")]
+    )
+    def test_declared_dataset_task_takes_precedence_over_label_dtype(self, name, kind):
+        panel = np.ones((3, 1, 5))
+        labels = np.arange(3) if kind == "regression" else np.array([0.1, 0.25, 0.8])
+        assert _classify_dataset(labels, panel, (panel, labels), name=name) == kind
+
     def test_panel_and_labels_maps_to_x_and_y(self):
         panel, labels = _nested_panel(4), np.array(["a", "b", "a", "b"])
         y, X = _split_dataset_tuple((panel, labels))

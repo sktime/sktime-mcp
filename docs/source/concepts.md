@@ -48,22 +48,42 @@ See the {doc}`tool-reference` for the job tools and the exact flag.
 ## Safety and Reproducibility
 
 ### Execution Model
-For modelling, `sktime-mcp` does not ask an LLM to write Python and then run it. Your assistant selects from a fixed set of tools with validated inputs, and models are constructed through sktime's own registry — so a typo or a hallucinated class name fails cleanly instead of executing something unintended.
+The assistant calls named MCP tools with advertised input schemas and tool-specific
+validation. `query_registry` reads the installed sktime registry;
+`describe_component` resolves registered component names without evaluating input
+or importing a client-supplied module. Descriptions include dependency availability,
+missing requirements and an installation hint when applicable.
+
+`instantiate` has a different trust boundary: it passes its specification to
+sktime's `craft()`, which evaluates Python expressions. A registry-backed interface
+does not make that expression evaluator a sandbox. Only use specifications from
+trusted clients and review them before execution.
 
 ```{warning}
-One tool is deliberately outside that boundary. `run_command` runs an arbitrary
-shell command with your account's privileges, so the assistant can install a
-missing optional dependency mid-session. It is powerful and it is **not**
-sandboxed.
-
-Most MCP clients let you approve or deny tools individually. Keep `run_command`
-on ask-every-time, or turn it off, unless you actively want the assistant
-installing packages and inspecting files for you. See {doc}`tool-reference`.
+`run_command` also executes arbitrary shell commands with the server account's
+privileges. Keep it on ask-every-time in the client, or disable it unless you need
+that capability. Neither a tool schema nor HTTP authentication restricts what an
+authorized call can do on the host.
 ```
 
-The server has no authentication layer of its own: it runs as you, with your
-filesystem permissions. Treat it as a local trusted tool, and use a container if
-you want a harder boundary.
+### Local and HTTP Access
+Local stdio runs as the user who starts the process and needs no HTTP token. The
+HTTP/SSE transport requires `SKTIME_MCP_HTTP_TOKEN` and an
+`Authorization: Bearer <token>` header on protected routes. Only the `/` health
+check is public. HTTP startup without a token is refused unless
+`SKTIME_MCP_HTTP_INSECURE=true` is explicitly enabled for local testing.
+
+Host/origin allowlists protect the HTTP transport as described in the README.
+Authentication controls who can call the server; it does not provide filesystem
+isolation. A container can reduce access when configured with limited mounts and
+permissions. See {doc}`developer/architecture` for the full boundary.
 
 ### From Conversation to Code
-Once you've found a workflow that works, you can turn your conversation into a permanent asset. Ask the assistant to **"export the Python code,"** and it will generate a standalone script that reproduces your entire analysis exactly.
+`export_code` reconstructs an estimator or pipeline from its stored specification,
+or emits a loader for a saved model. `include_fit_example=true` adds an example for
+a built-in dataset. It does not record the whole conversation, custom data loading,
+cleaning decisions, fitted weights or the Python environment.
+
+Use `save_data` for data and predictions, `save_model` for a fitted estimator, and
+record package versions plus the steps needed to reproduce your analysis. Review
+and run exported code in the environment where you intend to use it.

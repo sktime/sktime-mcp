@@ -6,10 +6,12 @@ registering both halves as new data handles.
 """
 
 import logging
+import math
 import uuid
 from typing import Any
 
 from sktime_mcp.runtime.executor import get_executor
+from sktime_mcp.tools.fit_predict import horizon_cap_error
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,8 @@ def split_data_tool(
         Handle ID of the loaded data to split (from load_data_source).
     test_size : float or None, default=None
         Fraction of the data to hold out for testing (0.0–1.0).
+        The number of test observations is rounded up, as in sktime.
+        The split must leave at least one training observation.
         Mutually exclusive with `fh`.
     fh : int, list of int, or None, default=None
         Forecast horizon — the number of final time steps to reserve
@@ -95,6 +99,11 @@ def split_data_tool(
                 "success": False,
                 "error": f"fh must be an integer or list of integers, got {type(fh).__name__}",
             }
+        # A hold-out longer than SKTIME_MCP_MAX_HORIZON could never be
+        # forecast, so apply predict's cap here too (F-24).
+        cap_error = horizon_cap_error(fh if isinstance(fh, int) else max(fh))
+        if cap_error:
+            return {"success": False, "error": cap_error.replace("horizon=", "fh=", 1)}
 
     data_info = executor._data_handles[data_handle]
     y = data_info["y"]
@@ -107,7 +116,7 @@ def split_data_tool(
         n = len(y)
 
         if test_size is not None:
-            n_test = max(1, int(n * test_size))
+            n_test = max(1, math.ceil(n * test_size))
         elif isinstance(fh, int):
             n_test = fh
         else:
