@@ -49,7 +49,10 @@ Behaviour:
 | `true` | `{"success": true, "job_id": "..."}` immediately | Training or loading is slow |
 
 When you pass `run_async: true`, the work is scheduled on the server's event loop
-and you get a `job_id` back straight away. Track it with the job tools:
+and you get a `job_id` back straight away. A missing estimator handle is rejected
+before any job is created, and calling a tool function with `run_async=True` from
+plain synchronous Python (no running event loop) returns a structured error instead
+of a job; use `run_async=False` there. Track a job with the job tools:
 
 ```text
 fit(run_async=true)  ->  job_id
@@ -88,12 +91,19 @@ Commonly useful tags: `capability:pred_int` (prediction intervals),
 
 ### `describe_component`
 
-Detailed information about any class in the sktime ecosystem — estimators,
-splitters, metrics, transformers.
+Detailed information about registered sktime components — estimators,
+splitters, metrics and transformers. Names and canonical or already-loaded
+qualified aliases are resolved from the registry, without evaluating the input
+or importing a client-supplied module.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :---: | :--- |
 | `name` | string | ✅ | Class name, e.g. `ARIMA`, `SlidingWindowSplitter`, `MeanAbsolutePercentageError`. |
+
+The response includes `dependencies_available`, `missing_dependencies` and
+`install_hint`, alongside parameters, tags and the docstring. Availability reflects
+the current server environment and package requirements, not model accuracy or a
+guarantee that every workflow will run.
 
 ### `list_available_data`
 
@@ -110,13 +120,14 @@ Lists demo datasets and active user-loaded data handles in one response.
 ### `instantiate`
 
 Create an estimator or pipeline from an sktime **craft** specification string.
-Composition is expressed directly in the spec — sktime validates it.
+Composition is expressed directly in the spec. `craft()` evaluates that specification, so only accept trusted input; registry lookup and result-type checks do not make it a sandbox. Compatibility may be checked during construction or fitting.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :---: | :--- |
 | `spec` | string | ✅ | Craft spec, e.g. `ARIMA(order=(1, 1, 1))` or `Detrender() * ARIMA()`. |
 
-Returns an `est_…` handle.
+Returns an `est_…` handle. The spec must *call* the class: a bare class name
+such as `NaiveForecaster` is rejected with a hint to write `NaiveForecaster()`.
 
 ### `list_handles`
 
@@ -154,17 +165,35 @@ Generate predictions from a fitted estimator.
 | Argument | Type | Required | Default | Description |
 | :--- | :--- | :---: | :--- | :--- |
 | `estimator_handle` | string | ✅ | — | Handle of a **fitted** estimator. |
-| `horizon` | integer | — | `12` | Forecast horizon. |
+| `horizon` | integer | — | `12` | Forecast horizon. At most `SKTIME_MCP_MAX_HORIZON` steps (default 10000); larger requests are rejected before any work, with or without `run_async`. |
 | `mode` | string | — | `predict` | One of `predict`, `predict_interval`, `predict_quantiles`, `predict_proba`, `predict_var`. |
 | `coverage` | float or list | — | `0.9` | Coverage level(s) — used by `predict_interval`. |
 | `alpha` | float or list | — | — | Quantile level(s) — used by `predict_quantiles`. |
 | `X_handle` | string | — | — | Data handle for `X`. |
-| `y_handle` | string | — | — | Data handle for `y` (needed by detectors/annotators). |
+| `y_handle` | string | — | — | Data handle for `y`: the series a detector annotates or a transformer transforms (as in `fit`); forecasters ignore it. |
 | `X_dataset` | string | — | — | Demo dataset name for `X`. |
 | `y_dataset` | string | — | — | Demo dataset name for `y`. |
 | `run_async` | boolean | — | `false` | Run in the background, return a `job_id`. |
 
 Interval and quantile forecasts are **modes of this tool**, not separate tools.
+`predict_proba` returns a numeric summary of the forecast distribution rather
+than the distribution object: `{"distribution": "Normal", "mean": {<period>:
+value}, "var": {<period>: value}, "quantiles": {<period>: {"0.05": v, "0.5": v,
+"0.95": v}}}`. A forecaster without probabilistic support (tag
+`capability:pred_int` false) gets a structured error for every probabilistic
+mode instead of a raw `NotImplementedError`.
+
+The full result is also registered as a **data handle** and returned as
+`prediction_handle` (metadata `source: "prediction"`, plus `estimator_handle`,
+`mode`, `horizon`, `cutoff`). Use it like any other handle: `plot_series` it next
+to the train/test handles, `save_data` it to a file, `inspect_data` it, or score
+it with `call_method` on a metric, e.g.
+`{"y_true_data_handle": "<test handle>", "y_pred_data_handle": "<prediction_handle>"}`.
+Interval/quantile handles hold the flattened columns of the JSON response
+(e.g. `Coverage_0.9_lower`); a `predict_proba` handle holds `<var>_mean`,
+`<var>_var` and `<var>_0.05` / `<var>_0.5` / `<var>_0.95`. When the JSON is truncated (over 500 rows) the
+handle still holds the complete forecast. For `run_async`, the handle is in the
+job result.
 
 ### `update`
 
@@ -195,16 +224,26 @@ scitypes that do not fit the `fit`/`predict` shape — splitters, metrics, align
 
 ### `evaluate`
 
-Cross-validate an estimator.
+Cross-validate a forecaster with expanding-window CV. Each fold trains on an
+expanding window and scores the `fh` steps after its cutoff; cutoffs advance by
+`step_length`. Without `initial_window`, exactly `cv_folds` folds are run, the
+last one ending at the final observation. The response reports `cv_folds_run`,
+the `initial_window`, `fh` and `step_length` actually used, and
+`cv_folds_requested` only when `cv_folds` drove the fold count (i.e. when
+`initial_window` was not set). Invalid fold geometry is rejected before a
+background job starts or a dense horizon is allocated. The maximum step in
+`fh` must not exceed `SKTIME_MCP_MAX_HORIZON` (default `10000`).
 
 | Argument | Type | Required | Default | Description |
 | :--- | :--- | :---: | :--- | :--- |
 | `estimator_handle` | string | ✅ | — | Handle from `instantiate`. |
 | `y` | string | ✅ | — | Target series: a data handle ID **or** a demo dataset name. |
 | `X` | string | — | — | Exogenous series: data handle ID or demo dataset name. |
-| `cv_folds` | integer | — | `3` | Number of folds. Ignored when `initial_window` is set. |
+| `cv_folds` | integer | — | `3` | Number of folds. Needs `len(y) >= max(fh) + (cv_folds - 1) * step_length + 1`. Ignored when `initial_window` is set. |
 | `metric` | string | — | — | Metric name, e.g. `MeanAbsolutePercentageError`. |
-| `initial_window` | integer | — | — | Initial training window for expanding-window CV. |
+| `initial_window` | integer | — | — | Initial training window; folds run from here to the end of the series. Must be `<= len(y) - max(fh)`. |
+| `fh` | integer \| int[] | — | `1` | Forecast horizon scored per fold, relative to the cutoff. Integer `n` = steps `1..n` (e.g. `12` for 12-step-ahead); list = exactly those steps (e.g. `[1, 6, 12]`). |
+| `step_length` | integer | — | `1` | Steps the cutoff advances between folds; larger values mean fewer refits. |
 | `run_async` | boolean | — | `false` | Run in the background, return a `job_id`. |
 
 ---
@@ -256,7 +295,7 @@ Split a series into temporal train/test handles. Provide **exactly one** of
 | Argument | Type | Required | Description |
 | :--- | :--- | :---: | :--- |
 | `data_handle` | string | ✅ | Handle to split. |
-| `test_size` | number | — | Hold-out fraction, exclusive range `(0.0, 1.0)`. Mutually exclusive with `fh`. |
+| `test_size` | number | — | Hold-out fraction, exclusive range `(0.0, 1.0)`. The test count is rounded up, as in sktime, and must leave at least one training observation. Mutually exclusive with `fh`. |
 | `fh` | int or list | — | Integer: hold out that many final steps. List: holds out `max(fh)` steps — `fh=[1,5,10]` reserves 10. Mutually exclusive with `test_size`. |
 
 Returns `train_handle` and `test_handle`.
@@ -286,6 +325,7 @@ creating parent directories as needed.
 | `data_handle` | string | ✅ | — | Handle to export. |
 | `path` | string | ✅ | — | Destination path. |
 | `format` | string | — | `csv` | `csv`, `parquet`, or `json`. |
+| `overwrite` | boolean | — | `false` | Refuse to replace an existing file unless explicitly enabled. The response reports whether a file was replaced. |
 
 ```{warning}
 The format comes from the `format` argument, **not** the file extension.
@@ -300,15 +340,16 @@ Writing to `out.parquet` with the default `format` produces a CSV.
 
 ### `plot_series`
 
-Plot one or more series. Saves a file when `path` is given, otherwise returns
-the image as a base64 string.
+Plot one or more series. Saves a file when `path` is given. Otherwise PNG and
+WebP plots are returned as an MCP image content block next to the JSON metadata,
+and SVG plots as a base64 string in `image_base64`.
 
 | Argument | Type | Required | Default | Description |
 | :--- | :--- | :---: | :--- | :--- |
-| `data_handles` | array of string | ✅ | — | Handles to plot, e.g. train, test, forecast. |
+| `data_handles` | array of string | ✅ | — | Handles to plot, e.g. the train/test handles from `split_data` and the `prediction_handle` from `predict`. |
 | `labels` | array of string | — | — | Legend label per handle. |
 | `title` | string | — | — | Plot title. |
-| `path` | string | — | — | Save location, e.g. `/tmp/plot.png`. Omit to get base64 back. |
+| `path` | string | — | — | Save location, e.g. `/tmp/plot.png`. Omit to get the plot back inline. |
 | `figsize` | array | — | `[12, 6]` | `[width, height]` in inches. |
 | `dpi` | integer | — | `150` | Resolution. |
 | `markers` | string or array | — | — | Marker style(s), e.g. `"o"` or `[".", "x"]`. |
@@ -321,7 +362,7 @@ the image as a base64 string.
 
 ### `export_code`
 
-Emit standalone, runnable Python that reconstructs the estimator.
+Emit Python that reconstructs the estimator or loads a saved model. This does not capture custom data preparation, fitted state or the complete conversation. The optional fit example uses a demo dataset; review and execute the export in your target environment.
 
 | Argument | Type | Required | Default | Description |
 | :--- | :--- | :---: | :--- | :--- |
@@ -411,8 +452,9 @@ pip install mlflow
 **Treat this as opt-in.** Most MCP clients prompt before each tool call and let
 you allow or deny individual tools — leave `run_command` on ask-every-time, or
 disable it outright, unless you specifically want the assistant installing
-packages and inspecting the filesystem on your behalf. If you need a hard
-guarantee, run the server inside a container (see the Docker option in the
-{doc}`user-guide`) so the blast radius is the container rather than your machine.
+packages and inspecting the filesystem on your behalf. For stronger isolation,
+use a container with restricted mounts and privileges (see the Docker option in
+the {doc}`user-guide`). Its isolation depends on that configuration; host mounts
+and elevated privileges can expose the host.
 
 See {doc}`developer/architecture` for the full trust boundary.

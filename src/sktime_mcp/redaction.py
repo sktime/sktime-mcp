@@ -15,9 +15,11 @@ Three entry points:
 
 from __future__ import annotations
 
+import logging
 import re
+import traceback
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import unquote_plus, urlsplit
 
 MASK = "***"
 
@@ -30,6 +32,8 @@ _CREDENTIAL_KEY_PATTERN = re.compile(
 )
 
 _PAIR_SEPARATORS = re.compile(r"([&;])")
+_URL_PATTERN = re.compile(r"[a-zA-Z][a-zA-Z0-9+.-]*://[^\s<>\"']+")
+_USERINFO_PATTERN = re.compile(r"(://)([^/?#\s]*@)")
 
 
 def is_credential_key(key: Any) -> bool:
@@ -48,7 +52,7 @@ def _redact_pairs(text: str) -> str:
         if part in ("&", ";") or "=" not in part:
             continue
         key, _, _value = part.partition("=")
-        if is_credential_key(key.strip()):
+        if is_credential_key(unquote_plus(key.strip())):
             parts[i] = f"{key}={MASK}"
     return "".join(parts)
 
@@ -57,6 +61,14 @@ def redact_url(url: str) -> str:
     """Mask the userinfo password and credential-like query parameters of *url*."""
     if not isinstance(url, str) or not url:
         return url
+
+    # Mask userinfo before parsing, including malformed host/IPv6 URLs that
+    # urlsplit rejects. Never return an unmasked password from the fallback.
+    def mask_userinfo(match: re.Match) -> str:
+        username, sep, _password = match[2][:-1].partition(":")
+        return f"://{username}:{MASK}@" if sep else f"://{MASK}@"
+
+    url = _USERINFO_PATTERN.sub(mask_userinfo, url)
     try:
         parsed = urlsplit(url)
     except ValueError:
@@ -81,7 +93,7 @@ def redact_url(url: str) -> str:
     if query:
         rebuilt += f"?{query}"
     if parsed.fragment:
-        rebuilt += f"#{parsed.fragment}"
+        rebuilt += f"#{_redact_pairs(parsed.fragment)}"
     return rebuilt
 
 
@@ -89,9 +101,58 @@ def redact_connection_string(conn: str) -> str:
     """Mask credentials in a URL-style or ODBC-style connection string."""
     if not isinstance(conn, str) or not conn:
         return conn
-    if "://" in conn:
-        return redact_url(conn)
-    return _redact_pairs(conn)
+    return redact_text(conn)
+
+
+def redact_text(text: str) -> str:
+    """Mask credential URLs and key=value pairs inside prose or tracebacks."""
+    parts = []
+    for line in text.splitlines(keepends=True):
+        body = line.rstrip("\r\n")
+        start = 0
+        for match in _URL_PATTERN.finditer(body):
+            parts.append(_redact_pairs(body[start : match.start()]))
+            parts.append(redact_url(match[0]))
+            start = match.end()
+        parts.append(_redact_pairs(body[start:]))
+        parts.append(line[len(body) :])
+    return "".join(parts)
+
+
+def redact_errors(obj: Any) -> Any:
+    """Redact error fields recursively without changing successful data values."""
+    if isinstance(obj, dict):
+        return {
+            key: _redact_error_value(value) if key in {"error", "errors"} else redact_errors(value)
+            for key, value in obj.items()
+        }
+    if isinstance(obj, list):
+        return [redact_errors(value) for value in obj]
+    return obj
+
+
+def _redact_error_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return redact_text(value)
+    if isinstance(value, list):
+        return [_redact_error_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _redact_error_value(item) for key, item in value.items()}
+    return value
+
+
+class RedactingFilter(logging.Filter):
+    """Redact formatted log messages and exception chains before any handler."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = redact_text(record.getMessage())
+        record.args = ()
+        if record.exc_info:
+            record.exc_text = redact_text("".join(traceback.format_exception(*record.exc_info)))
+            record.exc_info = None
+        elif record.exc_text:
+            record.exc_text = redact_text(record.exc_text)
+        return True
 
 
 def _truncate(text: str, max_chars: int) -> str:

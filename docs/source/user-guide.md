@@ -461,7 +461,7 @@ The server registers **26 tools**. The table below groups them by intent; the
 | Bring data into the session | `load_data_source`, `inspect_data`, `transform_data`, `split_data`, `save_data` | Load files, inline data, SQL, or URLs into handles; inspect, clean, split, and persist them. |
 | Build and run models | `instantiate`, `fit`, `predict`, `update`, `get_fitted_params`, `call_method` | Create sktime estimators or pipelines, fit them, forecast, update, or call native methods. |
 | Evaluate and reproduce | `evaluate`, `export_code`, `save_model`, `load_model` | Cross-validate, generate Python code, and persist fitted models. |
-| Visualize | `plot_series` | Plot one or more series to a PNG/SVG/WebP file, or inline as base64. |
+| Visualize | `plot_series` | Plot one or more series to a PNG/SVG/WebP file, or inline as an image. |
 | Manage runtime state | `list_handles`, `release_handle`, `release_data_handle`, `list_jobs`, `check_job_status`, `cancel_job` | See what is in memory, clean it up, and track async work. |
 | Repair the environment | `run_command` | Runs an arbitrary shell command — see the warning below. |
 
@@ -737,18 +737,13 @@ A sales operations team has monthly revenue data exported from a business system
 A cleaned time-series handle, a saved CSV file, train/test handles, forecast values for the holdout window, and a clear explanation of state cleanup.
 
 ```{note}
-The captured session below hit three real rough edges, and they are left in
-deliberately because you may hit them too:
+The captured session below is a historical transcript from before the current
+loader and handle fixes. Current main accepts duplicate timestamps for formatting,
+normalizes supported calendar indexes, and preserves the original handle when
+`transform_data` creates a new one. Its old duplicate-load, month-start and
+superseded-handle failures are retained below as historical output, not expected
+current behavior. Inspect the current data and `changes_applied` before modelling.
 
-1. `load_data_source` **rejects** input containing duplicate timestamps rather than
-   cleaning them, so duplicates must be removed before loading — even though
-   `transform_data` can remove duplicates once the data is already in a handle.
-2. A month-start (`<MonthBegin>`) frequency is not usable as a pandas period
-   frequency, which breaks `predict` for seasonal forecasters on such an index.
-3. Releasing a handle that has been superseded by `transform_data` reports
-   "not found".
-
-Everything else in the workflow completed normally.
 ```
 
 <details>
@@ -861,10 +856,10 @@ These limitations matter before building expectations around the tool.
 - The local stdio setup has no built-in auth layer. Treat it as a local trusted tool, and control access through the client, environment, and filesystem permissions.
 - Handles live in memory. Save data, save models, or export code before restarting the server.
 - File paths are resolved where the server runs. With Docker, mount files into the container and use container paths.
-- Optional estimators may need optional dependencies. Missing dependency errors are expected for some advanced models.
+- Optional estimators may need additional packages. Check `dependencies_available`, `missing_dependencies` and `install_hint` in `describe_component` before instantiation.
 - Forecasting workflows are the most polished. Classification, detection, splitters, metrics, and other scitypes are reachable, but may need `call_method` or more explicit prompts.
-- Some prediction results are returned as structured text or JSON, not as persistent data handles. Save them through exported code or client-side file writing when needed.
-- `evaluate` is strongest on demo datasets today. Custom train/test evaluation is a promising extension.
+- `predict` returns a `prediction_handle` containing the full forecast as well as the serialized result. Use it with `inspect_data`, `plot_series` or `save_data`; release it when finished. Handles remain in memory only for the current server process.
+- `evaluate` accepts a demo dataset or a live data handle for expanding-window forecasting CV. It supports `fh` and `step_length`, subject to the configured horizon cap and available series length. It does not provide automatic multi-model ranking.
 
 
 ## 6. Wrap-Up
@@ -876,7 +871,7 @@ Best current uses:
 - discover estimators, datasets, tags, and capabilities;
 - load, inspect, clean, split, and save time-series data;
 - fit forecasters and produce forecasts;
-- evaluate models on demo data;
+- cross-validate forecasters on demo data or live data handles;
 - export reproducible Python code;
 - save fitted models and important data artifacts.
 

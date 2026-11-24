@@ -12,8 +12,13 @@ import pytest
 
 from sktime_mcp.data.adapters.sql_adapter import SQLAdapter
 from sktime_mcp.data.adapters.url_adapter import UrlAdapter
-from sktime_mcp.redaction import redact_connection_string, redact_for_logging, redact_url
-from sktime_mcp.server import call_tool
+from sktime_mcp.redaction import (
+    redact_connection_string,
+    redact_errors,
+    redact_for_logging,
+    redact_url,
+)
+from tests.test_mcp_wire import _connected_session
 
 SECRET = "s3cr3tPW"
 TOKEN = "tok3nXYZ"
@@ -159,6 +164,27 @@ class TestUrlRedaction:
 
 
 class TestRedactForLogging:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            f"Connection failed for mysql://demo:{SECRET}@example.invalid/db",
+            f"Cannot connect to 'mysql://demo:{SECRET}@example.invalid/db' (retry)",
+            f"https://demo:{SECRET}@[invalid/db",
+            f"https://example.invalid/data?%74oken={TOKEN}&format=csv",
+            f"https://example.invalid/data#access_token={TOKEN}",
+        ],
+    )
+    def test_credentials_inside_error_prose(self, text):
+        output = redact_for_logging({"error": text})
+        assert SECRET not in str(output)
+        assert TOKEN not in str(output)
+
+    def test_error_redaction_preserves_successful_data(self):
+        url = f"mysql://demo:{SECRET}@example.invalid/db"
+        result = redact_errors({"data": url, "jobs": [{"errors": [f"Failed: {url}"]}]})
+        assert result["data"] == url
+        assert SECRET not in str(result["jobs"])
+
     def test_masks_credential_keys_anywhere(self):
         obj = {
             "config": {
@@ -206,14 +232,49 @@ SQL_ARGS = {
 }
 
 
+async def _call_tool(name, arguments):
+    async with _connected_session() as session:
+        return await session.call_tool(name, arguments)
+
+
 def _log_text(caplog):
     return "\n".join(r.getMessage() for r in caplog.records if r.name == "sktime_mcp.server")
 
 
 class TestServerLogRedaction:
+    async def test_exception_chain_is_redacted_in_response_and_rendered_logs(self, caplog):
+        caplog.set_level(logging.DEBUG)
+        url = f"mysql://demo:{SECRET}@example.invalid/db"
+
+        def fail(*args, **kwargs):
+            try:
+                raise OSError(f"Connection failed for {url}")
+            except OSError as exc:
+                raise RuntimeError(f"Could not load {url}") from exc
+
+        with patch("sktime_mcp.server.load_data_source_tool", side_effect=fail):
+            response = await _call_tool("load_data_source", SQL_ARGS)
+        assert response.is_error
+        assert SECRET not in response.content[0].text
+        assert SECRET not in caplog.text
+        assert "Traceback" in caplog.text
+        assert "RuntimeError" in caplog.text
+        assert "OSError" in caplog.text
+
+    async def test_adapter_failure_is_redacted_in_runtime_logs_and_response(self, caplog):
+        caplog.set_level(logging.DEBUG)
+        url = f"https://demo:{SECRET}@example.invalid/data.csv"
+        with patch("urllib.request.urlretrieve", side_effect=OSError(f"Cannot download {url}")):
+            response = await _call_tool("load_data_source", {"config": {"type": "url", "url": url}})
+        body = json.loads(response.content[0].text)
+        assert body["success"] is False
+        assert SECRET not in body["error"]
+        assert SECRET not in caplog.text
+        assert any(record.name == "sktime_mcp.runtime.executor" for record in caplog.records)
+
     async def test_info_log_has_summary_but_no_secrets(self, caplog):
         caplog.set_level(logging.INFO, logger="sktime_mcp.server")
-        await call_tool("load_data_source", SQL_ARGS)
+        await _call_tool("load_data_source", SQL_ARGS)
         text = _log_text(caplog)
         assert SECRET not in text
         assert "sk-live-123" not in text
@@ -226,7 +287,7 @@ class TestServerLogRedaction:
 
     async def test_debug_log_has_redacted_body(self, caplog):
         caplog.set_level(logging.DEBUG, logger="sktime_mcp.server")
-        await call_tool("load_data_source", SQL_ARGS)
+        await _call_tool("load_data_source", SQL_ARGS)
         text = _log_text(caplog)
         assert SECRET not in text
         assert "Result body for load_data_source" in text
@@ -244,7 +305,7 @@ class TestServerLogRedaction:
                 "target_column": "value",
             }
         }
-        response = await call_tool("load_data_source", args)
+        response = await _call_tool("load_data_source", args)
         text = _log_text(caplog)
         assert "<list: 300 items>" in text
         assert "1150.5" not in text  # a mid-payload row is not in the log
@@ -252,6 +313,6 @@ class TestServerLogRedaction:
         # Release the handle the call created so other tests see a clean registry.
         from sktime_mcp.tools.data_tools import release_data_handle_tool
 
-        handle = json.loads(response[0].text).get("data_handle")
+        handle = json.loads(response.content[0].text).get("data_handle")
         if handle:
             release_data_handle_tool(handle)

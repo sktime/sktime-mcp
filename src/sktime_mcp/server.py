@@ -7,14 +7,15 @@ that exposes sktime's registry and execution capabilities to LLMs.
 
 import argparse
 import asyncio
+import copy
+import functools
 import json
 import logging
-import os
 import sys
-from io import TextIOWrapper
+from contextlib import suppress
 from typing import Any
 
-import anyio
+import jsonschema
 
 from sktime_mcp import __version__
 
@@ -32,12 +33,20 @@ try:
 except ImportError:
     _PANDAS_AVAILABLE = False
 
-from mcp.server import Server
+from mcp.server import Server, ServerRequestContext
 from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.types import (
+    CallToolRequestParams,
+    CallToolResult,
+    ImageContent,
+    ListToolsResult,
+    PaginatedRequestParams,
+    TextContent,
+    Tool,
+)
 
 from sktime_mcp.config import settings
-from sktime_mcp.redaction import redact_for_logging
+from sktime_mcp.redaction import RedactingFilter, redact_errors, redact_for_logging, redact_text
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_tool,
@@ -76,31 +85,6 @@ from sktime_mcp.tools.save_model import save_model_tool
 from sktime_mcp.tools.split_data import split_data_tool
 from sktime_mcp.tools.transform_data import transform_data_tool
 
-
-# ---------------------------------------------------------------------------
-# Server configuration via environment variables
-# ---------------------------------------------------------------------------
-def _get_int_env(name: str, default: int) -> int:
-    """Return an integer env var value, falling back to default on parse errors."""
-    raw_value = os.environ.get(name)
-    if raw_value is None:
-        return default
-
-    try:
-        return int(raw_value)
-    except (TypeError, ValueError):
-        logging.getLogger(__name__).warning(
-            "Invalid %s=%r; using default value %d instead.",
-            name,
-            raw_value,
-            default,
-        )
-        return default
-
-
-JOB_MAX_AGE_HOURS = _get_int_env("SKTIME_MCP_JOB_MAX_AGE_HOURS", 24)
-JOB_CLEANUP_INTERVAL_SECS = _get_int_env("SKTIME_MCP_JOB_CLEANUP_INTERVAL", 3600)
-
 # Configure logging to stderr with detailed format
 _handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
 if settings.log_path:
@@ -112,39 +96,191 @@ logging.basicConfig(
     handlers=_handlers,
 )
 logger = logging.getLogger(__name__)
-# Create MCP server instance
-server = Server("sktime-mcp")
+logger.addFilter(RedactingFilter())
 
 _CHARS_PER_TOKEN = 4
+# Strings at or below this length are never shortened; the marker alone would
+# not save anything worthwhile.
+_MIN_STRING_CUT = 32
+_STRING_TRUNCATION_MARKER = "...[truncated]"
 
 
-def _apply_response_token_limit(tool_name: str, text: str) -> str:
-    """Truncate *text* to the configured token budget and append a notice.
+def _serialized_len(obj: Any) -> int:
+    """Length of *obj* as it will be sent on the wire (same dumps settings as call_tool)."""
+    return len(json.dumps(obj, indent=2, default=str))
 
-    Reads ``SKTIME_MCP_MAX_RESPONSE_TOKENS`` from environment variable at call time so
-    that live config changes are respected.
-    Returns *text* unchanged when the limit is 0 (unlimited) or not set.
+
+def _format_path(path: tuple) -> str:
+    """Render a key/index path such as ``("fold_results", 2, "y_pred")`` as a string."""
+    out = ""
+    for part in path:
+        if isinstance(part, int):
+            out += f"[{part}]"
+        else:
+            out += f".{part}" if out else str(part)
+    return out
+
+
+def _collect_cuttable(obj: Any, path: tuple, out: list[tuple[int, tuple]]) -> None:
+    """Collect ``(serialized_size, path)`` for every value that can still be shortened.
+
+    Candidates are lists/dicts with at least two entries and strings longer
+    than ``_MIN_STRING_CUT``. The top-level envelope dict itself and its
+    ``truncated`` entry are never candidates, so keys such as ``success`` and
+    ``error`` are always preserved.
+    """
+    if isinstance(obj, dict):
+        if path and len(obj) >= 2:
+            out.append((_serialized_len(obj), path))
+        for key, value in obj.items():
+            if not path and key == "truncated":
+                continue
+            _collect_cuttable(value, (*path, key), out)
+    elif isinstance(obj, list):
+        if len(obj) >= 2:
+            out.append((_serialized_len(obj), path))
+        for index, value in enumerate(obj):
+            _collect_cuttable(value, (*path, index), out)
+    elif isinstance(obj, str) and len(obj) > _MIN_STRING_CUT:
+        out.append((len(obj) + 2, path))
+
+
+def _pick_cut_target(candidates: list[tuple[int, tuple]]) -> tuple:
+    """Choose which candidate to cut next.
+
+    Starts from the largest candidate, then descends into a direct child while
+    that child accounts for more than half of its parent's size. This keeps
+    record-like dicts intact (``{"fold": 1, "score": 0.2, "y_pred": [...]}``
+    loses entries of ``y_pred`` rather than the ``score`` key) and only cuts a
+    parent container when its size is spread across many entries.
+    """
+    sizes = {path: size for size, path in candidates}
+    size, path = max(candidates, key=lambda item: item[0])
+    while True:
+        children = [
+            (child_size, child_path)
+            for child_path, child_size in sizes.items()
+            if len(child_path) == len(path) + 1 and child_path[: len(path)] == path
+        ]
+        if not children:
+            return path
+        child_size, child_path = max(children, key=lambda item: item[0])
+        if child_size * 2 <= size:
+            return path
+        size, path = child_size, child_path
+
+
+def _get_at(obj: Any, path: tuple) -> Any:
+    for part in path:
+        obj = obj[part]
+    return obj
+
+
+def _set_at(obj: Any, path: tuple, value: Any) -> None:
+    _get_at(obj, path[:-1])[path[-1]] = value
+
+
+def _shrink(value: Any, keep_fraction: float) -> tuple[Any, int, int]:
+    """Return ``(shortened_value, shown, total)`` for a list, dict or string.
+
+    ``keep_fraction`` is the share of the value's serialized size that may
+    remain. At least one entry (or character) is removed so that repeated calls
+    always make progress.
+    """
+    total = len(value)
+    keep_fraction = min(1.0, max(0.0, keep_fraction))
+    if isinstance(value, str):
+        keep = int(total * keep_fraction) - len(_STRING_TRUNCATION_MARKER)
+        keep = max(0, min(total - 1, keep))
+        return value[:keep] + _STRING_TRUNCATION_MARKER, keep, total
+
+    keep = max(1, min(total - 1, int(total * keep_fraction)))
+    if isinstance(value, dict):
+        return dict(list(value.items())[:keep]), keep, total
+    return value[:keep], keep, total
+
+
+def _apply_response_token_limit(tool_name: str, result: Any) -> Any:
+    """Shrink *result* structurally so its JSON serialization fits the token budget.
+
+    Reads ``SKTIME_MCP_MAX_RESPONSE_TOKENS`` (via ``settings``) at call time so
+    that live config changes are respected; a limit of 0 (the default) means
+    unlimited and returns *result* unchanged.
+
+    When the serialized response exceeds the budget, the largest list/dict/string
+    values are progressively capped (keeping the first N entries or characters)
+    until the response fits or nothing more can be cut. The envelope dict itself
+    is never cut, so ``success`` and the other top-level keys are preserved and
+    the response is always valid JSON. A ``truncated`` object is added with the
+    human-readable ``notice`` and a ``fields`` list of
+    ``{"field", "shown", "total", "unit"}`` entries describing what was cut.
+
+    The caller's *result* is not mutated.
     """
     from sktime_mcp.config import settings
 
     max_tokens = settings.max_response_tokens
     if max_tokens <= 0:
-        return text  # unlimited
+        return result  # unlimited
 
     max_chars = max_tokens * _CHARS_PER_TOKEN
-    if len(text) <= max_chars:
-        return text
+    if _serialized_len(result) <= max_chars:
+        return result
 
     notice = (
-        f"\n\n[sktime-mcp] Response truncated: output exceeded the SKTIME_MCP_MAX_RESPONSE_TOKENS "
+        f"[sktime-mcp] Response truncated: output exceeded the SKTIME_MCP_MAX_RESPONSE_TOKENS "
         f"limit of {max_tokens} tokens (tool: {tool_name}). "
         "Increase SKTIME_MCP_MAX_RESPONSE_TOKENS or narrow your query for full results."
     )
-    # Reserve space for the notice inside the budget
-    budget = max_chars - len(notice)
-    if budget < 0:
-        budget = 0
-    return text[:budget] + notice
+    work = copy.deepcopy(result) if isinstance(result, dict) else {"result": copy.deepcopy(result)}
+    work.pop("truncated", None)
+    records: dict[tuple, dict[str, Any]] = {}
+    work["truncated"] = {"notice": notice, "fields": []}
+
+    while True:
+        current_size = _serialized_len(work)
+        excess = current_size - max_chars
+        if excess <= 0:
+            break
+        candidates: list[tuple[int, tuple]] = []
+        _collect_cuttable(work, (), candidates)
+        if not candidates:
+            break
+        path = _pick_cut_target(candidates)
+        value = _get_at(work, path)
+        # Measure what the value costs inside the whole document (indentation
+        # included) so the keep fraction lands close to the budget in one step.
+        _set_at(work, path, type(value)())
+        cost = max(1, current_size - _serialized_len(work))
+        new_value, shown, total = _shrink(value, (cost - excess) / cost)
+        _set_at(work, path, new_value)
+        record = records.get(path)
+        if record is None:
+            record = {
+                "field": _format_path(path),
+                "shown": shown,
+                "total": total,
+                "unit": "chars" if isinstance(new_value, str) else "items",
+            }
+            records[path] = record
+            work["truncated"]["fields"].append(record)
+        else:
+            record["shown"] = shown
+
+    return work
+
+
+# SVG is left as base64 in the JSON body: MCP clients generally render raster images only.
+_IMAGE_MIME_TYPES = {"png": "image/png", "webp": "image/webp"}
+
+
+def _split_image(result: dict) -> tuple[dict, ImageContent | None]:
+    """Move an inline raster plot out of the JSON body into an MCP image block."""
+    mime_type = _IMAGE_MIME_TYPES.get(result.get("image_format"))
+    if mime_type is None or "image_base64" not in result:
+        return result, None
+    body = {k: v for k, v in result.items() if k != "image_base64"}
+    return body, ImageContent(type="image", data=result["image_base64"], mime_type=mime_type)
 
 
 def _summarize_result(result: Any, response_text: str) -> str:
@@ -166,7 +302,7 @@ def sanitize_for_json(obj, _seen=None):
     Handles:
     - Standard Python scalars and containers (dict, list, tuple)
     - NumPy integer/float scalars and ndarrays
-    - Pandas Timestamp, NaT, NA, and Series/DataFrame
+    - Pandas Timestamp, NaT, NA, Series/DataFrame, Index
     - Arbitrary objects (fallback to str repr)
     - Circular references (returns a placeholder instead of recursing forever)
     """
@@ -186,7 +322,11 @@ def sanitize_for_json(obj, _seen=None):
         if isinstance(obj, np.integer):
             return int(obj)
         if isinstance(obj, np.floating):
-            return float(obj)
+            f = float(obj)
+            # JSON has no representation for NaN/Inf — map to null.
+            if f != f or f == float("inf") or f == float("-inf"):
+                return None
+            return f
         if isinstance(obj, np.bool_):
             return bool(obj)
         if isinstance(obj, np.ndarray):
@@ -210,12 +350,18 @@ def sanitize_for_json(obj, _seen=None):
             return sanitize_for_json(obj.tolist(), _seen)
         if isinstance(obj, pd.DataFrame):
             return sanitize_for_json(obj.to_dict(orient="records"), _seen)
+        if isinstance(obj, pd.Index):
+            return [sanitize_for_json(item, _seen) for item in obj.tolist()]
 
     # --- Standard Python containers ---
     if isinstance(obj, dict):
         return {str(k): sanitize_for_json(v, _seen) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [sanitize_for_json(item, _seen) for item in obj]
+
+    # JSON has no non-finite numeric literals, including builtin Python floats.
+    if isinstance(obj, float):
+        return obj if obj == obj and obj not in (float("inf"), float("-inf")) else None
 
     # --- Already JSON-safe scalars ---
     if isinstance(obj, (str, int, float, bool, type(None))):
@@ -229,9 +375,8 @@ def sanitize_for_json(obj, _seen=None):
     return str(obj)
 
 
-@server.list_tools()
-async def list_tools() -> list[Tool]:
-    """List all available MCP tools."""
+def get_tools() -> list[Tool]:
+    """Return the definitions of all MCP tools exposed by this server."""
     return [
         # -- Discovery -------------------------------------------------------
         Tool(
@@ -283,7 +428,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="describe_component",
-            description="Get detailed information about ANY class or component in the sktime ecosystem (estimators, splitters, metrics, transformers)",
+            description="Describe a registered sktime component (estimator, splitter, metric or transformer) by name or a loaded qualified alias. Client input is never evaluated or used to import modules.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -338,7 +483,10 @@ async def list_tools() -> list[Tool]:
             name="fit",
             description=(
                 "Fit an estimator on data. "
-                "Provide explicit X_handle and/y_handle (or datasets) depending on the estimator's scitype."
+                "Provide explicit X_handle and/or y_handle (or datasets) depending on the estimator's scitype; "
+                "each handle/dataset pair (y_handle vs y_dataset, X_handle vs X_dataset) is mutually exclusive. "
+                "A data handle loaded with exog_columns carries X alongside its target: "
+                "fit(y_handle=h) uses that X automatically (reported under 'exogenous')."
             ),
             inputSchema={
                 "type": "object",
@@ -349,19 +497,29 @@ async def list_tools() -> list[Tool]:
                     },
                     "X_handle": {
                         "type": "string",
-                        "description": "Optional: Handle from load_data_source for X data (features, panel, etc.)",
+                        "description": (
+                            "Optional: data handle whose exogenous columns (exog_columns) are used as X. "
+                            "Errors if the handle has no exogenous columns. Do not pass the same handle as y_handle. "
+                            "Mutually exclusive with X_dataset."
+                        ),
                     },
                     "y_handle": {
                         "type": "string",
-                        "description": "Optional: Handle from load_data_source for y data (target, labels, etc.)",
+                        "description": (
+                            "Optional: data handle whose target series is y. Mutually exclusive with y_dataset. "
+                            "If it carries exogenous columns and X_handle/X_dataset are omitted, they are used as X."
+                        ),
                     },
                     "X_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset name for X data",
+                        "description": (
+                            "Optional: Demo dataset name for X data; it must ship exogenous data "
+                            "(a target-only dataset such as 'airline' is refused). Mutually exclusive with X_handle."
+                        ),
                     },
                     "y_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset name for y data",
+                        "description": "Optional: Demo dataset name for y data. Mutually exclusive with y_handle.",
                     },
                     "fh": {
                         "description": "Optional: Forecast horizon (e.g. 12 or [1,2,3]) to pass to fit",
@@ -380,7 +538,13 @@ async def list_tools() -> list[Tool]:
             name="predict",
             description=(
                 "Generate predictions from a fitted estimator. "
-                "Supports different modes like predict, predict_interval, predict_quantiles."
+                "Supports different modes like predict, predict_interval, predict_quantiles. "
+                "The full result is also registered as a data handle, returned as "
+                "`prediction_handle`: pass it to plot_series (with the train/test handles), "
+                "save_data, or call_method on a metric (y_pred_data_handle) to score it "
+                "against a test split. "
+                "A forecaster fitted with exogenous data needs FUTURE X covering the horizon: "
+                "pass X_handle (e.g. the test half from split_data) or X_dataset."
             ),
             inputSchema={
                 "type": "object",
@@ -391,7 +555,10 @@ async def list_tools() -> list[Tool]:
                     },
                     "horizon": {
                         "type": "integer",
-                        "description": "Forecast horizon (default: 12)",
+                        "description": (
+                            "Forecast horizon (default: 12). Capped by the server's "
+                            "SKTIME_MCP_MAX_HORIZON (default 10000); larger requests are rejected."
+                        ),
                         "default": 12,
                     },
                     "mode": {
@@ -419,19 +586,30 @@ async def list_tools() -> list[Tool]:
                     },
                     "X_handle": {
                         "type": "string",
-                        "description": "Optional: Handle from load_data_source for X data",
+                        "description": (
+                            "Optional: data handle whose exogenous columns are the future X for the horizon "
+                            "(required if the forecaster was fitted with X). Errors if the handle has none. "
+                            "Mutually exclusive with X_dataset."
+                        ),
                     },
                     "y_handle": {
                         "type": "string",
-                        "description": "Optional: Handle from load_data_source for y data (needed for annotators)",
+                        "description": (
+                            "Optional: data handle whose target series is y: the series a detector "
+                            "annotates or a transformer transforms (as in fit). Forecasters ignore it. "
+                            "Mutually exclusive with y_dataset."
+                        ),
                     },
                     "X_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset name for X data",
+                        "description": (
+                            "Optional: Demo dataset name for X data; it must ship exogenous data "
+                            "(a target-only dataset such as 'airline' is refused). Mutually exclusive with X_handle."
+                        ),
                     },
                     "y_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset name for y data",
+                        "description": "Optional: Demo dataset name for y data. Mutually exclusive with y_handle.",
                     },
                     "run_async": {
                         "type": "boolean",
@@ -443,7 +621,11 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="update",
-            description=("Update a fitted estimator with new data."),
+            description=(
+                "Update a fitted estimator with new data. "
+                "If y_handle carries exogenous columns and X_handle/X_dataset are omitted, "
+                "they are used as X automatically."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -453,19 +635,28 @@ async def list_tools() -> list[Tool]:
                     },
                     "X_handle": {
                         "type": "string",
-                        "description": "Optional: Handle for X data",
+                        "description": (
+                            "Optional: data handle whose exogenous columns are used as X. "
+                            "Errors if the handle has none. Mutually exclusive with X_dataset."
+                        ),
                     },
                     "y_handle": {
                         "type": "string",
-                        "description": "Optional: Handle for y data",
+                        "description": (
+                            "Optional: data handle whose target series is the new y. "
+                            "Mutually exclusive with y_dataset."
+                        ),
                     },
                     "X_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset for X data",
+                        "description": (
+                            "Optional: Demo dataset for X data; it must ship exogenous data. "
+                            "Mutually exclusive with X_handle."
+                        ),
                     },
                     "y_dataset": {
                         "type": "string",
-                        "description": "Optional: Demo dataset for y data",
+                        "description": "Optional: Demo dataset for y data. Mutually exclusive with y_handle.",
                     },
                 },
                 "required": ["estimator_handle"],
@@ -516,8 +707,13 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="evaluate",
             description=(
-                "Cross-validate an estimator on a dataset. "
-                "Dataset and data handle inputs supported for y and X."
+                "Cross-validate a forecaster with expanding-window CV. Each fold scores "
+                "fh steps (default 1), with cutoffs advanced by step_length. Without "
+                "initial_window, exactly cv_folds folds end at the final observation. "
+                "Horizon caps and fold geometry are checked before jobs or arrays are created. "
+                "Dataset and data handle inputs are supported for y and X. Exogenous "
+                "columns attached to the y handle are used automatically when X is omitted; "
+                "passing the same handle as y and X is refused."
             ),
             inputSchema={
                 "type": "object",
@@ -532,12 +728,21 @@ async def list_tools() -> list[Tool]:
                     },
                     "X": {
                         "type": "string",
-                        "description": "Optional: exogenous time series data_handle id or demo dataset name.",
+                        "description": (
+                            "Optional: exogenous time series: a data_handle id (its exogenous columns are "
+                            "used; errors if it has none) or a demo dataset name that ships exogenous data "
+                            "(a target-only dataset such as 'airline' is refused, also as X == y)."
+                        ),
                     },
                     "cv_folds": {
                         "type": "integer",
-                        "description": "Number of cross-validation folds (default: 3). Ignored if initial_window is set.",
+                        "description": (
+                            "Number of cross-validation folds (default: 3). The series must "
+                            "have at least max(fh) + (cv_folds - 1) * step_length + 1 "
+                            "observations. Ignored if initial_window is set."
+                        ),
                         "default": 3,
+                        "minimum": 1,
                     },
                     "metric": {
                         "type": "string",
@@ -545,7 +750,34 @@ async def list_tools() -> list[Tool]:
                     },
                     "initial_window": {
                         "type": "integer",
-                        "description": "Optional: initial training window size for expanding-window CV.",
+                        "description": (
+                            "Optional: initial training window size for expanding-window CV. "
+                            "When set, folds run from this window to the end of the series "
+                            "(cv_folds is ignored); must be <= len(y) - max(fh)."
+                        ),
+                        "minimum": 1,
+                    },
+                    "fh": {
+                        "type": ["integer", "array"],
+                        "items": {"type": "integer", "minimum": 1},
+                        "minItems": 1,
+                        "minimum": 1,
+                        "default": 1,
+                        "description": (
+                            "Forecast horizon scored in each fold, relative to the fold cutoff. "
+                            "Integer n: steps 1..n (e.g. 12 = a 12-step-ahead evaluation). "
+                            "List of ints: exactly those steps (e.g. [1, 6, 12]). Default 1. "
+                            "Maximum step is bounded by SKTIME_MCP_MAX_HORIZON."
+                        ),
+                    },
+                    "step_length": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 1,
+                        "description": (
+                            "Number of time steps the fold cutoff advances between folds "
+                            "(default 1). Larger values mean fewer refits."
+                        ),
                     },
                     "run_async": {
                         "type": "boolean",
@@ -676,7 +908,8 @@ async def list_tools() -> list[Tool]:
                         "type": "number",
                         "description": (
                             "Fraction of observations to hold out for the test set, "
-                            "exclusive range (0.0, 1.0). Mutually exclusive with fh."
+                            "exclusive range (0.0, 1.0), rounded up to a whole observation. "
+                            "Must leave at least one training observation. Mutually exclusive with fh."
                         ),
                     },
                     "fh": {
@@ -792,8 +1025,10 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="plot_series",
             description=(
-                "Plot one or more time series natively. "
-                "Can save the plot to a specified path as a PNG file or return it as a base64 string."
+                "Plot one or more time series natively, e.g. the train and test handles from "
+                "split_data together with the prediction_handle returned by predict. "
+                "Saves the plot to `path` when given. Otherwise PNG and WebP plots are "
+                "returned as an MCP image content block, and SVG as a base64 string."
             ),
             inputSchema={
                 "type": "object",
@@ -815,7 +1050,7 @@ async def list_tools() -> list[Tool]:
                     },
                     "path": {
                         "type": "string",
-                        "description": "Optional local file path to save the plot (e.g., '/tmp/plot.png'). If omitted, returns base64.",
+                        "description": "Optional local file path to save the plot (e.g., '/tmp/plot.png'). If omitted, the plot is returned inline.",
                     },
                     "figsize": {
                         "type": "array",
@@ -1004,14 +1239,34 @@ async def list_tools() -> list[Tool]:
     ]
 
 
+@functools.cache
+def _tools_by_name() -> dict[str, Tool]:
+    return {tool.name: tool for tool in get_tools()}
+
+
+async def list_tools(
+    ctx: ServerRequestContext, params: PaginatedRequestParams | None
+) -> ListToolsResult:
+    """MCP ``tools/list`` handler."""
+    return ListToolsResult(tools=get_tools())
+
+
 # ===================================================================
 # Tool dispatcher
 # ===================================================================
 
 
-@server.call_tool()
-async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
-    """Handle tool calls."""
+def _error_result(message: str) -> CallToolResult:
+    """Build the structured ``{"success": false, "error": ...}`` error response."""
+    body = json.dumps({"success": False, "error": redact_text(message)})
+    return CallToolResult(content=[TextContent(type="text", text=body)], is_error=True)
+
+
+async def call_tool(ctx: ServerRequestContext, params: CallToolRequestParams) -> CallToolResult:
+    """MCP ``tools/call`` handler: validate the arguments, then dispatch."""
+    name = params.name
+    arguments = params.arguments or {}
+
     import importlib
     import site
     import sys
@@ -1030,6 +1285,17 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             "Arguments: %s",
             json.dumps(redact_for_logging(arguments), indent=2, default=str),
         )
+
+    # mcp 2.x no longer validates arguments against inputSchema before dispatch,
+    # so wrongly typed values (e.g. the string "false" for a boolean) are rejected
+    # here, before any tool code runs.
+    tool = _tools_by_name().get(name)
+    if tool is not None:
+        try:
+            jsonschema.validate(instance=arguments, schema=tool.input_schema)
+        except jsonschema.ValidationError as e:
+            logger.warning(f"Input validation error for {name}: {e.message}")
+            return _error_result(f"Input validation error: {e.message}")
 
     try:
         # -- Discovery -------------------------------------------------------
@@ -1110,6 +1376,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 cv_folds=arguments.get("cv_folds", 3),
                 metric=arguments.get("metric"),
                 initial_window=arguments.get("initial_window"),
+                fh=arguments.get("fh", 1),
+                step_length=arguments.get("step_length", 1),
                 run_async=arguments.get("run_async", False),
             )
 
@@ -1225,9 +1493,13 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         else:
             result = {"error": f"Unknown tool: {name}"}
 
-        sanitized_result = sanitize_for_json(result)
-        response_text = json.dumps(sanitized_result, indent=2, default=str)
+        image = None
+        if name == "plot_series":
+            result, image = _split_image(result)
 
+        sanitized_result = redact_errors(sanitize_for_json(result))
+        limited_result = _apply_response_token_limit(name, sanitized_result)
+        response_text = json.dumps(limited_result, indent=2, default=str)
         logger.info(
             "=== Result for %s: %s", name, _summarize_result(sanitized_result, response_text)
         )
@@ -1238,12 +1510,22 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 json.dumps(redact_for_logging(sanitized_result), indent=2, default=str),
             )
 
-        truncated_text = _apply_response_token_limit(name, response_text)
-
-        return [TextContent(type="text", text=truncated_text)]
+        content: list[TextContent | ImageContent] = [TextContent(type="text", text=response_text)]
+        if image is not None:
+            content.append(image)
+        return CallToolResult(content=content)
     except Exception as e:
         logger.exception(f"Error in tool {name}")
-        return [TextContent(type="text", text=json.dumps({"success": False, "error": str(e)}))]
+        return _error_result(str(e))
+
+
+# Constructed after the handlers it binds; ``sktime_mcp.app`` imports this instance.
+server = Server(
+    "sktime-mcp",
+    version=__version__,
+    on_list_tools=list_tools,
+    on_call_tool=call_tool,
+)
 
 
 # ===================================================================
@@ -1252,14 +1534,20 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
 
 async def _periodic_job_cleanup():
-    """Automatically clean up old jobs on a timer."""
+    """Automatically clean up old finished jobs on a timer.
+
+    Settings are re-read on every iteration (so env changes apply live) and
+    the whole iteration runs inside the ``try`` so that no single failure,
+    whether from config or from the cleanup itself, can end the loop.
+    Cancellation (``asyncio.CancelledError``) is not an ``Exception`` and
+    still stops the task normally.
+    """
     from sktime_mcp.runtime.jobs import get_job_manager
 
     while True:
-        await asyncio.sleep(settings.job_cleanup_interval_secs)
         try:
-            job_manager = get_job_manager()
-            removed = job_manager.cleanup_old_jobs(settings.job_max_age_hours)
+            await asyncio.sleep(settings.job_cleanup_interval_secs)
+            removed = get_job_manager().cleanup_old_jobs(settings.job_max_age_hours)
             if removed:
                 logger.info(f"Periodic cleanup: removed {removed} old job(s)")
         except Exception:
@@ -1267,19 +1555,17 @@ async def _periodic_job_cleanup():
 
 
 async def run_server():
-    """Run the MCP server."""
-    # Stdio safety: redirect stdout to stderr to protect MCP JSON-RPC
-    # streams from being corrupted by stray prints in third-party libraries.
-    original_stdout = sys.stdout
-    sys.stdout = sys.stderr
-
-    # Explicitly wrap the original stdout buffer for the MCP server output
-    mcp_stdout = anyio.wrap_file(TextIOWrapper(original_stdout.buffer, encoding="utf-8"))
-
-    asyncio.create_task(_periodic_job_cleanup())
-
-    async with stdio_server(stdout=mcp_stdout) as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
+    """Run the MCP 2 server on stdio and retain its cleanup task."""
+    cleanup_task = asyncio.create_task(_periodic_job_cleanup())
+    try:
+        # Keep MCP 2's private wire descriptor and stdout protection.
+        async with stdio_server() as (read_stream, write_stream):
+            sys.stdout = sys.stderr
+            await server.run(read_stream, write_stream, server.create_initialization_options())
+    finally:
+        cleanup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await cleanup_task
 
 
 def build_arg_parser() -> argparse.ArgumentParser:

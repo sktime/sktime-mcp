@@ -6,11 +6,15 @@
 
 The server operates as a bridge between the stateless nature of LLM interactions and the stateful requirements of machine learning workflows. It manages object lifecycles, provides semantic discovery of estimators, and handles complex data ingestion.
 
-```{image} ../_static/mcp_data_flow.png
-:alt: Layered architecture of sktime-mcp, from user and LLM down through the MCP protocol layer, tools layer, executor layer, and data source layer.
-:align: center
-:width: 70%
-```
+| Layer | Current implementation | Responsibility |
+| :--- | :--- | :--- |
+| MCP protocol | `server.py` | Advertise tool schemas and dispatch requests. |
+| Tool functions | `tools/` | Validate tool-specific inputs and assemble responses. |
+| Execution | `runtime/executor.py` | Resolve data and run sktime operations. |
+| State | `runtime/handles.py`, `runtime/jobs.py` | Retain estimator handles and background jobs. |
+| Discovery | `registry/` | Read registered classes, parameters and capability tags. |
+| Data access | `data/registry.py`, `data/adapters/` | Select and run the pandas, SQL, file or URL adapter. |
+
 
 A request enters at the MCP protocol layer (`server.py`), is dispatched to a tool
 (`tools/`), which delegates the actual work to the executor (`runtime/executor.py`).
@@ -39,21 +43,18 @@ Tools are modularized into functional groups:
 - **Jobs**: Tracking and cancelling background work.
 
 Composition is **not** a separate layer. Pipelines are expressed inside the
-`instantiate` spec string and validated by sktime's own `craft()`, so the server
-carries no pipeline-validation code of its own.
+`instantiate` spec string and constructed by sktime's own `craft()`. Compatibility errors can arise during
+construction or later fitting; the server carries no independent proof of pipeline
+compatibility.
 
 ### 5. Data Layer (`data/`)
 Loading is adapter-based. `DataSourceRegistry` selects an adapter from the
 `type` key of the incoming config:
 
-```{image} ../_static/data_adapter_pattern.png
-:alt: DataSourceAdapter abstract base class with concrete PandasAdapter, SQLAdapter, and FileAdapter subclasses.
-:align: center
-:width: 55%
-```
+
 
 Four adapters ship today: `PandasAdapter`, `SQLAdapter`, `FileAdapter`, and
-`URLAdapter` (the diagram above predates the URL adapter).
+`UrlAdapter`.
 
 ## Data Flow: The "Handle" Pattern
 
@@ -61,14 +62,11 @@ Four adapters ship today: `PandasAdapter`, `SQLAdapter`, `FileAdapter`, and
 2. **Action**: The client calls `fit`, then `predict`, passing the handle. The server retrieves the object from the registry and executes the requested method.
 3. **Response**: The server serializes the result (e.g., forecast values) into JSON and returns it to the client.
 
-The two flows below show this end to end — loading data to obtain a handle, and
-then forecasting against it:
-
-```{image} ../_static/component_interaction.png
-:alt: Sequence diagrams for the data loading flow and the forecasting flow, showing user, MCP server, executor, adapter, and estimator interactions.
-:align: center
-:width: 90%
-```
+A data load uses `load_data_source`, then the executor selects an adapter and
+retains the loaded target and optional exogenous data behind a data handle.
+A forecasting call resolves that data handle plus an estimator handle, invokes the
+sktime method, and returns the serialized result. `predict` also stores the full
+forecast behind a `prediction_handle` for plotting, inspection or saving.
 
 ## Concurrency Model
 
@@ -79,12 +77,15 @@ then forecasting against it:
 
 ## Security Considerations
 
-The trust boundary is **the user account running the server**. There is no
-authentication layer and no sandbox.
+The execution boundary is **the user account running the server**, not a sandbox.
 
-- **Strict typing**: All tool inputs are validated against JSON schemas.
-- **Registry-bounded modelling**: The modelling tools (`instantiate`, `fit`, `predict`, …) only construct classes resolvable through the `sktime` registry via `craft()`. They do not evaluate caller-supplied Python.
-- **`run_command` is an explicit exception.** The server also exposes a `run_command` tool that executes an arbitrary shell command with the server process's full privileges, so that an assistant can install a missing optional dependency mid-session. It is not sandboxed. Any client permitted to call it can run anything the user can. Treat it as opt-in: most MCP clients can allow or deny individual tools, and `run_command` should stay on ask-every-time — or be disabled — unless you want that capability. Running the server in a container confines it to the container.
-- **Local access**: The server inherits the permissions of the user running it and can read/write any file that user can.
+- **Transport access:** local stdio relies on the client and operating-system process permissions. HTTP/SSE requires `SKTIME_MCP_HTTP_TOKEN`, except for the public `/` health check. Startup without a token fails unless `SKTIME_MCP_HTTP_INSECURE=true` is explicitly enabled for local testing. Protected routes require `Authorization: Bearer <token>`; configured host/origin allowlists also apply.
+- **Description lookup:** `describe_component` resolves registered classes and known qualified aliases without evaluating input or importing client-supplied paths.
+- **Instantiation:** `instantiate` passes caller-supplied specifications to `craft()`, an expression evaluator. It checks that the result is an sktime object, but evaluation occurs before that result check. Restrict this tool to trusted specifications and clients.
+- **Shell access:** `run_command` executes arbitrary shell commands with the process's privileges. Keep it disabled or subject to explicit client approval unless needed.
+- **Input contracts:** tools advertise JSON schemas and perform tool-specific validation. These checks help reject invalid requests but do not provide code isolation.
+- **Filesystem access:** tools operate on paths accessible to the server account. Container isolation depends on its mounts, privileges and configuration. HTTP authentication does not reduce an authorized client's execution privileges.
 
-See the {doc}`../tool-reference` for the per-tool detail.
+See the {doc}`../tool-reference` for per-tool behavior and the README for HTTP
+configuration. The broader execution trust boundary is tracked in
+[issue #540](https://github.com/sktime/sktime-mcp/issues/540).

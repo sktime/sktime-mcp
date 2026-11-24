@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 import pandas as pd
 
-from ...redaction import redact_url
+from ...redaction import redact_text, redact_url
 from ..base import DataSourceAdapter
 from .file_adapter import FileAdapter
 
@@ -94,7 +94,7 @@ class UrlAdapter(DataSourceAdapter):
 
             import asyncio
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             df = await loop.run_in_executor(None, file_adapter.load)
 
             self._data = df
@@ -109,7 +109,7 @@ class UrlAdapter(DataSourceAdapter):
 
         except Exception as e:
             raise ValueError(
-                f"Error downloading or loading data from URL {redact_url(url)}: {e}"
+                f"Error downloading or loading data from URL {redact_url(url)}: {redact_text(str(e))}"
             ) from e
 
         finally:
@@ -158,7 +158,7 @@ class UrlAdapter(DataSourceAdapter):
 
         except Exception as e:
             raise ValueError(
-                f"Error downloading or loading data from URL {redact_url(url)}: {e}"
+                f"Error downloading or loading data from URL {redact_url(url)}: {redact_text(str(e))}"
             ) from e
 
         finally:

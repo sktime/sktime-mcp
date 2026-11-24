@@ -1,7 +1,7 @@
 
 # sktime-mcp
 
-**[Read the Official Documentation](http://sktime.github.io/sktime-mcp/)** | **[PyPI Package](https://pypi.org/project/sktime-mcp/)**
+**[Read the Official Documentation](https://sktime-mcp.readthedocs.io/en/latest/)** | **[PyPI Package](https://pypi.org/project/sktime-mcp/)**
 
 <div class="hero-text">
   <h1>The Semantic Engine for Time-Series</h1>
@@ -13,8 +13,8 @@
 
 > **Why sktime-mcp?**
 > Combines **LLM reasoning** with **time-series precision**. 
-> Instead of hallucinating Python code, your agent interacts with a strictly typed, 
-> safe, and stateful API to perform complex forecasting tasks.
+> Your agent queries the installed registry and calls a typed, stateful API.
+> Execution still uses the privileges of the account running the server.
 
 ---
 
@@ -22,8 +22,8 @@
 
 sktime‑mcp is designed for:
 
-- **Developers** building LLM agents that need reliable, production‑grade time‑series forecasting.
-- **Data scientists** who want to expose sktime workflows to language models without unsafe code generation.
+- **Developers** building LLM agents that need time-series discovery and execution.
+- **Data scientists** who want to expose sktime workflows to language models through structured tool calls.
 - **Platform teams** integrating forecasting capabilities into tools like Claude Desktop, Cursor, or custom MCP clients.
 
 If you are new to MCP‑based workflows, start with the **Quick Start** below, then explore the **Use Cases** and **User Guide** for deeper examples.
@@ -33,7 +33,7 @@ If you are new to MCP‑based workflows, start with the **Quick Start** below, t
 ## 🔥 Key Features
 
 - **Registry-Driven Discovery:** Find estimators by capability tag and name search against the live `sktime` registry (e.g., "probabilistic forecaster that handles missing data") — reading installed metadata, never recalling it from memory.
-- **Composition via `craft()`:** Build pipelines (Transformer → Forecaster) from a single spec string, validated by sktime itself, so incompatible components fail before execution.
+- **Composition via `craft()`:** Build pipelines (Transformer → Forecaster) from a single spec string, constructed by sktime itself. Compatibility errors may surface during construction or fitting.
 - **Universal Data Loading:** Ingest data from Pandas, SQL, URLs, and files — CSV, Excel, and Parquet.
 - **Execution Runtime:** Stateful engine that manages object lifecycles, fitting, predicting, and background jobs, all via MCP tool calls.
 
@@ -79,6 +79,31 @@ Add this to your `claude_desktop_config.json`:
 ```
 
 **With pip-installed package:**
+
+If installed in a virtual environment, supply the absolute path to that environment's Python binary:
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "/absolute/path/to/.venv/bin/python",
+      "args": ["-m", "sktime_mcp.server"]
+    }
+  }
+}
+```
+On Windows:
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "C:\\path\\to\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "sktime_mcp.server"]
+    }
+  }
+}
+```
+
+If the console script is on your system `PATH`:
 ```json
 {
   "mcpServers": {

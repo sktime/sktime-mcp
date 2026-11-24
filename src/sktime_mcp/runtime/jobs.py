@@ -4,15 +4,20 @@ Job management for long-running operations in sktime MCP.
 Handles background training jobs with progress tracking and status updates.
 """
 
+import asyncio
 import logging
 import threading
 import uuid
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any
 
+from sktime_mcp.redaction import RedactingFilter
+
 logger = logging.getLogger(__name__)
+logger.addFilter(RedactingFilter())
 
 
 class JobStatus(Enum):
@@ -23,6 +28,11 @@ class JobStatus(Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+# Statuses after which a job can no longer change; only these are ever evicted
+# by cleanup_old_jobs.
+_TERMINAL_STATUSES = frozenset({JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED})
 
 
 @dataclass
@@ -367,18 +377,34 @@ class JobManager:
 
     def cleanup_old_jobs(self, max_age_hours: int = 24) -> int:
         """
-        Remove jobs older than max_age_hours.
+        Remove finished jobs that ended more than max_age_hours ago.
+
+        Only terminal jobs (COMPLETED, FAILED, CANCELLED) are eligible: a
+        PENDING or RUNNING job is never evicted here, however old, because
+        dropping its record would orphan the still-running task without
+        cancelling it. Use ``cancel_job`` for those.
 
         Args:
-            max_age_hours: Maximum age in hours
+            max_age_hours: Maximum age in hours; must be at least 1.
 
         Returns:
             Number of jobs removed
+
+        Raises:
+            ValueError: if max_age_hours is below 1 (a zero or negative age
+                would wipe every finished job, which is never intended).
         """
+        if max_age_hours < 1:
+            raise ValueError(f"max_age_hours must be >= 1, got {max_age_hours!r}")
+
         cutoff = datetime.now() - timedelta(hours=max_age_hours)
 
         with self.lock:
-            old_job_ids = [job_id for job_id, job in self.jobs.items() if job.created_at <= cutoff]
+            old_job_ids = [
+                job_id
+                for job_id, job in self.jobs.items()
+                if job.status in _TERMINAL_STATUSES and (job.end_time or job.created_at) <= cutoff
+            ]
 
             for job_id in old_job_ids:
                 del self.jobs[job_id]
@@ -402,6 +428,60 @@ class JobManager:
                 self._tasks.pop(job_id, None)
                 return True
             return False
+
+
+NO_EVENT_LOOP_ERROR = (
+    "run_async=true needs the MCP server's running asyncio event loop, but this call "
+    "was made from synchronous code with no event loop, so no background job was "
+    "created. Call the tool with run_async=false, or invoke it through the server."
+)
+
+
+def start_background_job(
+    job_manager: "JobManager",
+    make_coro: Callable[[str], Coroutine[Any, Any, Any]],
+    *,
+    job_type: str,
+    estimator_handle: str,
+    estimator_name: str | None = None,
+    dataset_name: str | None = None,
+    horizon: int | None = None,
+    total_steps: int = 3,
+) -> dict[str, Any]:
+    """Create a job and schedule ``make_coro(job_id)`` on the running event loop.
+
+    This is the single scheduling path for every ``run_async=True`` tool. When
+    no event loop is running (plain synchronous callers), it returns a
+    structured error *before* creating a job or a coroutine, so nothing runs
+    synchronously under the guise of a job and no coroutine is left un-awaited.
+
+    Returns ``{"success": True, "job_id": ..., "status": "running"}`` on
+    success, or ``{"success": False, "error": ...}``.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return {"success": False, "error": NO_EVENT_LOOP_ERROR}
+
+    job_id = job_manager.create_job(
+        job_type=job_type,
+        estimator_handle=estimator_handle,
+        estimator_name=estimator_name,
+        dataset_name=dataset_name,
+        horizon=horizon,
+        total_steps=total_steps,
+    )
+    coro = None
+    try:
+        coro = make_coro(job_id)
+        task = loop.create_task(coro)
+    except Exception as exc:
+        if coro is not None:
+            coro.close()
+        job_manager.delete_job(job_id)
+        return {"success": False, "error": f"Could not schedule background job: {exc}"}
+    job_manager.register_task(job_id, task)
+    return {"success": True, "job_id": job_id, "status": "running"}
 
 
 # Singleton instance
