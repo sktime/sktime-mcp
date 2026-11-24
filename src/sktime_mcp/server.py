@@ -46,6 +46,7 @@ from mcp.types import (
 )
 
 from sktime_mcp.config import settings
+from sktime_mcp.redaction import RedactingFilter, redact_errors, redact_for_logging, redact_text
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_tool,
@@ -95,6 +96,7 @@ logging.basicConfig(
     handlers=_handlers,
 )
 logger = logging.getLogger(__name__)
+logger.addFilter(RedactingFilter())
 
 _CHARS_PER_TOKEN = 4
 # Strings at or below this length are never shortened; the marker alone would
@@ -279,6 +281,19 @@ def _split_image(result: dict) -> tuple[dict, ImageContent | None]:
         return result, None
     body = {k: v for k, v in result.items() if k != "image_base64"}
     return body, ImageContent(type="image", data=result["image_base64"], mime_type=mime_type)
+
+
+def _summarize_result(result: Any, response_text: str) -> str:
+    """One-line, secret-free summary of a tool result for the INFO log.
+
+    The full (redacted) body is only logged at DEBUG; see ``call_tool``.
+    """
+    size = len(response_text.encode("utf-8"))
+    if isinstance(result, dict):
+        success = result.get("success", "n/a")
+        keys = ", ".join(str(k) for k in result)
+        return f"success={success} keys=[{keys}] bytes={size}"
+    return f"type={type(result).__name__} bytes={size}"
 
 
 def sanitize_for_json(obj, _seen=None):
@@ -1243,7 +1258,7 @@ async def list_tools(
 
 def _error_result(message: str) -> CallToolResult:
     """Build the structured ``{"success": false, "error": ...}`` error response."""
-    body = json.dumps({"success": False, "error": message})
+    body = json.dumps({"success": False, "error": redact_text(message)})
     return CallToolResult(content=[TextContent(type="text", text=body)], is_error=True)
 
 
@@ -1265,7 +1280,11 @@ async def call_tool(ctx: ServerRequestContext, params: CallToolRequestParams) ->
     importlib.invalidate_caches()
 
     logger.info(f"=== Tool Call: {name} ===")
-    logger.info(f"Arguments: {json.dumps(arguments, indent=2)}")
+    if logger.isEnabledFor(logging.INFO):
+        logger.info(
+            "Arguments: %s",
+            json.dumps(redact_for_logging(arguments), indent=2, default=str),
+        )
 
     # mcp 2.x no longer validates arguments against inputSchema before dispatch,
     # so wrongly typed values (e.g. the string "false" for a boolean) are rejected
@@ -1478,13 +1497,18 @@ async def call_tool(ctx: ServerRequestContext, params: CallToolRequestParams) ->
         if name == "plot_series":
             result, image = _split_image(result)
 
-        logger.info(f"=== Result for {name} ===")
-
-        sanitized_result = sanitize_for_json(result)
-        logger.info(f"{json.dumps(sanitized_result, indent=2, default=str)}")
-
+        sanitized_result = redact_errors(sanitize_for_json(result))
         limited_result = _apply_response_token_limit(name, sanitized_result)
         response_text = json.dumps(limited_result, indent=2, default=str)
+        logger.info(
+            "=== Result for %s: %s", name, _summarize_result(sanitized_result, response_text)
+        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Result body for %s: %s",
+                name,
+                json.dumps(redact_for_logging(sanitized_result), indent=2, default=str),
+            )
 
         content: list[TextContent | ImageContent] = [TextContent(type="text", text=response_text)]
         if image is not None:
