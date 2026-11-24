@@ -214,17 +214,16 @@ def _action_convert(
     base_meta["converted_from"] = original_mtype
     base_meta["parent_handle"] = data_handle
 
-    # Determine y and X for the new handle
-    if isinstance(converted, pd.DataFrame):
-        new_y = converted
-        new_X = None
-    elif isinstance(converted, pd.Series):
-        new_y = converted
-        new_X = data_info.get("X")
-    else:
-        # numpy or other — wrap as Series for consistency
-        new_y = converted
-        new_X = None
+    # Determine y and X for the new handle. Exogenous X is independent of y's
+    # mtype, so any pandas target keeps it (F-30: the DataFrame branch used to
+    # drop it silently).
+    new_y = converted
+    new_X = data_info.get("X") if isinstance(converted, (pd.DataFrame, pd.Series)) else None
+
+    changes_applied = [f"Converted from '{original_mtype}' to '{to_mtype}'"]
+    if new_X is not None:
+        n_cols = new_X.shape[1] if isinstance(new_X, pd.DataFrame) else 1
+        changes_applied.append(f"Carried exogenous X ({n_cols} column(s)) across unchanged")
 
     executor._register_data_handle(
         new_handle,
@@ -240,6 +239,6 @@ def _action_convert(
     return {
         "success": True,
         "data_handle": new_handle,
-        "changes_applied": [f"Converted from '{original_mtype}' to '{to_mtype}'"],
+        "changes_applied": changes_applied,
         "metadata": base_meta,
     }

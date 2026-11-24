@@ -332,6 +332,14 @@ The format comes from the `format` argument, **not** the file extension.
 Writing to `out.parquet` with the default `format` produces a CSV.
 ```
 
+CSV and JSON write the time index as a column named after the index
+(`time` when the index is unnamed, `time_index` if that name is already a
+data column). The response reports it as `time_column`; pass that value back
+as `load_data_source`'s `time_column` to reload the file with its time index.
+A MultiIndex becomes one column per level, listed in `index_columns`.
+Parquet keeps the index in the file itself (`time_column` is `null`) and is
+reloaded without `time_column`.
+
 ### `release_data_handle`
 
 | Argument | Type | Required | Description |
@@ -364,6 +372,11 @@ and SVG plots as a base64 string in `image_base64`.
 
 Emit Python that reconstructs the estimator or loads a saved model. This does not capture custom data preparation, fitted state or the complete conversation. The optional fit example uses a demo dataset; review and execute the export in your target environment.
 
+Specs that reference `np.`/`pd.` are emitted as explicit imports plus the
+constructor call (the server-side `craft()` namespace is not available
+outside the server); a `warnings` list is returned when that is not possible.
+Fit examples unpack `(y, X)` datasets such as `longley` and pass `X`.
+
 | Argument | Type | Required | Default | Description |
 | :--- | :--- | :---: | :--- | :--- |
 | `handle` | string | ✅ | — | Estimator/pipeline handle. |
@@ -376,7 +389,7 @@ Emit Python that reconstructs the estimator or loads a saved model. This does no
 | Argument | Type | Required | Description |
 | :--- | :--- | :---: | :--- |
 | `estimator_handle` | string | ✅ | Estimator to save. |
-| `path` | string | ✅ | Local directory or URI. |
+| `path` | string | ✅ | Local directory (`file://` URIs accepted) or MLflow URI. |
 | `mlflow_params` | object | — | Extra parameters for `sktime.utils.mlflow_sktime.save_model`. |
 
 ### `load_model`
