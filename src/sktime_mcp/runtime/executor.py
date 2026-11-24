@@ -17,11 +17,13 @@ from typing import Any
 import pandas as pd
 from pandas.tseries.frequencies import to_offset as _to_offset
 
+from sktime_mcp.redaction import RedactingFilter
 from sktime_mcp.registry.interface import get_registry
 from sktime_mcp.runtime.handles import get_handle_manager
 from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
 
 logger = logging.getLogger(__name__)
+logger.addFilter(RedactingFilter())
 
 
 # Dynamically discover all available sktime demo datasets at import time.
