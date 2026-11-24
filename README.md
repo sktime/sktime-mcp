@@ -1,6 +1,6 @@
 # sktime-mcp
 
-**[Read the Documentation](http://sktime.github.io/sktime-mcp/)** | **[PyPI Package](https://pypi.org/project/sktime-mcp/0.1.0/)**
+**[Read the Documentation](https://sktime-mcp.readthedocs.io/en/latest/)** | **[PyPI Package](https://pypi.org/project/sktime-mcp/)**
 
 
 **MCP (Model Context Protocol) layer for sktime - Registry-Driven for LLMs**
@@ -18,9 +18,9 @@ This MCP is **not** just documentation or static code analysis. It is a **semant
 
 ### Key Principles
 
-1. **sktime as Source of Truth** - No AST parsing, no repo indexing, no heuristics. All structure comes from `all_estimators`, estimator tags, and sktime's API contracts.
+1. **sktime as Source of Truth** - Model metadata comes from `all_estimators`, estimator tags, and sktime's API contracts.
 
-2. **Registry-First** - Instead of `File → Class → Infer Relationships`, we do `Registry → Semantics → Safe Execution`.
+2. **Registry-First** - Instead of `File → Class → Infer Relationships`, we do `Registry → Semantics → Execution`.
 
 3. **Minimal MCP Surface** - Exposes only what an LLM needs: Discovery, Description, Instantiation, Execution, and model persistence.
 
@@ -97,7 +97,7 @@ For a more detailed first-time setup flow, including MCP server verification and
 If you are new to sktime‑mcp or to MCP‑based workflows, this section provides a minimal starting point to help you verify that your setup is working correctly.
 
 ### What is MCP?
-The Model Context Protocol (MCP) allows Large Language Models (LLMs) to discover, reason about, and execute sktime workflows programmatically. This project exposes sktime’s estimator registry and semantics in a structured way so that LLMs can safely compose and run real time‑series pipelines.
+The Model Context Protocol (MCP) allows Large Language Models (LLMs) to discover, reason about, and execute sktime workflows programmatically. This project exposes sktime’s estimator registry and semantics in a structured way so that LLMs can compose and run real time-series pipelines. Execution uses the server account's privileges; tool schemas do not provide a sandbox.
 
 ### Prerequisites
 - Python 3.10 or newer
@@ -162,24 +162,28 @@ sktime-mcp
 #### HTTP/SSE Mode via FastAPI (for Web Browsers or ChatGPT)
 To expose the MCP server as a REST API over SSE (Server-Sent Events) for direct consumption:
 ```bash
+export SKTIME_MCP_HTTP_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
 PYTHONPATH=src .venv/bin/uvicorn sktime_mcp.app:app --host 127.0.0.1 --port 8001
 ```
-This exposes standard SSE on `/sse` and message passing on `/messages/`.
+This exposes standard SSE on `/sse` and message passing on `/messages/`. Every request except the `/` health check must send `Authorization: Bearer <token>`. The server refuses to start without `SKTIME_MCP_HTTP_TOKEN` unless you set `SKTIME_MCP_HTTP_INSECURE=true`, which is only meant for local testing.
+
+> **Warning:** the server includes `run_command`, which runs arbitrary shell commands on the host. Anyone holding the token has full control of the machine. Do not expose it publicly without a token, and keep the token secret.
 
 > **Note for ChatGPT Web Users:** ChatGPT runs in the cloud and cannot connect to `http://127.0.0.1` (you will get an "Unsafe URL" error). You must expose your local server to the internet using a secure tunnel like [ngrok](https://ngrok.com/):
 > ```bash
 > ngrok http 8001
 > ```
-> Then use the provided `https://<your-ngrok-id>.ngrok-free.app/sse` URL in ChatGPT.
+> Requests through ngrok arrive with the ngrok hostname, so add it to the allowed hosts before starting the server, e.g. `SKTIME_MCP_HTTP_ALLOWED_HOSTS="<your-ngrok-id>.ngrok-free.app"`. Then use the provided `https://<your-ngrok-id>.ngrok-free.app/sse` URL in ChatGPT.
 
 ### Configuration (Environment Variables)
 
 You can configure the server's behavior at runtime using environment variables:
 
-- `SKTIME_MCP_MAX_RESPONSE_TOKENS`: Maximum tokens allowed per tool response (e.g., `10000`). If a response exceeds this limit, it is truncated and appended with a notice. Set to `0` (default) for unlimited.
+- `SKTIME_MCP_MAX_RESPONSE_TOKENS`: Maximum tokens allowed per tool response (e.g., `10000`). If a response exceeds this limit, the largest lists/dicts/strings in the result are capped (keeping the first entries) so the response stays valid JSON, and a `truncated` object describes what was cut. Set to `0` (default) for unlimited.
 - `SKTIME_MCP_LOG_LEVEL`: Server logging verbosity level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Defaults to `WARNING`.
 - `SKTIME_MCP_AUTO_FORMAT`: Enables or disables automatic time-series formatting during data loading.
-- `SKTIME_MCP_JOB_MAX_AGE_HOURS`: Maximum hours before completed background jobs are automatically pruned. Defaults to `24`.
+- `SKTIME_MCP_JOB_MAX_AGE_HOURS`: Hours a finished background job is kept before cleanup (minimum `1`; running and pending jobs are never pruned). Defaults to `24`.
+- `SKTIME_MCP_MAX_HORIZON`: Maximum forecast horizon (steps) a `predict`, `split_data`, or `evaluate` call may request; larger horizons are rejected before any computation. Defaults to `10000`.
 
 ### Connecting from an LLM Client
 
@@ -218,6 +222,31 @@ The server uses stdio transport by default, compatible with Claude Desktop, Clau
 ```
 
 **With pip-installed package:**
+
+If installed in a virtual environment, supply the absolute path to that environment's Python binary:
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "/absolute/path/to/.venv/bin/python",
+      "args": ["-m", "sktime_mcp.server"]
+    }
+  }
+}
+```
+On Windows:
+```json
+{
+  "mcpServers": {
+    "sktime": {
+      "command": "C:\\path\\to\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "sktime_mcp.server"]
+    }
+  }
+}
+```
+
+If the console script is on your system `PATH`:
 ```json
 {
   "mcpServers": {
@@ -237,12 +266,21 @@ The server can be configured via environment variables:
 | `SKTIME_MCP_LOG_LEVEL` | Logging verbosity (e.g. `INFO`, `DEBUG`, `WARNING`) | `"WARNING"` |
 | `SKTIME_MCP_LOG_PATH` | Optional file path to output logs to in addition to stderr | (None) |
 | `SKTIME_MCP_AUTO_FORMAT` | Automatically format time series data on load (`true`/`false`) | `"true"` |
-| `SKTIME_MCP_JOB_MAX_AGE_HOURS` | Maximum age in hours before background jobs are cleared | `24` |
-| `SKTIME_MCP_JOB_CLEANUP_INTERVAL` | Interval in seconds for periodic job cleanup checks | `3600` |
+| `SKTIME_MCP_JOB_MAX_AGE_HOURS` | Hours a finished job is kept; minimum `1`; running/pending jobs are never removed | `24` |
+| `SKTIME_MCP_JOB_CLEANUP_INTERVAL` | Seconds between cleanup checks; minimum `1` | `3600` |
+| `SKTIME_MCP_HTTP_TOKEN` | Bearer token required by the HTTP/SSE app | (None, app refuses to start) |
+| `SKTIME_MCP_HTTP_INSECURE` | Allow the HTTP/SSE app to start without a token (`true`/`false`) | `"false"` |
+| `SKTIME_MCP_HTTP_ALLOWED_HOSTS` | Comma-separated `Host` header values the HTTP/SSE app accepts (DNS-rebinding protection) | `"127.0.0.1,127.0.0.1:*,localhost,localhost:*"` |
+| `SKTIME_MCP_HTTP_ALLOWED_ORIGINS` | Comma-separated `Origin` values the HTTP/SSE app accepts, also used as the CORS allow-list | (None) |
+| `SKTIME_MCP_MAX_HORIZON` | Maximum forecast horizon (steps) for `predict` / `split_data` / `evaluate`; larger requests are rejected up front | `10000` |
+| `SKTIME_MCP_MAX_DATA_HANDLES` | Maximum data handles before eviction; minimum `1` | `50` |
+| `SKTIME_MCP_MAX_RESPONSE_TOKENS` | Response token budget; `0` means unlimited | `0` |
+
+Integer settings are validated on every read. Invalid values produce a warning and use the default.
 
 ## 📚 Available Tools
 
-The full tool reference is in the project documentation: https://sktime.github.io/sktime-mcp/
+The full tool reference is in the project documentation: https://sktime-mcp.readthedocs.io/en/latest/
 
 | Need | Tool options | Rough explanation |
 | --- | --- | --- |
@@ -256,7 +294,7 @@ The practical mental model is simple: prompts create tool calls, tool calls crea
 
 ## 🔄 Example LLM Flows
 
-See the [User Guide](https://sktime.github.io/sktime-mcp/en/latest/user-guide.html) for end-to-end workflow examples, including:
+See the [User Guide](https://sktime-mcp.readthedocs.io/en/latest/user-guide.html) for end-to-end workflow examples, including:
 - Discovering sktime coverage
 - Retail forecasting and saving results
 - Cleaning messy business data

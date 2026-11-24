@@ -9,7 +9,10 @@ extras, xlrd for .xls).
 
 import contextlib
 import json
+import os
 import re
+import shlex
+import signal
 import sqlite3
 import sys
 import time
@@ -44,6 +47,12 @@ def _release(handle):
 
 
 class TestIntegralFloats:
+    def test_integral_float_horizon_still_obeys_server_cap(self, monkeypatch):
+        monkeypatch.setenv("SKTIME_MCP_MAX_HORIZON", "5")
+        result = predict_tool(estimator_handle="unused", horizon=6.0)
+        assert result["success"] is False
+        assert "SKTIME_MCP_MAX_HORIZON" in result["error"]
+
     def test_query_registry_accepts_integral_float_limit_and_offset(self):
         res = query_registry_tool(task="forecaster", limit=5.0, offset=0.0)
         assert res["success"], res
@@ -148,6 +157,25 @@ class TestSanitizeSets:
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX process groups")
 class TestRunCommandBackgroundChild:
+    def test_detached_child_cannot_make_timeout_cleanup_unbounded(self, monkeypatch):
+        monkeypatch.setattr(run_command_module, "_TIMEOUT_SECONDS", 0.5)
+        monkeypatch.setattr(run_command_module, "_CLEANUP_TIMEOUT_SECONDS", 0.1)
+        code = (
+            "import subprocess, sys; "
+            "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(5)'], "
+            "start_new_session=True); print(p.pid, flush=True)"
+        )
+        started = time.monotonic()
+        result = run_command_tool(f"{shlex.quote(sys.executable)} -c {shlex.quote(code)}")
+        try:
+            assert time.monotonic() - started < 3
+            assert result["timed_out"] is True
+            assert result["success"] is False
+        finally:
+            if result.get("output", "").strip().isdigit():
+                with contextlib.suppress(ProcessLookupError):
+                    os.kill(int(result["output"].strip()), signal.SIGKILL)
+
     def test_timeout_returns_partial_output_and_kills_process_group(self, monkeypatch):
         monkeypatch.setattr(run_command_module, "_TIMEOUT_SECONDS", 1)
         started = time.monotonic()
@@ -269,6 +297,16 @@ def sqlite_db(tmp_path):
 
 
 class TestSQLAdapter:
+    @pytest.mark.parametrize("password", ["p ss/+@", ""])
+    def test_fallback_url_preserves_spaces_and_empty_passwords(self, monkeypatch, password):
+        from urllib.parse import unquote, urlsplit
+
+        monkeypatch.setitem(sys.modules, "sqlalchemy.engine", None)
+        adapter = SQLAdapter({"dialect": "mysql", "username": "demo user", "password": password})
+        parsed = urlsplit(adapter._get_connection_string())
+        assert unquote(parsed.username) == "demo user"
+        assert unquote(parsed.password) == password
+
     def test_component_url_escapes_credentials(self):
         adapter = SQLAdapter(
             {

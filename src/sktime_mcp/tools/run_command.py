@@ -1,6 +1,7 @@
 import os
 import signal
 import subprocess
+from contextlib import suppress
 from typing import Any
 
 # Cap on returned output so a command like `seq 1 100000` (688k chars observed)
@@ -9,6 +10,7 @@ _MAX_OUTPUT_CHARS = 20_000
 
 # Wall-clock budget for a command. Module-level so tests can shrink it.
 _TIMEOUT_SECONDS = 120
+_CLEANUP_TIMEOUT_SECONDS = 5
 
 
 def _truncate(text: str) -> tuple[str, bool]:
@@ -75,16 +77,30 @@ def run_command_tool(command: str) -> dict[str, Any]:
         # communicate() keeps the partial output it already read; once the
         # group is dead the pipes close and this returns everything captured.
         try:
-            stdout, stderr = proc.communicate(timeout=5)
-        except subprocess.TimeoutExpired:  # pragma: no cover - defensive
-            proc.kill()
-            stdout, stderr = proc.communicate()
+            stdout, stderr = proc.communicate(timeout=_CLEANUP_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired as exc:
+            # A descendant can detach into a different process group and keep
+            # inherited pipes open. Never fall back to an unbounded communicate.
+            stdout, stderr = exc.output or b"", exc.stderr or b""
+            if isinstance(stdout, bytes):
+                stdout = stdout.decode(errors="replace")
+            if isinstance(stderr, bytes):
+                stderr = stderr.decode(errors="replace")
+            with suppress(ProcessLookupError):
+                proc.kill()
+            with suppress(subprocess.TimeoutExpired):
+                proc.wait(timeout=_CLEANUP_TIMEOUT_SECONDS)
+            # On POSIX communicate uses selectors, so no background reader can
+            # hold the pipe locks. Windows readers close their own pipes at EOF.
+            if os.name == "posix":
+                proc.stdout.close()
+                proc.stderr.close()
         output, truncated = _format_output(stdout, stderr)
         return {
             "success": False,
             "error": (
                 f"Command timed out after {_TIMEOUT_SECONDS} seconds; the process "
-                "group was killed. Partial output is in 'output'."
+                "group was terminated where supported. Partial output is in 'output'."
             ),
             "output": output,
             "returncode": proc.returncode,

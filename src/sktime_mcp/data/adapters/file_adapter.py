@@ -11,7 +11,7 @@ from typing import Any
 
 import pandas as pd
 
-from ..base import DataSourceAdapter
+from ..base import DataSourceAdapter, check_frequency_alignment, coerce_time_index
 
 
 class FileAdapter(DataSourceAdapter):
@@ -86,25 +86,13 @@ class FileAdapter(DataSourceAdapter):
             raise ValueError(
                 f"Time column {time_col!r} not found in data. Available columns: [{available}]"
             )
-        # An explicit parse_dates=false keeps the time column's raw dtype
-        # (no datetime coercion at all, F-61); the default parses it.
-        parse_dates = self.config.get("parse_dates", True) is not False
-        if time_col and time_col in df.columns:
-            if parse_dates:
-                with contextlib.suppress(Exception):
-                    df[time_col] = pd.to_datetime(df[time_col])
+        # Keep explicitly unparsed time columns unchanged; otherwise retain
+        # shared integer/timezone handling from the other data adapters.
+        index_warnings = []
+        if self.config.get("parse_dates", True) is not False:
+            df, index_warnings = coerce_time_index(df, time_col)
+        elif time_col is not None:
             df = df.set_index(time_col)
-
-        # Only ensure datetime index if it looks like it should be one
-        # or if we have a time_column. For RangeIndex, keep it as is.
-        if parse_dates and not isinstance(df.index, pd.DatetimeIndex) and time_col:
-            try:
-                df.index = pd.to_datetime(df.index)
-            except Exception as e:
-                # If we explicitly asked for a time_column but can't convert, that's an error
-                raise ValueError(
-                    f"Could not convert time column '{time_col}' to datetime: {e}"
-                ) from e
 
         # Sort by time
         df = df.sort_index()
@@ -112,6 +100,9 @@ class FileAdapter(DataSourceAdapter):
         # Set frequency if specified
         freq = self.config.get("frequency")
         if freq:
+            # Refuse a freq whose anchor misses the timestamps: asfreq would
+            # silently replace every row with NaN (F-15)
+            check_frequency_alignment(df.index, freq)
             with contextlib.suppress(Exception):
                 df = df.asfreq(freq)
 
@@ -136,6 +127,8 @@ class FileAdapter(DataSourceAdapter):
             "start_date": str(df.index.min()),
             "end_date": str(df.index.max()),
         }
+        if index_warnings:
+            self._metadata["validation"] = {"valid": True, "errors": [], "warnings": index_warnings}
 
         return df
 
