@@ -4,15 +4,15 @@ Provides the query_registry tool.
 """
 
 import difflib
-import json
 from typing import Any
 
 from sktime_mcp.registry.interface import get_registry
+from sktime_mcp.tools._params import coerce_integer
 
 
 def query_registry_tool(
     task: str | None = None,
-    tags: dict[str, Any] | str | None = None,
+    tags: dict[str, Any] | None = None,
     query: str | None = None,
     limit: int = 50,
     offset: int = 0,
@@ -29,9 +29,8 @@ def query_registry_tool(
         task: Filter by scitype (e.g., "forecaster", "classifier", "regressor",
               "transformer", "detector", "metric").
               Set to "tag" or "tags" to query available capability tags.
-        tags: Filter estimators by capability tags. Can be a dictionary or a JSON string.
-              Example JSON string: '{"capability:pred_int": true}'.
-              Ignored when task="tag".
+        tags: Filter estimators by capability tags, as a dictionary.
+              Example: {"capability:pred_int": True}. Ignored when task="tag".
         query: Search by name/description (substring, case-insensitive).
         limit: Maximum number of results to return (default: 50). Ignored when task="tag".
         offset: Number of results to skip for pagination (default: 0). Ignored when task="tag".
@@ -48,6 +47,14 @@ def query_registry_tool(
     """
     registry = get_registry()
     try:
+        # Integral floats (5.0) are valid JSON integers; non-integral ones are not (F-46)
+        limit, err = coerce_integer(limit, "limit")
+        if err:
+            return {"success": False, "error": err}
+        offset, err = coerce_integer(offset, "offset")
+        if err:
+            return {"success": False, "error": err}
+
         # Check pagination bounds
         if offset < 0:
             return {"success": False, "error": "offset must be a non-negative integer."}
@@ -93,13 +100,8 @@ def query_registry_tool(
 
         # Validate tag keys if provided
         if tags is not None:
-            if isinstance(tags, str):
-                try:
-                    tags = json.loads(tags)
-                except json.JSONDecodeError as e:
-                    return {"success": False, "error": f"Invalid JSON string in 'tags': {e}"}
             if not isinstance(tags, dict):
-                return {"success": False, "error": "tags must be a dictionary or a JSON string."}
+                return {"success": False, "error": "tags must be a dictionary."}
 
             valid_tag_keys = {t["tag"] for t in registry.get_available_tags()}
             invalid_keys = [k for k in tags if k not in valid_tag_keys]

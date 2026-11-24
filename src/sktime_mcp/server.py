@@ -300,7 +300,7 @@ def sanitize_for_json(obj, _seen=None):
     """Recursively convert objects to JSON-serializable format.
 
     Handles:
-    - Standard Python scalars and containers (dict, list, tuple)
+    - Standard Python scalars and containers (dict, list, tuple, set, frozenset)
     - NumPy integer/float scalars and ndarrays
     - Pandas Timestamp, NaT, NA, Series/DataFrame, Index
     - Arbitrary objects (fallback to str repr)
@@ -358,6 +358,14 @@ def sanitize_for_json(obj, _seen=None):
         return {str(k): sanitize_for_json(v, _seen) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [sanitize_for_json(item, _seen) for item in obj]
+    if isinstance(obj, (set, frozenset)):
+        # Sorted for a stable output; mixed-type sets are unsortable, so fall
+        # back to arbitrary order rather than stringifying the set (F-49).
+        try:
+            items = sorted(obj)
+        except TypeError:
+            items = list(obj)
+        return [sanitize_for_json(item, _seen) for item in items]
 
     # JSON has no non-finite numeric literals, including builtin Python floats.
     if isinstance(obj, float):

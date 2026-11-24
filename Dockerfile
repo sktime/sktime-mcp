@@ -32,8 +32,10 @@ WORKDIR /build
 COPY pyproject.toml README.md LICENSE ./
 COPY src/ src/
 
-# Install the project in production mode (no dev/test extras)
-RUN pip install --no-cache-dir --prefix=/install .
+# Install the project in production mode (no dev/test extras) with the
+# sql and files extras, so load_data_source can actually read the SQL,
+# Excel and Parquet sources it advertises (F-64)
+RUN pip install --no-cache-dir --prefix=/install ".[sql,files]"
 
 # ---------------------------------------------------------------------------
 # Stage 2: Runtime

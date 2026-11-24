@@ -8,6 +8,7 @@ import logging
 from typing import Any
 
 from sktime_mcp.runtime.jobs import JobStatus, get_job_manager
+from sktime_mcp.tools._params import coerce_integer
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,14 @@ def list_jobs_tool(
                 "success": False,
                 "error": f"Invalid status '{status}'. Valid values: pending, running, completed, failed, cancelled",
             }
+
+    # Integral floats (5.0) are valid JSON integers; non-integral ones are not (F-46)
+    limit, err = coerce_integer(limit, "limit")
+    if err:
+        return {"success": False, "error": err}
+    offset, err = coerce_integer(offset, "offset")
+    if err:
+        return {"success": False, "error": err}
 
     if limit < 1:
         return {

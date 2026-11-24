@@ -449,6 +449,13 @@ pip install mlflow
 | :--- | :--- | :---: | :--- |
 | `command` | string | ✅ | The shell command to run. |
 
+Commands have a 120-second execution timeout. On timeout, the server terminates
+the process group on POSIX, returns the output captured so far, and reports
+`success: false` and `timed_out: true`. Output is capped and includes a
+`truncated` flag. Cleanup is also bounded if a detached descendant keeps an
+output pipe open; descendants that leave the process group are not guaranteed
+to be terminated.
+
 **Treat this as opt-in.** Most MCP clients prompt before each tool call and let
 you allow or deny individual tools — leave `run_command` on ask-every-time, or
 disable it outright, unless you specifically want the assistant installing
