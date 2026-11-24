@@ -1,7 +1,7 @@
 """Shared parameter coercion for tool arguments.
 
-JSON has no integer type, so a client may legitimately send ``5.0`` for a
-schema ``integer``. Slicing with a float then crashes with "slice indices must
+JSON numbers such as ``5.0`` satisfy a schema's ``integer`` constraint.
+Slicing with the decoded float then crashes with "slice indices must
 be integers" (F-46); coerce integral floats instead and reject the rest with a
 structured message.
 """
