@@ -14,7 +14,10 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any
 
+from sktime_mcp.redaction import RedactingFilter
+
 logger = logging.getLogger(__name__)
+logger.addFilter(RedactingFilter())
 
 
 class JobStatus(Enum):
