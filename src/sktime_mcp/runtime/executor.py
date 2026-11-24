@@ -11,6 +11,7 @@ import inspect
 import logging
 import uuid
 from collections import deque
+from functools import lru_cache
 from typing import Any
 
 import pandas as pd
@@ -28,9 +29,15 @@ logger.addFilter(RedactingFilter())
 # Dynamically discover all available sktime demo datasets at import time.
 # This replaces the old hardcoded dictionary and automatically exposes every
 # load_* function in sktime.datasets to the MCP server.
+# Loaders that need a network download or expand to hundreds of MB. They are
+# not "demo" data and loading them can exhaust memory on a laptop.
+_HEAVY_DATASETS = frozenset({"m5", "solar", "unit_test_tsf"})
+
+
 def _discover_demo_datasets() -> dict:
     """Return a mapping of dataset name -> dotted module path for every
-    zero-argument ``load_*`` function exported by ``sktime.datasets``."""
+    zero-argument ``load_*`` function exported by ``sktime.datasets``,
+    excluding loaders that download or are very large."""
     try:
         import sktime.datasets as _ds_module
 
@@ -38,6 +45,7 @@ def _discover_demo_datasets() -> dict:
             name.removeprefix("load_"): f"sktime.datasets.{name}"
             for name, obj in inspect.getmembers(_ds_module, inspect.isfunction)
             if name.startswith("load_")
+            and name.removeprefix("load_") not in _HEAVY_DATASETS
             and all(
                 p.default is not inspect.Parameter.empty
                 for p in inspect.signature(obj).parameters.values()
@@ -49,6 +57,91 @@ def _discover_demo_datasets() -> dict:
 
 
 _DEMO_DATASETS: dict | None = None
+_DATASET_KINDS: dict[str, str] = {}
+
+
+def _is_panel(obj: Any) -> bool:
+    """True for sktime panel containers: nested DataFrames, MultiIndex frames, 3D arrays."""
+    if isinstance(obj, pd.DataFrame):
+        if isinstance(obj.index, pd.MultiIndex):
+            return True
+        return len(obj) > 0 and any(isinstance(v, pd.Series) for v in obj.iloc[0])
+    return hasattr(obj, "ndim") and getattr(obj, "ndim", 0) == 3
+
+
+def _is_label_vector(obj: Any, n: int) -> bool:
+    """True for a 1-D array/Series with one target per panel instance."""
+    if isinstance(obj, pd.Series):
+        return len(obj) == n
+    return hasattr(obj, "ndim") and getattr(obj, "ndim", 0) == 1 and len(obj) == n
+
+
+def _panel_instance_count(panel: Any) -> int:
+    """Count instances, not individual time observations in a MultiIndex panel."""
+    if isinstance(panel, pd.DataFrame) and isinstance(panel.index, pd.MultiIndex):
+        return panel.index.droplevel(-1).nunique()
+    return len(panel)
+
+
+@lru_cache(maxsize=1)
+def _dataset_task_metadata() -> dict[str, str]:
+    """Read declared task tags without loading or instantiating dataset classes."""
+    from sktime.registry import all_estimators
+
+    kinds = {
+        "classifier": "classification",
+        "regressor": "regression",
+        "forecaster": "forecasting",
+        "detector": "detection",
+    }
+    metadata = {}
+    for _, dataset in all_estimators(estimator_types="dataset"):
+        loader = getattr(dataset, "loader_func", None)
+        if not inspect.isfunction(loader):
+            continue
+        tasks = dataset.get_class_tag("task_type", [])
+        if isinstance(tasks, str):
+            tasks = [tasks]
+        if len(tasks) == 1 and tasks[0] in kinds:
+            metadata[loader.__name__.removeprefix("load_")] = kinds[tasks[0]]
+    return metadata
+
+
+def _split_dataset_tuple(data: tuple) -> tuple[Any, Any | None]:
+    """Map a loader's tuple onto canonical ``(y, X)`` by inspecting shapes.
+
+    sktime loaders return three shapes: ``(X_panel, y_labels)`` for
+    classification/regression, ``(y_series, X_exog)`` for forecasting, and
+    ``(y_series, period, change_points)`` for segmentation. Deciding by
+    shape instead of a name list keeps every dataset in the catalogue
+    loadable through the same ``y``/``X`` convention.
+    """
+    first = data[0]
+    second = data[1] if len(data) > 1 else None
+    if (
+        _is_panel(first)
+        and second is not None
+        and _is_label_vector(second, _panel_instance_count(first))
+    ):
+        return second, first  # y = labels, X = panel
+    if isinstance(second, (pd.DataFrame, pd.Series)):
+        return first, second  # y = target series, X = exogenous frame
+    return first, None  # segmentation and single-output tuples: y only
+
+
+def _classify_dataset(y: Any, X: Any | None, data: Any, name: str | None = None) -> str:
+    """Use dataset task tags, falling back to the loaded target's data contract."""
+    if name is not None and name in _dataset_task_metadata():
+        return _dataset_task_metadata()[name]
+    if X is not None and _is_panel(X):
+        from sklearn.utils.multiclass import type_of_target
+
+        if type_of_target(y).startswith("continuous"):
+            return "regression"
+        return "classification"
+    if isinstance(data, tuple) and len(data) >= 3 and isinstance(y, pd.Series):
+        return "detection"
+    return "forecasting"
 
 
 def _get_demo_datasets() -> dict:
@@ -954,24 +1047,11 @@ class Executor:
             data = loader()
 
             if isinstance(data, tuple):
-                # sktime classifier/clusterer datasets return (X-panel, y-labels)
-                # whereas forecaster datasets return (y-target, X-exog)
-                if name in (
-                    "arrow_head",
-                    "italy_power_demand",
-                    "basic_motions",
-                    "gunpoint",
-                    "osuleaf",
-                    "plaid",
-                ):
-                    X, y = data[0], data[1] if len(data) > 1 else None
-                    primary = X
-                else:
-                    y, X = data[0], data[1] if len(data) > 1 else None
-                    primary = y
+                y, X = _split_dataset_tuple(data)
             else:
                 y, X = data, None
-                primary = y
+            primary = X if X is not None and _is_panel(X) else y
+            _DATASET_KINDS.setdefault(name, _classify_dataset(y, X, data, name=name))
 
             return {
                 "success": True,
@@ -1758,6 +1838,15 @@ class Executor:
     def list_datasets(self) -> list[str]:
         """List available demo datasets."""
         return list(_get_demo_datasets().keys())
+
+    def dataset_kinds(self) -> dict[str, str]:
+        """Map every demo dataset to its task bucket, loading each once and caching."""
+        for name in _get_demo_datasets():
+            if name not in _DATASET_KINDS:
+                res = self.load_dataset(name)
+                if not res["success"]:
+                    _DATASET_KINDS[name] = "unavailable"
+        return {name: _DATASET_KINDS[name] for name in _get_demo_datasets()}
 
     def load_data_source(self, config: dict[str, Any]) -> dict[str, Any]:
         """
