@@ -351,6 +351,8 @@ class JobManager:
             running inside a thread-pool executor (e.g. a single fit call) cannot
             be force-killed and runs to completion, but its result is discarded
             because update_job ignores late updates on a CANCELLED job.
+            The worker can still mutate its estimator handle; cancellation does
+            not roll back state or make that handle safe to reuse immediately.
         """
         with self.lock:
             if job_id not in self.jobs:

@@ -68,7 +68,8 @@ def _validate_evaluate_inputs(executor, estimator_handle: str, y: str) -> dict[s
             "success": False,
             "error": (
                 "evaluate expects a univariate/Series target, but the given y is Panel "
-                "or Hierarchical scitype. Forecasting CV is not defined for panel data."
+                "or Hierarchical scitype. This tool currently supports Series only; "
+                "use sktime directly for panel or hierarchical cross-validation."
             ),
         }
 

@@ -119,30 +119,35 @@ def check_frequency_alignment(index: pd.Index, freq: str) -> None:
     all-NaN data. Callers check alignment first and only ``asfreq`` when every
     existing timestamp lies on the ``freq`` grid (gaps are still allowed).
 
-    An unparseable ``freq`` string is not judged here — ``asfreq`` reports it.
-    Non-datetime indexes are left to the caller too.
+    Invalid and non-positive frequencies raise. Non-datetime indexes are left
+    to the caller. Daily grids use local wall time across daylight-saving changes.
     """
     if not isinstance(index, pd.DatetimeIndex) or len(index) == 0:
         return
+    from pandas.tseries.frequencies import to_offset
+
+    offset = to_offset(freq)
+    if offset.n <= 0:
+        raise ValueError("frequency must be positive")
+    if index.hasnans:
+        raise ValueError("Time index contains missing timestamps")
     try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", FutureWarning)
-            expected = pd.date_range(start=index.min(), end=index.max(), freq=freq)
-    except (ValueError, TypeError):
-        return
-    misaligned = index[~index.isin(expected)]
-    if len(misaligned) == 0:
-        return
-    first = misaligned[0]
-    grid = ", ".join(str(t) for t in expected[:3])
-    raise ValueError(
-        f"Frequency {freq!r} does not align with the data: {len(misaligned)} of "
-        f"{len(index)} timestamps are not on the {freq!r} grid (first: {first}; "
-        f"grid starts {grid}{', ...' if len(expected) > 3 else ''}). "
-        "Reindexing would replace the data with NaN. Use a frequency anchored on "
-        "the actual timestamps (e.g. 'MS' for month starts, 'W-MON' for Mondays) "
-        "or omit 'frequency' to have it inferred."
-    )
+        nanos = offset.nanos
+    except ValueError:
+        aligned = [offset.is_on_offset(value) for value in index]
+    else:
+        # Python integers avoid int64 overflow for widely separated timestamps.
+        coordinates = (
+            index.tz_localize(None)
+            if index.tz is not None and isinstance(offset, pd.offsets.Day)
+            else index
+        )
+        origin = int(coordinates.min().value)
+        aligned = [(int(value.value) - origin) % nanos == 0 for value in coordinates]
+    if not all(aligned):
+        raise ValueError(
+            f"Frequency {freq!r} does not align with every observed timestamp (first off-grid: {next(value for value, ok in zip(index, aligned, strict=True) if not ok)}); choose an aligned frequency"
+        )
 
 
 class DataSourceAdapter(ABC):
@@ -223,63 +228,9 @@ class DataSourceAdapter(ABC):
             - y: Target time series (pd.Series with DatetimeIndex)
             - X: Exogenous variables (pd.DataFrame, optional)
         """
-        # Get target column from config
-        target_col = self.config.get("target_column")
-        exog_cols = self.config.get("exog_columns", [])
-        if isinstance(exog_cols, str):
-            # A bare string would otherwise be iterated per character (#556 / F-37)
-            exog_cols = [exog_cols]
+        from .contracts import select_columns
 
-        if target_col is not None and target_col not in data.columns:
-            available_columns = ", ".join(repr(col) for col in data.columns)
-            raise ValueError(
-                f"Target column {target_col!r} not found in data. "
-                f"Available columns: [{available_columns}]"
-            )
-
-        if target_col is not None:
-            y = data[target_col]
-
-            # Get exogenous variables if specified
-            if exog_cols:
-                missing_exog_cols = [col for col in exog_cols if col not in data.columns]
-                if missing_exog_cols:
-                    available_columns = ", ".join(repr(col) for col in data.columns)
-                    raise ValueError(
-                        f"Exogenous column(s) not found in data: {missing_exog_cols!r}. "
-                        f"Available columns: [{available_columns}]"
-                    )
-
-                X = data[exog_cols]
-            else:
-                # Use all columns except target as exogenous
-                other_cols = [col for col in data.columns if col != target_col]
-                X = data[other_cols] if other_cols else None
-        else:
-            # Default: first column is target, rest are exogenous
-            if len(data.columns) == 1:
-                y = data.iloc[:, 0]
-                X = None
-            else:
-                y = data.iloc[:, 0]
-                X = data.iloc[:, 1:]
-
-                # Add a guideline warning if we're defaulting with multiple columns
-                if not hasattr(self, "_metadata") or self._metadata is None:
-                    self._metadata = {}
-
-                if "validation" not in self._metadata:
-                    self._metadata["validation"] = {"valid": True, "errors": [], "warnings": []}
-
-                # Ensure it's a dict and has warnings list
-                val = self._metadata["validation"]
-                if isinstance(val, dict) and "warnings" in val:
-                    val["warnings"].append(
-                        f"Target column not specified. Defaulting to first column '{data.columns[0]}'. "
-                        "If this is a time index or feature, please specify 'target_column' in config."
-                    )
-
-        return y, X
+        return select_columns(data, self.config)
 
     def get_metadata(self) -> dict[str, Any]:
         """

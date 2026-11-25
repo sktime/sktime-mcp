@@ -29,7 +29,7 @@ import sktime_mcp
 from sktime_mcp.runtime.executor import get_executor
 from sktime_mcp.server import get_tools, server
 
-EXPECTED_TOOL_COUNT = 26
+EXPECTED_TOOL_COUNT = 25
 
 
 @asynccontextmanager

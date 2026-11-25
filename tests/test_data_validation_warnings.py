@@ -25,7 +25,8 @@ def test_load_data_source_propagates_default_target_warning():
 
     assert result["success"] is True
     warnings = result["validation"]["warnings"]
-    assert any("Target column not specified" in warning for warning in warnings)
+    assert not any("Defaulting to first column" in warning for warning in warnings)
+    assert result["inspection"]["columns"] == ["date", "value"]
 
 
 def test_load_data_source_async_propagates_default_target_warning():
@@ -34,4 +35,5 @@ def test_load_data_source_async_propagates_default_target_warning():
 
     assert result["success"] is True
     warnings = result["validation"]["warnings"]
-    assert any("Target column not specified" in warning for warning in warnings)
+    assert not any("Defaulting to first column" in warning for warning in warnings)
+    assert result["inspection"]["columns"] == ["date", "value"]

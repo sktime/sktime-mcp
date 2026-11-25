@@ -1,139 +1,38 @@
+# What sktime-mcp does
 
-# sktime-mcp
+`sktime-mcp` connects an MCP client to the sktime installation running on your
+machine or server. An assistant can discover estimators, construct models and
+pipelines, load data, run supported methods, and return results to the conversation.
 
-**[Read the Official Documentation](https://sktime-mcp.readthedocs.io/en/latest/)** | **[PyPI Package](https://pypi.org/project/sktime-mcp/)**
+## A workflow you can continue
 
-<div class="hero-text">
-  <h1>The Semantic Engine for Time-Series</h1>
-  <p style="font-size: 1.2rem; margin-bottom: 2rem;">
-    Enables Large Language Models to discover, reason about, and execute 
-    sktime's advanced forecasting algorithms on real-world data.
-  </p>
-</div>
+A loaded dataset gets a `data_…` handle; a model gets an `est_…` handle. Later calls
+reuse these objects. You can fit a model, inspect its parameters, forecast, plot the
+result, and save it without transferring the training data on every call.
 
-> **Why sktime-mcp?**
-> Combines **LLM reasoning** with **time-series precision**. 
-> Your agent queries the installed registry and calls a typed, stateful API.
-> Execution still uses the privileges of the account running the server.
+The server exposes **25 tools**. Data work uses four entry points: `load_data`,
+`inspect_data`, `prepare_data`, and `save_data`. Background loading, fitting,
+prediction and evaluation return jobs that clients can poll.
 
----
+## sktime defines the data contracts
 
-## 👋 Who is this for?
+The data layer uses sktime's datatype checks and converters. A scientific type
+(*scitype*) describes meaning, such as Series or Panel. A machine type (*mtype*)
+describes its representation, such as `pd.Series` or `numpy3D`.
 
-sktime‑mcp is designed for:
+Loading preserves values and row order. Cleaning, conversion and splitting happen
+only through explicit preparation actions. A validation report describes issues;
+a successful load does not mean every estimator can use that data.
 
-- **Developers** building LLM agents that need time-series discovery and execution.
-- **Data scientists** who want to expose sktime workflows to language models through structured tool calls.
-- **Platform teams** integrating forecasting capabilities into tools like Claude Desktop, Cursor, or custom MCP clients.
+## What is established, and what is limited
 
-If you are new to MCP‑based workflows, start with the **Quick Start** below, then explore the **Use Cases** and **User Guide** for deeper examples.
+Forecasting has the broadest end-to-end coverage. Custom classification can use a
+feature panel and a separate label container. Native method calls make additional
+sktime components reachable, but do not give every task the same evaluation,
+plotting or export support. Read {doc}`support-matrix` before choosing a path.
 
----
+The server runs with its process account's permissions. Craft specifications and
+shell commands are trusted execution, not a sandbox. HTTP authentication controls
+access to the server; it does not isolate an authorized call from the filesystem.
 
-## 🔥 Key Features
-
-- **Registry-Driven Discovery:** Find estimators by capability tag and name search against the live `sktime` registry (e.g., "probabilistic forecaster that handles missing data") — reading installed metadata, never recalling it from memory.
-- **Composition via `craft()`:** Build pipelines (Transformer → Forecaster) from a single spec string, constructed by sktime itself. Compatibility errors may surface during construction or fitting.
-- **Universal Data Loading:** Ingest data from Pandas, SQL, URLs, and files — CSV, Excel, and Parquet.
-- **Execution Runtime:** Stateful engine that manages object lifecycles, fitting, predicting, and background jobs, all via MCP tool calls.
-
----
-
-
-## ⚡ Quick Start
-
-Get up and running in seconds. Use with **Claude Desktop**, **Cursor**, or any MCP-compatible client.
-
-### 1. Install
-
-**Zero-install via uvx (recommended):** if you have [uv](https://github.com/astral-sh/uv) installed, skip this step — uvx fetches and runs the package automatically when your MCP client starts.
-
-```bash
-# Or install explicitly with pip
-pip install sktime-mcp
-```
-
-When contributing, install from source:
-
-```bash
-git clone https://github.com/sktime/sktime-mcp.git
-cd sktime-mcp
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-```
-
-### 2. Connect (Claude Desktop / Claude Code Config)
-Add this to your `claude_desktop_config.json`:
-
-**With uvx (no prior install needed):**
-```json
-{
-  "mcpServers": {
-    "sktime": {
-      "command": "uvx",
-      "args": ["sktime-mcp"]
-    }
-  }
-}
-```
-
-**With pip-installed package:**
-
-If installed in a virtual environment, supply the absolute path to that environment's Python binary:
-```json
-{
-  "mcpServers": {
-    "sktime": {
-      "command": "/absolute/path/to/.venv/bin/python",
-      "args": ["-m", "sktime_mcp.server"]
-    }
-  }
-}
-```
-On Windows:
-```json
-{
-  "mcpServers": {
-    "sktime": {
-      "command": "C:\\path\\to\\.venv\\Scripts\\python.exe",
-      "args": ["-m", "sktime_mcp.server"]
-    }
-  }
-}
-```
-
-If the console script is on your system `PATH`:
-```json
-{
-  "mcpServers": {
-    "sktime": {
-      "command": "sktime-mcp"
-    }
-  }
-}
-```
-
----
-
-
-## 📚 Documentation Map
-
-| Section | Description |
-| :--- | :--- |
-| [**Installation**](installation.md) | Install methods, optional extras, and verification. |
-| [**Quickstart**](quickstart.md) | Fastest route to running the sktime-mcp server and connecting it to a client. |
-| [**Concepts**](concepts.md) | Core concepts, handles, and asynchronous operations. |
-| [**User Guide**](user-guide.md) | Hands-on walkthrough with four worked end-to-end workflows. |
-| [**Tool Reference**](tool-reference.md) | Every MCP tool, its arguments, and what it returns. |
-| [**Architecture**](developer/architecture.md) | High-level system design, data flow, and the trust boundary. |
-| [**Contributing**](developer/contributing.md) | Contributing guidelines, testing, and extending the server. |
-
----
-
-
-## 🚀 Get Started
-
-- See [Quickstart](quickstart.md) to start the server.
-- See the [User Guide](user-guide.md) for worked end-to-end workflows.
-- See the [Tool Reference](tool-reference.md) for what the assistant can actually call.
+Continue with {doc}`quickstart` or {doc}`data-guide`.

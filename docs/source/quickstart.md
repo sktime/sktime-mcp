@@ -1,69 +1,98 @@
 # Quickstart
 
-This guide provides the fastest route to running the `sktime-mcp` server and connecting it to a client.
+This page uses the unreleased source interface. Install the current checkout as
+shown in {doc}`installation`; PyPI 0.1.3 still uses the earlier data-tool names.
 
-```{note}
-The `latest` documentation follows the repository development branch. `pip` and
-`uvx` install the published release, which can lag behind development features.
-For current-main installation and an explicit Python environment, see
-{doc}`installation`.
-```
+## Connect your MCP client
 
-## 1. Start the Server
-
-Once installed, you can start the MCP server directly from your terminal:
-
-```bash
-uvx sktime-mcp
-```
-
-By default, the server communicates over standard input/output (stdio).
-
-## 2. Connect to a Client
-
-To use `sktime-mcp` with an AI assistant, you must configure the client to launch the server.
-
-### Claude Desktop
-
-Add the following configuration to your `claude_desktop_config.json`:
-
-**Linux**: follow your MCP client's Linux configuration guide.
-
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`  
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+Configure a stdio server using the absolute path to your environment's Python.
+Clients that use an `mcpServers` configuration can use this shape:
 
 ```json
 {
   "mcpServers": {
     "sktime": {
-      "command": "uvx",
-      "args": ["sktime-mcp"]
+      "command": "/absolute/path/to/.venv/bin/python",
+      "args": [
+        "-m",
+        "sktime_mcp.server"
+      ]
     }
   }
 }
 ```
 
-### Cursor or VS Code (MCP Extensions)
+On Windows use the environment's `Scripts/python.exe`. The outer configuration
+format varies by client; the command and arguments are the same. Restart or
+reconnect the MCP server after changing its installed code.
 
-Configure the command `sktime-mcp` in the MCP settings section of your IDE or extension.
+## Run a small forecast
 
-## 3. Verify Functionality
+Ask your assistant:
 
-Once connected, you can verify the server is working by asking your assistant:
+> Find NaiveForecaster, fit it to the airline demo dataset, and forecast the next
+> six months. Plot the forecast and tell me which data it used.
 
-> "What forecasting models are available in sktime?"
+The essential calls are:
 
-The assistant will use the `query_registry` tool and return a list of available models for your review.
+```json
+{
+  "name": "instantiate",
+  "arguments": {
+    "spec": "NaiveForecaster(strategy='last', sp=12)"
+  }
+}
+```
 
-## 4. Run Your First Forecast
+Use the returned estimator handle in the next calls:
 
-Try an end-to-end workflow by directing your assistant to use a built-in dataset:
+```json
+{
+  "name": "fit",
+  "arguments": {
+    "estimator_handle": "<model>",
+    "y_dataset": "airline"
+  }
+}
+```
 
-> "Load the 'airline' demo dataset and forecast the next 12 months using a NaiveForecaster."
+```json
+{
+  "name": "predict",
+  "arguments": {
+    "estimator_handle": "<model>",
+    "horizon": 6
+  }
+}
+```
 
-The assistant will handle the technical steps — locating the data, instantiating the model, and fitting it — before presenting the final predictions to you in the chat.
+The result includes predictions and, for supported output containers, a
+`prediction_handle`. Pass it to `plot_series` or `save_data`.
 
-## Next Steps
+## Load your own data
 
-- Explore **Core Concepts** to understand how the system manages state.
-- Refer to the **User Guide** for instructions on loading your own data and building pipelines.
+```json
+{
+  "name": "load_data",
+  "arguments": {
+    "config": {
+      "type": "file",
+      "path": "/absolute/path/to/sales.csv",
+      "time_column": "date",
+      "target_column": "sales"
+    }
+  }
+}
+```
+
+Read the returned `inspection` and `validation`. The loader preserves missing
+values and duplicates. If repairs are needed, request them with `prepare_data`.
+Use {doc}`data-guide` for policies and {doc}`user-guide` for complete workflows.
+
+## If something fails
+
+- **Command not found:** use the absolute Python path above.
+- **Wrong tool names:** reconnect and confirm which checkout or release the client starts.
+- **Missing dependency:** call `describe_component` and install only the required package.
+- **Data validation issues:** inspect the report; declare the representation or preparation explicitly.
+- **Background work:** poll `check_job_status`; completion is not pushed to the client.

@@ -1,140 +1,156 @@
-"""
-Data persistence tool for sktime MCP.
+"""Explicit persistence for sktime data containers, without implicit axis flattening."""
 
-Saves the data behind a handle to a local file in CSV, Parquet, or JSON format.
-"""
-
-import logging
+import os
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
+from sktime_mcp.data.contracts import scientific_type
+from sktime_mcp.data.preparation import canonical
 from sktime_mcp.runtime.executor import get_executor
-
-logger = logging.getLogger(__name__)
-
-# Supported output formats and their pandas writer methods
-_FORMAT_WRITERS = {
-    "csv": "to_csv",
-    "parquet": "to_parquet",
-    "json": "to_json",
-}
 
 
 def save_data_tool(
-    data_handle: str,
-    path: str,
-    format: str = "csv",
-    overwrite: bool = False,
+    data_handle: str, path: str, format: str = "csv", overwrite: bool = False
 ) -> dict[str, Any]:
-    """Persist the data behind a handle to a local file.
-
-    Supports CSV, Parquet, and JSON output formats. The target
-    directory is created automatically if it does not exist.
-
-    Parameters
-    ----------
-    data_handle : str
-        Handle ID of the data to save (from load_data_source, split_data, etc.).
-    path : str
-        Destination file path (e.g. "/tmp/forecast_output.csv").
-        Note that the file extension is not used to infer the format;
-        use the `format` argument instead.
-    format : str, default="csv"
-        Output format. Must be one of: "csv", "parquet", or "json".
-    overwrite : bool, default=False
-        If the target file already exists, the write is refused unless this
-        is True, in which case the response reports ``overwritten: true``.
-
-    Returns
-    -------
-    dict
-        Dictionary containing success status and path information:
-
-        - ``"success"`` (bool) -- True if the data was written successfully, False otherwise.
-        - ``"saved_path"`` (str) -- Absolute path to the written file.
-        - ``"format"`` (str) -- The format used to write the file.
-        - ``"rows"`` (int) -- Number of rows written to the file.
-        - ``"overwritten"`` (bool) -- True if an existing file was replaced.
-        - ``"error"`` (str, optional) -- Error message if "success" is False.
-    """
     executor = get_executor()
-
-    # --- validation --------------------------------------------------------
     if data_handle not in executor._data_handles:
-        return {
-            "success": False,
-            **executor.data_handle_missing(data_handle),
-        }
-
+        return {"success": False, **executor.data_handle_missing(data_handle)}
     fmt = format.lower()
-    if fmt not in _FORMAT_WRITERS:
-        return {
-            "success": False,
-            "error": f"Unsupported format '{format}'. Choose from: {list(_FORMAT_WRITERS.keys())}",
-        }
-
-    # Resolve (expanduser so "~/x" doesn't create a literal "~" dir) and guard
-    # against silently clobbering an existing file (#539).
-    abs_path = Path(path).expanduser().resolve()
-    existed = abs_path.exists()
+    if fmt not in {"csv", "parquet", "json", "npy"}:
+        return {"success": False, "error": "Unsupported format; choose csv, parquet, json or npy"}
+    target = Path(path).expanduser().resolve()
+    existed = target.exists()
     if existed and not overwrite:
         return {
             "success": False,
-            "error": (
-                f"File already exists: '{abs_path}'. Pass overwrite=true to replace it, "
-                "or choose a different path."
-            ),
-            "saved_path": str(abs_path),
+            "error": f"File already exists: '{target}'. Pass overwrite=true to replace it.",
+            "saved_path": str(target),
         }
-
-    data_info = executor._data_handles[data_handle]
-    y = data_info["y"]
-    X = data_info.get("X")
-
+    record = executor._data_handles[data_handle]
+    y, X = record["y"], record.get("X")
+    scitype = record.get("scitype") or scientific_type(y)
     try:
-        # Combine y and X into a single DataFrame for export
-        if isinstance(y, pd.Series):
-            df = y.to_frame(name=y.name if y.name else "target")
-        elif isinstance(y, pd.DataFrame):
-            df = y.copy()
+        if record.get("role") == "X":
+            X = None
+        if fmt == "npy":
+            if not isinstance(y, np.ndarray) or X is not None:
+                raise ValueError(
+                    "npy requires an ndarray without a separate exogenous component; convert explicitly or save components separately"
+                )
+            if y.dtype.hasobject:
+                raise ValueError("npy object arrays require pickle and are not supported")
+            frame = None
+            load_config = {
+                "type": "file",
+                "path": str(target),
+                "format": fmt,
+                "scitype": scitype,
+                "role": record.get("role", "y"),
+            }
         else:
-            # Best-effort: wrap in a DataFrame
-            df = pd.DataFrame(y, columns=["target"])
-
-        if X is not None and isinstance(X, pd.DataFrame):
-            df = pd.concat([df, X], axis=1)
-
-        # Ensure target directory exists
-        abs_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Write
-        if fmt == "json":
-            # records orient drops the index; write it as a "time" column so the
-            # file round-trips through load_data_source(time_column="time").
-            out_df = df.copy()
-            out_df.index = out_df.index.astype(str)
-            out_df = out_df.reset_index(names="time")
-            out_df.to_json(str(abs_path), orient="records", indent=2)
-        elif fmt == "parquet":
-            df.to_parquet(str(abs_path))
-        else:
-            # CSV — include the index as a time column
-            df.to_csv(str(abs_path))
-
+            frame = canonical(y, scitype)
+            if isinstance(frame.columns, pd.MultiIndex):
+                raise ValueError(
+                    "This tabular export cannot preserve MultiIndex columns; convert to an explicit flat representation first"
+                )
+            if X is not None:
+                features = canonical(X, scitype)
+                if not frame.index.equals(features.index):
+                    raise ValueError("Cannot save misaligned target and exogenous indexes")
+                overlap = frame.columns.intersection(features.columns)
+                if len(overlap):
+                    raise ValueError(f"Target and feature column names overlap: {list(overlap)}")
+                frame = pd.concat([frame, features], axis=1)
+            if frame.columns.has_duplicates:
+                raise ValueError("Export requires unique column names")
+            # Explicit unique index columns preserve hierarchy levels and avoid
+            # clobbering a real variable called 'time'. Integer times stay integers.
+            names = []
+            occupied = {str(c) for c in frame.columns}
+            for i, name in enumerate(frame.index.names):
+                base = "time" if i == frame.index.nlevels - 1 else name or f"instance_{i}"
+                name = str(base)
+                while name in occupied:
+                    name = "_" + name
+                occupied.add(name)
+                names.append(name)
+            index = frame.index
+            if isinstance(index, pd.PeriodIndex):
+                frame = frame.copy()
+                frame.index = index.astype(str)
+            elif isinstance(index, pd.MultiIndex) and any(
+                isinstance(index.get_level_values(i), pd.PeriodIndex) for i in range(index.nlevels)
+            ):
+                frame = frame.copy()
+                frame.index = pd.MultiIndex.from_arrays(
+                    [
+                        index.get_level_values(i).astype(str)
+                        if isinstance(index.get_level_values(i), pd.PeriodIndex)
+                        else index.get_level_values(i)
+                        for i in range(index.nlevels)
+                    ],
+                    names=index.names,
+                )
+            frame = frame.reset_index(names=names)
+            load_config = {
+                "type": "file",
+                "path": str(target),
+                "format": fmt,
+                "scitype": scitype,
+                "time_column": names[-1],
+                "role": record.get("role", "y"),
+            }
+            if len(names) > 1:
+                load_config["instance_columns"] = names[:-1]
+            if X is not None:
+                load_config["target_columns"] = list(canonical(y, scitype).columns)
+                load_config["exog_columns"] = list(canonical(X, scitype).columns)
+            if scitype == "Table":
+                load_config["parse_dates"] = False
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # Serialize beside the destination before publishing it. Failed writers
+        # cannot truncate an existing export or leave a partial new file.
+        temporary = None
+        try:
+            with NamedTemporaryFile(
+                dir=target.parent, prefix=f".{target.name}.", delete=False
+            ) as output:
+                temporary = Path(output.name)
+                if fmt == "npy":
+                    np.save(output, y, allow_pickle=False)
+                elif fmt == "json":
+                    output.write(
+                        frame.to_json(orient="records", date_format="iso", indent=2).encode()
+                    )
+                elif fmt == "parquet":
+                    frame.to_parquet(output, index=False)
+                else:
+                    output.write(frame.to_csv(index=False).encode())
+            if overwrite:
+                temporary.replace(target)
+            else:
+                # Linking a complete file is atomic and fails if another caller
+                # created the destination, preserving overwrite=False.
+                os.link(temporary, target)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
         return {
             "success": True,
-            "saved_path": str(abs_path),
+            "saved_path": str(target),
             "format": fmt,
-            "rows": len(df),
+            "rows": len(y),
             "overwritten": existed,
+            "load_config": load_config,
+            "notes": [
+                "Tabular files preserve values and index columns; dtype and exact mtype reconstruction may require explicit reader options."
+            ]
+            if fmt != "npy"
+            else [],
         }
-
-    except Exception as e:
-        logger.exception("Error saving data")
-        return {
-            "success": False,
-            "error": str(e),
-            "error_type": type(e).__name__,
-        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc), "error_type": type(exc).__name__}

@@ -12,7 +12,8 @@ from urllib.parse import quote
 import pandas as pd
 
 from ...redaction import redact_connection_string
-from ..base import DataSourceAdapter, check_frequency_alignment, coerce_time_index
+from ..base import DataSourceAdapter
+from ..contracts import describe_data, map_index, scientific_type
 
 
 class SQLAdapter(DataSourceAdapter):
@@ -82,45 +83,14 @@ class SQLAdapter(DataSourceAdapter):
         finally:
             engine.dispose()
 
-        # Set time index. Integer columns become an integer index; only
-        # date-like values are parsed to datetime; with no time_column the
-        # RangeIndex is kept (shared with the pandas and file adapters, F-13/F-14).
-        time_col = self.config.get("time_column")
-        df, index_warnings = coerce_time_index(df, time_col)
-
-        # Sort by time
-        df = df.sort_index()
-
-        # Set frequency if specified
-        freq = self.config.get("frequency")
-        if freq:
-            # Refuse a freq whose anchor misses the timestamps: asfreq would
-            # silently replace every row with NaN (F-15)
-            check_frequency_alignment(df.index, freq)
-            df = df.asfreq(freq)
-
+        df, notes = map_index(df, self.config)
         self._data = df
-
-        # Determine frequency for metadata (infer_freq needs >= 3 points)
-        if isinstance(df.index, pd.DatetimeIndex):
-            from .pandas_adapter import _safe_infer_freq
-
-            freq_str = str(df.index.freq) if df.index.freq else _safe_infer_freq(df.index)
-        else:
-            freq_str = "Integer"
-
         self._metadata = {
             "source": "sql",
             "connection": self._sanitize_connection_string(conn_string),
-            "rows": len(df),
-            "columns": list(df.columns),
-            "frequency": freq_str,
-            "start_date": str(df.index.min()),
-            "end_date": str(df.index.max()),
+            **describe_data(df, scientific_type(df, self.config)),
         }
-        if index_warnings:
-            self._metadata["validation"] = {"valid": True, "errors": [], "warnings": index_warnings}
-
+        self._metadata["validation"]["warnings"].extend(notes)
         return df
 
     @staticmethod
@@ -276,11 +246,4 @@ class SQLAdapter(DataSourceAdapter):
         # Reuse pandas validation logic
         from .pandas_adapter import PandasAdapter
 
-        pandas_adapter = PandasAdapter(
-            {
-                "data": data,
-                "target_column": self.config.get("target_column"),
-                "exog_columns": self.config.get("exog_columns", []),
-            }
-        )
-        return pandas_adapter.validate(data)
+        return PandasAdapter(self.config).validate(data)

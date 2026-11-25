@@ -187,7 +187,7 @@ class TestTransformData:
         assert result["success"]
         assert "data_handle" in result
         assert "changes_applied" in result
-        assert isinstance(result["changes_applied"], list)
+        assert isinstance(result["changes_applied"], dict)
 
     def test_convert_requires_to_mtype(self):
         executor, handle = _make_executor_with_data()
@@ -207,7 +207,7 @@ class TestTransformData:
         finally:
             self._unpatch()
         assert not result["success"]
-        assert "Unknown action" in result["error"]
+        assert "action must be" in result["error"]
 
     def test_unknown_handle(self):
         result = transform_data_tool("data_nonexistent", action="format")

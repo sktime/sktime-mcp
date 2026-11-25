@@ -43,13 +43,15 @@ from mcp.types import (
     PaginatedRequestParams,
     TextContent,
     Tool,
+    ToolAnnotations,
 )
 
 from sktime_mcp.config import settings
+from sktime_mcp.data.schemas import LOAD_CONFIG_SCHEMA, PREPARE_SCHEMA
 from sktime_mcp.redaction import RedactingFilter, redact_errors, redact_for_logging, redact_text
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
-    load_data_source_tool,
+    load_data_tool,
     release_data_handle_tool,
 )
 from sktime_mcp.tools.describe_component import (
@@ -76,14 +78,13 @@ from sktime_mcp.tools.job_tools import (
 )
 from sktime_mcp.tools.list_available_data import list_available_data_tool
 from sktime_mcp.tools.plotting import plot_series_tool
+from sktime_mcp.tools.prepare_data import prepare_data_tool
 from sktime_mcp.tools.query_registry import (
     query_registry_tool,
 )
 from sktime_mcp.tools.run_command import run_command_tool
 from sktime_mcp.tools.save_data import save_data_tool
 from sktime_mcp.tools.save_model import save_model_tool
-from sktime_mcp.tools.split_data import split_data_tool
-from sktime_mcp.tools.transform_data import transform_data_tool
 
 # Configure logging to stderr with detailed format
 _handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
@@ -818,43 +819,16 @@ def get_tools() -> list[Tool]:
             },
         ),
         Tool(
-            name="load_data_source",
-            description=(
-                "Load data from various sources into a data handle for forecasting. "
-                "Can run synchronously (blocking) or asynchronously in the background. "
-                "Supported source types: "
-                "'pandas' - from a dict or inline data (keys: data, time_column, target_column). "
-                "'file' - from CSV, Excel (.xlsx), or Parquet (keys: path, time_column, target_column). "
-                "'sql' - from a SQL database (keys: connection_string, query, time_column, target_column). "
-                "'url' - from a web URL pointing to CSV/Excel/Parquet (keys: url, time_column, target_column). "
-                "GUIDELINES: "
-                "1. NEVER assume a column is a time index unless the user says so. "
-                "2. ALWAYS specify 'target_column' if the user mentions a specific variable. "
-                "3. The first column is used as target by default — if that's a date column, "
-                "specify target_column explicitly. "
-                "4. For non-standard date formats, omit 'time_column' to use an integer index."
-            ),
+            name="load_data",
+            description="Load a memory/inline, file, SQL or HTTP(S) source into a reusable handle. Preserve values, variables and row order; never guess time or target columns. Declare scitype/mtype for ambiguous representations, instance_columns plus time_column for panels/hierarchies, and role='X' for standalone features. Returns inspection and sktime validation, including repairable issues. run_async returns a job_id.",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "config": {
-                        "type": "object",
-                        "description": (
-                            "Data source configuration. Must include 'type' "
-                            "(pandas, sql, file, url)."
-                        ),
-                    },
-                    "run_async": {
-                        "type": "boolean",
-                        "description": (
-                            "If True, loads data in the background (non-blocking) and "
-                            "returns a job_id. If False (default), blocks and returns the "
-                            "data_handle directly."
-                        ),
-                        "default": False,
-                    },
+                    "config": LOAD_CONFIG_SCHEMA,
+                    "run_async": {"type": "boolean", "default": False},
                 },
                 "required": ["config"],
+                "additionalProperties": False,
             },
         ),
         Tool(
@@ -873,13 +847,14 @@ def get_tools() -> list[Tool]:
         ),
         Tool(
             name="inspect_data",
+            annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
             description=(
-                "Inspect a loaded data handle and return rich metadata for understanding "
-                "the series before modelling. Returns mtype, scitype, shape, column names, "
-                "dtypes, index level names, inferred frequency, cutoff (last training "
-                "timestamp), total missing-value count, a 5-row head preview, and "
-                "per-column summary statistics. Works on handles from load_data_source, "
-                "split_data, or transform_data. Does not modify the data."
+                "Inspect a data handle without modifying it. Returns sktime validation, "
+                "mtype, scitype, shape and a bounded preview. For pandas containers, "
+                "includes columns, dtypes and index names; temporal containers may "
+                "include frequency and cutoff. Missing-value counts and summary "
+                "statistics depend on the representation. Works on handles from "
+                "load_data, prepare_data and supported model outputs."
             ),
             inputSchema={
                 "type": "object",
@@ -887,8 +862,7 @@ def get_tools() -> list[Tool]:
                     "data_handle": {
                         "type": "string",
                         "description": (
-                            "Data handle ID to inspect (from load_data_source, split_data, "
-                            "or transform_data)."
+                            "Data handle ID to inspect (from load_data or prepare_data)."
                         ),
                     },
                 },
@@ -896,103 +870,21 @@ def get_tools() -> list[Tool]:
             },
         ),
         Tool(
-            name="split_data",
-            description=(
-                "Split a time series data handle into temporal train and test sets, "
-                "registering both halves as new data handles. Provide exactly one of "
-                "test_size (fraction in (0, 1)) or fh (forecast horizon). fh may be an "
-                "integer (hold out that many final steps) or a list of relative horizon "
-                "indices (hold out max(fh) final steps). Returns train_handle, "
-                "test_handle, cutoff timestamp, train_size, and n_test."
+            name="prepare_data",
+            description="Prepare existing data without modifying the source. action='format' applies only explicit sort/duplicate/missing/frequency policies, separately per series. action='convert' uses sktime mtypes and preserves unselected y/X components. action='split' creates train/test handles, either temporally per series or by whole instances. Returns bounded inspection and validation. Split before fitting imputers to avoid leakage.",
+            inputSchema=PREPARE_SCHEMA,
+            annotations=ToolAnnotations(
+                read_only_hint=False, destructive_hint=False, open_world_hint=False
             ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "data_handle": {
-                        "type": "string",
-                        "description": "Data handle ID to split (from load_data_source or transform_data).",
-                    },
-                    "test_size": {
-                        "type": "number",
-                        "description": (
-                            "Fraction of observations to hold out for the test set, "
-                            "exclusive range (0.0, 1.0), rounded up to a whole observation. "
-                            "Must leave at least one training observation. Mutually exclusive with fh."
-                        ),
-                    },
-                    "fh": {
-                        "description": (
-                            "Forecast horizon for the test window. Integer: hold out that "
-                            "many final time steps. List of ints: hold out max(fh) final "
-                            "steps (e.g. fh=[1,5,10] reserves 10 steps). "
-                            "Mutually exclusive with test_size."
-                        ),
-                        "type": ["integer", "array"],
-                        "items": {"type": "integer"},
-                    },
-                },
-                "required": ["data_handle"],
-            },
-        ),
-        Tool(
-            name="transform_data",
-            description=(
-                "Transform a loaded data handle and return a new handle. "
-                "action='format' (default): auto-fix common time series issues — "
-                "infer/set frequency, remove duplicate timestamps, fill index gaps, "
-                "and forward/backward-fill missing values; returns changes_applied. "
-                "action='convert': convert y to a different sktime mtype via convert_to() "
-                "(requires to_mtype, e.g. 'pd.DataFrame', 'pd.Series', 'np.ndarray'). "
-                "Replaces the legacy format_time_series tool."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "data_handle": {
-                        "type": "string",
-                        "description": "Data handle ID to transform.",
-                    },
-                    "action": {
-                        "type": "string",
-                        "description": (
-                            "Transformation to apply: 'format' (default) or 'convert'."
-                        ),
-                        "enum": ["format", "convert"],
-                        "default": "format",
-                    },
-                    "auto_infer_freq": {
-                        "type": "boolean",
-                        "description": "(format only) Infer and set DatetimeIndex frequency (default: true).",
-                        "default": True,
-                    },
-                    "fill_missing": {
-                        "type": "boolean",
-                        "description": "(format only) Forward/backward fill missing values (default: true).",
-                        "default": True,
-                    },
-                    "remove_duplicates": {
-                        "type": "boolean",
-                        "description": "(format only) Drop duplicate timestamps, keeping first (default: true).",
-                        "default": True,
-                    },
-                    "to_mtype": {
-                        "type": "string",
-                        "description": (
-                            "(convert only, required) Target sktime mtype string, "
-                            "e.g. 'pd.DataFrame', 'pd.Series', 'np.ndarray'."
-                        ),
-                    },
-                },
-                "required": ["data_handle"],
-            },
         ),
         Tool(
             name="save_data",
             description=(
-                "Persist the target series (y) and any exogenous features (X) behind a "
-                "data handle to a local file. Combines y and X into one table. Creates "
-                "parent directories as needed. Supported formats: csv (default, writes "
-                "index as first column), parquet, json (records orient, ISO dates)."
+                "Save a data handle to a local file. csv, parquet and json preserve "
+                "explicit index/hierarchy columns and aligned y/X in a canonical table. "
+                "npy preserves native numeric ndarray shape without pickle. Returns "
+                "load_config for reloading; exact dtype/mtype round trips depend on the "
+                "format. Creates parent directories and publishes complete files atomically."
             ),
             inputSchema={
                 "type": "object",
@@ -1000,8 +892,7 @@ def get_tools() -> list[Tool]:
                     "data_handle": {
                         "type": "string",
                         "description": (
-                            "Data handle ID to export (from load_data_source, split_data, "
-                            "or transform_data)."
+                            "Data handle ID to export (from load_data or prepare_data)."
                         ),
                     },
                     "path": {
@@ -1013,8 +904,8 @@ def get_tools() -> list[Tool]:
                     },
                     "format": {
                         "type": "string",
-                        "description": "Output format: csv (default), parquet, or json.",
-                        "enum": ["csv", "parquet", "json"],
+                        "description": "Output format: csv (default), parquet, json, or npy.",
+                        "enum": ["csv", "parquet", "json", "npy"],
                         "default": "csv",
                     },
                     "overwrite": {
@@ -1298,6 +1189,8 @@ async def call_tool(ctx: ServerRequestContext, params: CallToolRequestParams) ->
     # so wrongly typed values (e.g. the string "false" for a boolean) are rejected
     # here, before any tool code runs.
     tool = _tools_by_name().get(name)
+    if tool is None:
+        return _error_result(f"Unknown tool: {name}")
     if tool is not None:
         try:
             jsonschema.validate(instance=arguments, schema=tool.input_schema)
@@ -1392,17 +1285,14 @@ async def call_tool(ctx: ServerRequestContext, params: CallToolRequestParams) ->
         # -- Data ------------------------------------------------------------
         elif name == "list_available_data":
             result = list_available_data_tool(arguments.get("is_demo"))
-        elif name == "load_data_source":
-            result = load_data_source_tool(arguments["config"], arguments.get("run_async", False))
+        elif name == "load_data":
+            config = arguments["config"]
+            if arguments.get("run_async", False):
+                result = load_data_tool(config, True)
+            else:
+                from sktime_mcp.runtime.executor import get_executor
 
-        elif name == "list_data_sources":
-            # Deprecated — info is now in load_data_source description
-            logger.warning(
-                "list_data_sources is deprecated; info is in load_data_source description"
-            )
-            from sktime_mcp.tools.data_tools import list_data_sources_tool
-
-            result = list_data_sources_tool()
+                result = await get_executor().load_data_foreground_async(config)
 
         elif name == "release_data_handle":
             result = release_data_handle_tool(arguments["data_handle"])
@@ -1410,22 +1300,8 @@ async def call_tool(ctx: ServerRequestContext, params: CallToolRequestParams) ->
         elif name == "inspect_data":
             result = inspect_data_tool(arguments["data_handle"])
 
-        elif name == "split_data":
-            result = split_data_tool(
-                data_handle=arguments["data_handle"],
-                test_size=arguments.get("test_size"),
-                fh=arguments.get("fh"),
-            )
-
-        elif name == "transform_data":
-            result = transform_data_tool(
-                data_handle=arguments["data_handle"],
-                action=arguments.get("action", "format"),
-                auto_infer_freq=arguments.get("auto_infer_freq", True),
-                fill_missing=arguments.get("fill_missing", True),
-                remove_duplicates=arguments.get("remove_duplicates", True),
-                to_mtype=arguments.get("to_mtype"),
-            )
+        elif name == "prepare_data":
+            result = prepare_data_tool(**arguments)
 
         elif name == "save_data":
             result = save_data_tool(
@@ -1434,15 +1310,6 @@ async def call_tool(ctx: ServerRequestContext, params: CallToolRequestParams) ->
                 format=arguments.get("format", "csv"),
                 overwrite=arguments.get("overwrite", False),
             )
-
-        elif name == "auto_format_on_load":
-            # Deprecated — now controlled via SKTIME_MCP_AUTO_FORMAT env var
-            logger.warning(
-                "auto_format_on_load is deprecated; use env var SKTIME_MCP_AUTO_FORMAT=true/false"
-            )
-            from sktime_mcp.tools.format_tools import auto_format_on_load_tool
-
-            result = auto_format_on_load_tool(arguments.get("enabled", True))
 
         # -- Visualization ---------------------------------------------------
         elif name == "plot_series":
@@ -1521,7 +1388,9 @@ async def call_tool(ctx: ServerRequestContext, params: CallToolRequestParams) ->
         content: list[TextContent | ImageContent] = [TextContent(type="text", text=response_text)]
         if image is not None:
             content.append(image)
-        return CallToolResult(content=content)
+        return CallToolResult(
+            content=content, is_error=result.get("success") is False or "error" in result
+        )
     except Exception as e:
         logger.exception(f"Error in tool {name}")
         return _error_result(str(e))

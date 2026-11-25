@@ -1,45 +1,49 @@
-/* Custom CSS for sktime-mcp docs */
-
-:root {
-    --md-primary-fg-color: #4C3BCF;
-    /* Deep Indigo */
-    --md-primary-fg-color--light: #6E5ED9;
-    --md-primary-fg-color--dark: #3729A0;
+/* Read the Docs theme: readable tables, bounded code and a responsive content area. */
+:root { --sktime-accent: #3455a4; --sktime-ink: #17253c; }
+body, .rst-content, .rst-content h1, .rst-content h2, .rst-content h3,
+.rst-content h4, .rst-content .toctree-wrapper > p.caption, .wy-menu, .wy-nav-top {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
-
-/* Make tables look a bit more modern and spaced out */
-.md-typeset table:not([class]) {
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    border-radius: 8px;
-    overflow: hidden;
+.wy-side-nav-search, .wy-nav-top { background: var(--sktime-accent); }
+.wy-side-nav-search > a, .wy-nav-top > a { color: #fff; }
+.wy-side-nav-search a img.logo {
+  max-width: 144px; max-height: 144px; width: auto; height: auto;
+  padding: .5rem; background: #fff; border-radius: .35rem; margin: .75rem auto;
 }
-
-.md-typeset table:not([class]) th {
-    background-color: var(--md-primary-fg-color);
-    color: white;
-    font-weight: 600;
-}
-
-/* Admonition refinements */
-.md-typeset .admonition,
-.md-typeset details {
-    border-radius: 8px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-    border-left-width: 0.4rem;
-}
-
-/* Hero section styling for index page if used */
-.hero-text {
-    text-align: center;
-    padding: 4rem 0;
-}
-
-.hero-text h1 {
-    font-size: 2.5rem;
-    font-weight: 800;
-    margin-bottom: 1rem;
-    background: linear-gradient(to right, var(--md-primary-fg-color), #FF0080);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+.wy-nav-content { max-width: 1120px; padding: 2.5rem 3rem; }
+.rst-content { color: var(--sktime-ink); line-height: 1.65; }
+.rst-content h1 { font-size: 2.1rem; line-height: 1.2; margin-bottom: 1.5rem; overflow-wrap: anywhere; }
+.rst-content h2 { border-bottom: 1px solid #dfe5ef; padding-bottom: .45rem; margin-top: 2rem; }
+.rst-content h3 { margin-top: 1.5rem; }
+.rst-content .wy-table-responsive { margin-bottom: 1.5rem; overflow-x: auto; }
+.rst-content table.docutils { width: 100%; border-color: #dfe5ef; }
+.rst-content table.docutils td, .rst-content table.docutils th { white-space: normal; vertical-align: top; padding: .7rem .8rem; }
+.rst-content table.docutils thead th { background: #eef3fc; color: var(--sktime-ink); }
+.rst-content code.literal { color: #254582; background: #f2f5fb; border: 1px solid #e3e8f0; overflow-wrap: anywhere; }
+.rst-content pre { overflow-x: auto; max-width: 100%; }
+.rst-content .highlight pre { line-height: 1.5; padding: 1rem; }
+.rst-content .admonition { border-radius: 4px; }
+.rst-content a { text-underline-offset: .15em; }
+.rst-content a:focus-visible { outline: 2px solid var(--sktime-accent); outline-offset: 3px; }
+.rst-content dl.py dt { overflow-wrap: anywhere; max-width: 100%; }
+.rst-content dl.py dt.sig, .rst-content dl.py dt.sig * { white-space: normal; }
+.rst-content dl.py dd { margin-left: 1rem; }
+.rst-content .genindextable { table-layout: fixed; width: 100%; }
+.rst-content .genindextable td { overflow-wrap: anywhere; padding-right: 1rem; }
+.rst-content .modindextable { width: 100%; }
+.rst-content .modindextable td { overflow-wrap: anywhere; }
+.docs-search { display: flex; gap: .5rem; margin: 1.5rem 0; }
+.docs-search input { min-width: 0; flex: 1; padding: .65rem; }
+.docs-search button { background: var(--sktime-accent); color: #fff; padding: .65rem 1rem; border: 0; border-radius: 3px; }
+.rst-content #search-results { overflow-wrap: anywhere; }
+@media (max-width: 768px) {
+  .wy-nav-content { padding: 1.5rem; }
+  .rst-content h1 { font-size: 1.75rem; }
+  .rst-content table.docutils td, .rst-content table.docutils th { padding: .5rem; }
+  .rst-content .wy-table-responsive table.docutils { min-width: 560px; }
+  .rst-content .genindextable td { display: block; width: 100% !important; }
+  .rst-content dl.py dd { margin-left: .5rem; }
+  html.writer-html5 .rst-content dl.field-list { display: block; }
+  .rst-content dl.field-list > dt { float: none; max-width: 100%; padding-left: 0; }
+  .rst-content dl.field-list > dd { margin-left: .5rem; max-width: 100%; overflow-wrap: anywhere; }
 }

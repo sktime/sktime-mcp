@@ -1,0 +1,11 @@
+{% extends "!search.html" %}
+{% block body %}
+  <h1>Search the documentation</h1>
+  <p>Search tool names, data formats and workflow examples.</p>
+  <form class="docs-search" action="{{ pathto('search') }}" method="get" role="search">
+    <label class="sr-only" for="docs-query">Search terms</label>
+    <input id="docs-query" type="search" name="q" value="{{ q|default('', true)|e }}" placeholder="For example: prepare_data" required>
+    <button type="submit">Search</button>
+  </form>
+  {{ super() }}
+{% endblock %}

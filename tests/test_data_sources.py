@@ -83,7 +83,8 @@ class TestExecutorDataIntegration:
             result = executor.load_data_source(config)
 
         assert result["success"]
-        assert result["formatted"] is True
+        assert "formatted" not in result
+        assert result["inspection"]["shape"] == [4, 1]
         assert result["metadata"]["frequency"] == "Integer"
         assert "Auto-formatting failed" not in caplog.text
 

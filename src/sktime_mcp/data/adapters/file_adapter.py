@@ -4,14 +4,14 @@ File adapter for CSV, Excel, and Parquet files.
 Supports loading data from local files with automatic format detection.
 """
 
-import contextlib
 import importlib
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-from ..base import DataSourceAdapter, check_frequency_alignment, coerce_time_index
+from ..base import DataSourceAdapter
+from ..contracts import describe_data, map_index, scientific_type
 
 
 class FileAdapter(DataSourceAdapter):
@@ -66,7 +66,11 @@ class FileAdapter(DataSourceAdapter):
             file_format = self._detect_format(path)
 
         # Load based on format
-        if file_format == "csv":
+        if file_format == "npy":
+            import numpy as np
+
+            df = np.load(path, allow_pickle=False)
+        elif file_format == "csv":
             df = self._load_csv(path)
         elif file_format == "excel":
             df = self._load_excel(path)
@@ -79,57 +83,16 @@ class FileAdapter(DataSourceAdapter):
                 f"Unsupported format: {file_format}. Supported formats: csv, excel, parquet, json"
             )
 
-        # Set time index
-        time_col = self.config.get("time_column")
-        if time_col is not None and time_col not in df.columns:
-            available = ", ".join(repr(c) for c in df.columns)
-            raise ValueError(
-                f"Time column {time_col!r} not found in data. Available columns: [{available}]"
-            )
-        # Keep explicitly unparsed time columns unchanged; otherwise retain
-        # shared integer/timezone handling from the other data adapters.
-        index_warnings = []
-        if self.config.get("parse_dates", True) is not False:
-            df, index_warnings = coerce_time_index(df, time_col)
-        elif time_col is not None:
-            df = df.set_index(time_col)
-
-        # Sort by time
-        df = df.sort_index()
-
-        # Set frequency if specified
-        freq = self.config.get("frequency")
-        if freq:
-            # Refuse a freq whose anchor misses the timestamps: asfreq would
-            # silently replace every row with NaN (F-15)
-            check_frequency_alignment(df.index, freq)
-            with contextlib.suppress(Exception):
-                df = df.asfreq(freq)
-
+        df, notes = map_index(df, self.config)
         self._data = df
-
-        # Determine frequency for metadata
-        if isinstance(df.index, pd.DatetimeIndex):
-            from .pandas_adapter import _safe_infer_freq
-
-            freq_str = str(df.index.freq) if df.index.freq else _safe_infer_freq(df.index)
-        else:
-            freq_str = "Integer"
-
         self._metadata = {
             "source": "file",
             "path": str(path.absolute()),
             "format": file_format,
             "file_size_bytes": path.stat().st_size,
-            "rows": len(df),
-            "columns": list(df.columns),
-            "frequency": freq_str,
-            "start_date": str(df.index.min()),
-            "end_date": str(df.index.max()),
+            **describe_data(df, scientific_type(df, self.config)),
         }
-        if index_warnings:
-            self._metadata["validation"] = {"valid": True, "errors": [], "warnings": index_warnings}
-
+        self._metadata["validation"]["warnings"].extend(notes)
         return df
 
     def _options(self, key: str) -> dict[str, Any]:
@@ -154,6 +117,7 @@ class FileAdapter(DataSourceAdapter):
         suffix = path.suffix.lower()
 
         format_map = {
+            ".npy": "npy",
             ".csv": "csv",
             ".txt": "csv",
             ".tsv": "csv",
@@ -259,11 +223,4 @@ class FileAdapter(DataSourceAdapter):
 
         # Reuse pandas validation logic, forwarding the column config so the
         # target-dtype check applies to file sources too.
-        pandas_adapter = PandasAdapter(
-            {
-                "data": data,
-                "target_column": self.config.get("target_column"),
-                "exog_columns": self.config.get("exog_columns", []),
-            }
-        )
-        return pandas_adapter.validate(data)
+        return PandasAdapter(self.config).validate(data)

@@ -1,6 +1,6 @@
 <!--
 Thanks for contributing a pull request! Please ensure you have taken a look
-at our contribution guide: https://github.com/sktime/sktime-mcp/blob/main/docs/source/dev-guide.md
+at our contribution guide: https://github.com/sktime/sktime-mcp/blob/main/docs/source/developer/contributing.md
 -->
 
 #### Reference Issues/PRs
@@ -39,10 +39,11 @@ Please go through the checklist below. Please feel free to remove points if they
 -->
 
 ##### For all contributions
-- [ ] I've added unit tests and made sure they pass locally (`make check`).
+- [ ] I've run the relevant regression tests, lint and formatting checks; added tests for changed behavior where needed.
 
-- [ ] I've added the tool to the online documentation in `docs/source/`.
-- [ ] I've updated the existing example scripts or provided a new one to showcase how my tool works in `examples/`.
+- [ ] I've updated the relevant tool contracts and documentation in `docs/source/`.
+- [ ] I've checked affected examples in `docs/source/user-guide.md` and the migration guide for interface changes.
+- [ ] For documentation changes, I've built with warnings as errors and checked affected pages in a browser.
 
 
 <!--

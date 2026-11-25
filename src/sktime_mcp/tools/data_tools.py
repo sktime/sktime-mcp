@@ -12,21 +12,25 @@ from sktime_mcp.runtime.executor import get_executor
 logger = logging.getLogger(__name__)
 
 
-def load_data_source_tool(
+def load_data_tool(
     config: dict[str, Any],
     run_async: bool = False,
 ) -> dict[str, Any]:
-    """Load data from any source (pandas, SQL, file, etc.).
+    """Load a memory, file, SQL or HTTP(S) source without implicit repairs.
 
     Can run synchronously (blocking) or asynchronously in the background.
+    Declare scitype/mtype for ambiguous containers and map time, instance and
+    target columns explicitly. Values, variables and row order are preserved.
+    Repairable pandas inputs may load with ``validation.valid=False``; inspect
+    the result and use ``prepare_data`` for deliberate repairs.
 
     Parameters
     ----------
     config : dict
         Data source configuration dictionary. Must contain:
 
-        - ``"type"`` (str) -- source type: ``"pandas"``, ``"sql"``, ``"file"``,
-          or ``"url"``.
+        - ``"type"`` (str) -- source type: ``"memory"`` (alias ``"pandas"``),
+          ``"sql"``, ``"file"`` or ``"url"``.
         - Additional type-specific configuration keys (e.g. ``"data"``,
           ``"path"``, ``"time_column"``, ``"target_column"``).
     run_async : bool, default=False
@@ -60,7 +64,7 @@ def load_data_source_tool(
     Examples
     --------
     # Synchronous Pandas DataFrame Loading
-    >>> load_data_source_tool({
+    >>> load_data_tool({
     ...     "type": "pandas",
     ...     "data": {"date": [...], "value": [...]},
     ...     "time_column": "date",
@@ -68,7 +72,7 @@ def load_data_source_tool(
     ... })
 
     # Asynchronous CSV File Loading
-    >>> load_data_source_tool({
+    >>> load_data_tool({
     ...     "type": "file",
     ...     "path": "/path/to/data.csv",
     ...     "time_column": "date",
@@ -77,18 +81,18 @@ def load_data_source_tool(
     """
     executor = get_executor()
     if not run_async:
-        return executor.load_data_source(config)
+        return executor.load_data(config)
 
     from sktime_mcp.runtime.jobs import get_job_manager, start_background_job
 
     source_type = config.get("type", "unknown")
     scheduled = start_background_job(
         get_job_manager(),
-        lambda job_id: executor.load_data_source_async(config, job_id),
+        lambda job_id: executor.load_data_async(config, job_id),
         job_type="data_loading",
         estimator_handle="",
         dataset_name=source_type,
-        total_steps=3,  # load, validate, format
+        total_steps=3,  # load, validate, register
     )
     if not scheduled["success"]:
         return scheduled
@@ -155,3 +159,7 @@ def release_data_handle_tool(data_handle: str) -> dict[str, Any]:
     """
     executor = get_executor()
     return executor.release_data_handle(data_handle)
+
+
+# Compatibility for Python callers only; MCP clients use load_data.
+load_data_source_tool = load_data_tool

@@ -168,7 +168,7 @@ class TestFormatMultivariate:
         _register(executor, "sp_mv", frame)
         res = transform_data_tool(data_handle="sp_mv", action="format")
         assert res["success"], res
-        assert "Filled 2 missing values (forward/backward fill)" in res["changes_applied"]
+        assert res["changes_applied"]["y"]["missing_filled"] == 2
         out = executor._data_handles[res["data_handle"]]["y"]
         assert not out.isna().values.any()
 
@@ -177,7 +177,7 @@ class TestFormatMultivariate:
         _register(executor, "sp_uv", s)
         res = transform_data_tool(data_handle="sp_uv", action="format")
         assert res["success"], res
-        assert "Filled 1 missing values (forward/backward fill)" in res["changes_applied"]
+        assert res["changes_applied"]["y"]["missing_filled"] == 1
 
 
 # --------------------------------------------------------------------------

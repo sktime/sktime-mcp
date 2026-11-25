@@ -1,8 +1,8 @@
-import os
 import sys
+from pathlib import Path
 
 # Path setup
-sys.path.insert(0, os.path.abspath("../../src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 # Project information
 project = "sktime-mcp"
@@ -67,3 +67,6 @@ autodoc_default_options = {
     "undoc-members": True,
     "exclude-members": "__weakref__",
 }
+
+html_title = "sktime-mcp — development documentation"
+html_theme_options = {"navigation_depth": 3, "collapse_navigation": False}

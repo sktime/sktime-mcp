@@ -1,89 +1,73 @@
-# Core Concepts
+# Core concepts
 
-`sktime-mcp` is a specialized interface that allows you to perform advanced time-series analysis by collaborating with an AI assistant. It bridges the gap between natural language requests and the rigorous execution environment of the `sktime` library.
+## Containers, meanings and roles
 
-## Collaborative Model Discovery
+A **scitype** describes the data's meaning: Series, Panel, Hierarchical, Table,
+Alignment or Proba. An **mtype** describes its physical representation. For example,
+`numpy3D` is a Panel with axes `(instances, variables, time)`; `numpy2D` is a Table.
+A plain 2D NumPy array can also represent a Series as `np.ndarray`, so declare the
+meaning when it is ambiguous.
 
-Instead of requiring you to know the exact names of hundreds of forecasting models, `sktime-mcp` enables a discovery-based workflow. You can ask your assistant to find models based on your data's characteristics:
-- **"Find models for multivariate data"**
-- **"Which estimators handle missing values?"**
-- **"Show me probabilistic forecasters."**
+A data handle contains primary data and optionally an exogenous component. By
+default, all variables are primary data. `target_column` or `target_columns` makes
+the target selection explicit; other columns are features unless an explicit
+`exog_columns` mapping accounts for them. No mapped column is silently discarded.
 
-The system queries the `sktime` registry in real-time, ensuring your assistant always has access to the most up-to-date models and their metadata.
+Use `role="X"` for a standalone feature container, such as a classification panel.
+Pass its handle as `X_handle`. Load labels separately as a Table and pass their
+handle as `y_handle`. A target-only forecasting handle cannot silently become X.
 
-## Stateful Interaction (Handles)
+## Loading is not cleaning
 
-To allow for complex, multi-turn conversations, the server maintains a stateful runtime. This is managed through **Handles**.
+`load_data` reads and describes data. It preserves values, row order, duplicates,
+missing values and the existing container where possible. An explicit index or
+column mapping is a requested representation change, not an inferred cleaning step.
 
-### How it works for you
-When you ask the assistant to load a dataset or create a model, the server creates that object in memory and assigns it a "handle" (a unique ID).
-- You don't need to track these IDs yourself.
-- You can refer to objects naturally: *"Use the model we just created"* or *"Run that forecast on the sales data I loaded earlier."*
-- The assistant manages the handles behind the scenes to ensure your requests are executed on the correct objects.
+A successful load means the source was read and registered. Check
+`validation.valid` to see whether the current data satisfies its sktime contract.
+Repairable pandas inputs can be retained with validation issues so that
+`prepare_data` can sort or remove duplicates explicitly. This does not guarantee
+that any particular estimator supports the data's properties.
 
-### Memory Management
-Because these objects stay in memory to support follow-up questions, you can tell the assistant to "clear the session" or "release the data" when you are finished to free up system resources.
+`prepare_data` creates new handles. Its three actions are `format`, `convert` and
+`split`. It retains the source and rejects operations whose semantics are undefined
+for the selected data. See {doc}`data-guide`.
 
-## Asynchronous Background Jobs
+## Handles and lifecycle
 
-Time-series work can be computationally intensive. If a task (like training a deep learning model) will take a long time, you can ask the assistant to **run it in the background**.
+| Handle | Holds | Lifetime |
+| --- | --- | --- |
+| `data_…` | Loaded, prepared or predicted data | Until release, capacity eviction or server restart |
+| `est_…` | An estimator or pipeline | Until release, eviction or server restart |
+| Job ID | Background task status and result | Until deletion or completed-job cleanup |
 
-Under the hood this is a single flag — `run_async: true` — accepted by the four
-tools that can be slow: `fit`, `predict`, `evaluate`, and `load_data_source`.
-There are no separate "async" tools. The call returns a **job ID** straight away
-instead of a result.
+Handles are process-wide, not isolated per client. Releasing a handle frees the
+server's reference; it does not delete saved files. Preparation reserves capacity
+for its source and outputs before committing a result. A split requires at least
+three data-handle slots.
 
-- This allows you to continue the conversation while the model trains.
-- You can ask for a status update at any time: *"Is the model training finished yet?"* — the assistant checks the job for you.
-- You can also cancel work that is taking too long: *"Stop that training run."*
+## Background jobs and cancellation
 
-```{note}
-Nothing arrives unprompted. The server has no way to push a message to you when a
-job finishes, so the assistant only learns the job is done when it checks. Ask if
-you want to know.
-```
+`load_data`, `fit`, `predict` and `evaluate` accept `run_async=true`. They return a
+job ID immediately; retrieve progress and results with `check_job_status`.
+There are no completion push notifications.
 
-See the {doc}`tool-reference` for the job tools and the exact flag.
+Cancelling a fit stops the awaiting coroutine without joining its worker on the
+server loop. An already-running sktime call can still finish and mutate its
+estimator. The job remains cancelled. Use a fresh estimator handle afterward;
+cancellation is not a rollback of fitted state.
 
-## Safety and Reproducibility
+## Execution and reproducibility
 
-### Execution Model
-The assistant calls named MCP tools with advertised input schemas and tool-specific
-validation. `query_registry` reads the installed sktime registry;
-`describe_component` resolves registered component names without evaluating input
-or importing a client-supplied module. Descriptions include dependency availability,
-missing requirements and an installation hint when applicable.
+Registry descriptions come from the installed sktime version. They report
+capabilities and dependencies, not a guarantee of accuracy or workflow success.
 
-`instantiate` has a different trust boundary: it passes its specification to
-sktime's `craft()`, which evaluates Python expressions. A registry-backed interface
-does not make that expression evaluator a sandbox. Only use specifications from
-trusted clients and review them before execution.
+`instantiate` delegates a trusted craft expression to sktime. `run_command`
+executes a shell command as the server user. Neither interface is a sandbox.
+HTTP/SSE requires a configured bearer token unless explicitly started in insecure
+local-test mode; stdio uses local process permissions.
 
-```{warning}
-`run_command` also executes arbitrary shell commands with the server account's
-privileges. Keep it on ask-every-time in the client, or disable it unless you need
-that capability. Neither a tool schema nor HTTP authentication restricts what an
-authorized call can do on the host.
-```
-
-### Local and HTTP Access
-Local stdio runs as the user who starts the process and needs no HTTP token. The
-HTTP/SSE transport requires `SKTIME_MCP_HTTP_TOKEN` and an
-`Authorization: Bearer <token>` header on protected routes. Only the `/` health
-check is public. HTTP startup without a token is refused unless
-`SKTIME_MCP_HTTP_INSECURE=true` is explicitly enabled for local testing.
-
-Host/origin allowlists protect the HTTP transport as described in the README.
-Authentication controls who can call the server; it does not provide filesystem
-isolation. A container can reduce access when configured with limited mounts and
-permissions. See {doc}`developer/architecture` for the full boundary.
-
-### From Conversation to Code
-`export_code` reconstructs an estimator or pipeline from its stored specification,
-or emits a loader for a saved model. `include_fit_example=true` adds an example for
-a built-in dataset. It does not record the whole conversation, custom data loading,
-cleaning decisions, fitted weights or the Python environment.
-
-Use `save_data` for data and predictions, `save_model` for a fitted estimator, and
-record package versions plus the steps needed to reproduce your analysis. Review
-and run exported code in the environment where you intend to use it.
+`save_data` stores data, `save_model` stores fitted models through MLflow, and
+`export_code` reconstructs a specification or model loader. Code export does not
+capture custom preprocessing, the conversation, or your complete environment.
+Record versions, preparation policies and source data separately.

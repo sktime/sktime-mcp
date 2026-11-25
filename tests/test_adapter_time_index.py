@@ -201,7 +201,7 @@ def test_sql_misaligned_frequency_is_an_error_not_nan(sqlite_url):
 
 
 def test_aligned_frequency_with_gaps_still_applies():
-    """Gaps are fine (asfreq fills them); only off-grid timestamps are rejected."""
+    """A declared frequency validates alignment without silently inserting rows."""
     result = _load(
         {
             "type": "pandas",
@@ -213,14 +213,15 @@ def test_aligned_frequency_with_gaps_still_applies():
     )
 
     assert result["success"] is True, result.get("error")
-    assert result["metadata"]["rows"] == 3
+    assert result["metadata"]["rows"] == 2
 
 
 def test_check_frequency_alignment_ignores_invalid_strings_and_integer_index():
     """Invalid freq strings are PR #451's concern; non-datetime indexes are skipped."""
     from sktime_mcp.data.base import check_frequency_alignment
 
-    check_frequency_alignment(pd.DatetimeIndex(["2020-01-01"]), "not_a_freq")
+    with pytest.raises(ValueError):
+        check_frequency_alignment(pd.DatetimeIndex(["2020-01-01"]), "not_a_freq")
     check_frequency_alignment(pd.Index([1, 2, 3]), "D")
 
 

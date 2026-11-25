@@ -1,86 +1,67 @@
-# Contributing Guide
+# Contributing
 
-Thank you for your interest in contributing to `sktime-mcp`. This project aims to provide a robust MCP layer for the `sktime` ecosystem.
+## Set up
 
-## Development Setup
-
-1. **Fork and Clone**:
-   ```bash
-   git clone https://github.com/sktime/sktime-mcp.git
-   cd sktime-mcp
-   ```
-
-2. **Environment**:
-   We recommend using a virtual environment.
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
-
-3. **Install Dependencies**:
-   Install the package in editable mode with all development and optional dependencies.
-   ```bash
-   pip install -e ".[dev,all]"
-   ```
-
-4. **Pre-commit Hooks**:
-   Enable pre-commit hooks to ensure code quality and formatting.
-   ```bash
-   pre-commit install
-   ```
-
-## Code Quality Standards
-
-We use `ruff` for linting and formatting.
-
-- **Check Linting**: `ruff check .`
-- **Format Code**: `ruff format .`
-
-Ensure all new code is properly type-hinted and includes docstrings following the NumPy format.
-
-## Testing
-
-The project uses `pytest`. All new features should be accompanied by unit or integration tests.
-
-### Running Tests
-```bash
-pytest tests/
-```
-
-### Async Tests
-Since the MCP server is heavily asynchronous, many tests use `pytest-asyncio`. Ensure your test environment is correctly configured.
-
-## Project Structure
-
-- `src/sktime_mcp/server.py`: The main entry point, tool schemas, and tool dispatcher.
-- `src/sktime_mcp/tools/`: Implementation of individual MCP tools, grouped by category.
-- `src/sktime_mcp/runtime/`: State management, handle registry, and job execution.
-- `src/sktime_mcp/registry/`: sktime registry introspection and tag resolution.
-- `src/sktime_mcp/data/`: Data source adapters, loading, and formatting logic.
-
-Pipeline composition has no module of its own — it is expressed in the
-`instantiate` spec string and validated by sktime's `craft()`.
-
-## Documentation
-
-Docs live in `docs/source/` and are built with Sphinx + MyST.
+From the checkout:
 
 ```bash
-sphinx-build -W docs/source docs/_build/html
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev,files,sql]"
 ```
 
-`-W` turns warnings into errors, which is what CI enforces — **the build must stay
-warning-free**. If you add or change a tool, update `docs/source/tool-reference.md`
-in the same PR.
+Use lightweight fixtures by default. No large model download or deep-learning
+installation is required for the data-contract and MCP regression suites.
 
-When writing NumPy-style docstrings, a bullet list needs a blank line before it,
-and each bullet's description must stay on the bullet's own line or be indented to
-align with the bullet text. Otherwise docutils reports "Unexpected indentation"
-and the section renders incorrectly in the API reference.
+## Verify a change
 
-## Pull Request Process
+```bash
+ruff check .
+ruff format --check .
+pytest -q
+sphinx-build -W --keep-going docs/source docs/_build/html
+```
 
-1. Create a new branch for your feature or bug fix.
-2. Ensure all tests pass and linting is clean.
-3. Update the documentation if you are adding or changing tools.
-4. Submit a PR with a clear description of the changes and references to any related issues.
+For a data change, start with:
+
+```bash
+pytest tests/test_general_data.py tests/test_url_limits.py tests/test_job_cancellation.py -q
+```
+
+Core tests use sktime's own example containers and compare behavior across sync and
+async paths. Add tests for preserved values, indexes, X/y roles, group boundaries,
+invalid action combinations, resource limits and real MCP calls. A test that only
+checks an implementation detail is not evidence of a usable workflow.
+
+## Extend the data layer
+
+An adapter reads a source. Shared contracts handle explicit mappings, validation
+and inspection; preparation handles changes to data. Do not infer task semantics
+from the first column, silently resample, or add source-specific repair rules.
+
+Use sktime's public datatype checks and converters. Keep optional-backend support
+conditional on installed dependencies. Document where an operation cannot preserve
+a representation, and return a meaningful error rather than flattening axes.
+
+MCP tools are declared in `server.get_tools`. Loading/preparation schemas are in
+`data/schemas.py`. Add action-specific input validation and update the
+{doc}`../tool-reference`, {doc}`../data-guide` and {doc}`../support-matrix` together.
+
+## Review documentation in the browser
+
+Build with warnings treated as errors, then serve the rendered directory locally:
+
+```bash
+python -m http.server 8765 --bind 127.0.0.1 --directory docs/_build/html
+```
+
+Open `http://127.0.0.1:8765/`. Check every authored page at desktop and narrow widths:
+headings, sidebar links, tables, code blocks, examples, local anchors and search.
+Fix the source and rebuild; a successful Sphinx build alone does not verify the
+rendered layout. CSS must target the configured Read the Docs theme.
+
+## Submit a reviewable change
+
+Explain the concrete behavior change, migration impact and checks run. Keep release
+version/tag/PyPI changes separate unless a release is requested. Existing Python
+compatibility helpers do not imply that retired MCP tool names remain supported.

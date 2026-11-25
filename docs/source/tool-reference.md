@@ -1,7 +1,8 @@
 # MCP Tool Reference
 
 Complete reference for every tool the `sktime-mcp` server exposes to an MCP client.
-The server currently registers **26 tools**.
+The server currently registers **25 tools**. This page describes the unreleased
+source interface; see {doc}`migration` for changes from 0.1.3.
 
 You normally do not call these by hand — the assistant selects them from your
 natural-language request. This page exists so you can see exactly what the
@@ -22,7 +23,7 @@ server holds in memory.
 | Prefix | Created by | Refers to |
 | :--- | :--- | :--- |
 | `est_…` | `instantiate`, `load_model` | An estimator or pipeline |
-| `data_…` | `load_data_source`, `split_data`, `transform_data` | A time series (target `y` plus any exogenous `X`) |
+| `data_…` | `load_data`, `prepare_data`, `predict` | A native data container (primary data plus optional X) |
 
 Handles live in the server process and are lost when it restarts. Use
 `save_data`, `save_model`, or `export_code` to persist anything you need to keep,
@@ -39,7 +40,7 @@ Exactly four tools accept the flag:
 - `fit`
 - `predict`
 - `evaluate`
-- `load_data_source`
+- `load_data`
 
 Behaviour:
 
@@ -250,93 +251,90 @@ background job starts or a dense horizon is allocated. The maximum step in
 
 ## Data
 
-### `load_data_source`
+### `load_data`
 
-Load data into a `data_…` handle. The `config` object must carry a `type` key.
+Read a source and return a handle, bounded inspection and sktime validation.
+Loading preserves values, row order and missing data. See the {doc}`data-guide`
+for complete source and representation examples.
 
-| Argument | Type | Required | Default | Description |
-| :--- | :--- | :---: | :--- | :--- |
-| `config` | object | ✅ | — | Source configuration; must include `type`. |
-| `run_async` | boolean | — | `false` | Load in the background, return a `job_id`. |
+| Argument | Required | Meaning |
+| --- | --- | --- |
+| `config` | Yes | Source and data contract described below |
+| `run_async` | No | Return a background job ID instead of waiting; default false |
 
-Supported `config.type` values:
+`config.type` is `memory` (or the `pandas` alias), `file`, `sql`, or `url`.
+Memory sources need `data`, files need `path`, URLs need `url`, and SQL needs a
+connection and query/table. Optional `scitype`, `mtype`, `role`, `time_column`,
+`instance_columns`, `target_column`/`target_columns`, `exog_columns`, `frequency`,
+and reader options make interpretation explicit. Unknown config keys are rejected.
 
-| `type` | Additional keys |
-| :--- | :--- |
-| `pandas` | `data`, `time_column`, `target_column` |
-| `file` | `path` (CSV / `.xlsx` / Parquet), `time_column`, `target_column` |
-| `sql` | connection and query keys, `time_column`, `target_column` |
-| `url` | `path`/URL, `time_column`, `target_column` |
+Defaults preserve all primary variables. `role="X"` marks a standalone feature
+container. `frequency` validates a grid without resampling. HTTP(S) downloads have
+configurable defaults of 30 seconds and 50 MiB; parsing is outside that deadline.
 
-```json
-{
-  "type": "file",
-  "path": "/data/sales.csv",
-  "time_column": "date",
-  "target_column": "revenue"
-}
-```
+A successful load can contain validation issues in a repairable pandas container.
+Always check `validation.valid` before modelling. The foreground and background
+paths use the same finalization and preserve the same data.
 
 ### `inspect_data`
 
-Rich metadata for a loaded handle: mtype, scitype, shape, column names, dtypes,
-index level names, inferred frequency, cutoff, missing-value count, a 5-row head
-preview, and per-column summary statistics.
+| Argument | Required | Meaning |
+| --- | --- | --- |
+| `data_handle` | Yes | Any loaded, prepared or predicted data handle |
 
-| Argument | Type | Required | Description |
-| :--- | :--- | :---: | :--- |
-| `data_handle` | string | ✅ | Handle to inspect. |
+Read-only inspection returns scitype, mtype, shape, columns/dtypes, index metadata,
+frequency/cutoff where meaningful, bounded preview, statistics and validation.
+Attached features have a separate `exogenous` inspection. Loading and preparation
+already include this information, so an immediate extra call is usually unnecessary.
 
-### `split_data`
+### `prepare_data`
 
-Split a series into temporal train/test handles. Provide **exactly one** of
-`test_size` or `fh`.
+| Argument | Required | Meaning |
+| --- | --- | --- |
+| `data_handle` | Yes | Source retained unchanged |
+| `action` | Yes | `format`, `convert`, or `split` |
 
-| Argument | Type | Required | Description |
-| :--- | :--- | :---: | :--- |
-| `data_handle` | string | ✅ | Handle to split. |
-| `test_size` | number | — | Hold-out fraction, exclusive range `(0.0, 1.0)`. The test count is rounded up, as in sktime, and must leave at least one training observation. Mutually exclusive with `fh`. |
-| `fh` | int or list | — | Integer: hold out that many final steps. List: holds out `max(fh)` steps — `fh=[1,5,10]` reserves 10. Mutually exclusive with `test_size`. |
+Each action accepts only its own options:
 
-Returns `train_handle` and `test_handle`.
+| Action | Options | Result |
+| --- | --- | --- |
+| `format` | `sort_index`, `duplicates`, `missing`, `fill_value`, `frequency`, `regularize`, `index_type` | New handle, inspection, validation and per-component change counts |
+| `convert` | Required `to_mtype`; `component` = `y`, `X` or `both` | New handle using sktime conversion within the same scitype |
+| `split` | Exactly one of `test_size` or `fh`; `axis` = `time` or `instance` | `train_handle`, `test_handle`, counts and inspections |
 
-### `transform_data`
+Formatting defaults preserve data: no sorting, dropping, filling, resampling or
+period conversion. `missing` supports `keep`, `ffill`, `bfill`, `interpolate` and
+`constant`; `duplicates` supports `keep`, `first`, `last`, `drop` and `error`.
+Regularization requires an explicit frequency and obeys `SKTIME_MCP_MAX_PREPARED_ROWS`.
 
-Returns a **new** handle; the input handle is unchanged.
+Temporal splitting uses sktime per series. Integer `fh` holds out that many final
+steps; a list holds out its maximum step. Instance splitting uses a fraction and
+holds out whole series or Table rows in existing order. It is not randomized or
+stratified. A split needs capacity for its source and both outputs.
 
-| Argument | Type | Required | Default | Description |
-| :--- | :--- | :---: | :--- | :--- |
-| `data_handle` | string | ✅ | — | Handle to transform. |
-| `action` | string | — | `format` | `format` or `convert`. |
-| `auto_infer_freq` | boolean | — | `true` | *(format)* Infer and set `DatetimeIndex` frequency. |
-| `fill_missing` | boolean | — | `true` | *(format)* Forward/backward-fill missing values. |
-| `remove_duplicates` | boolean | — | `true` | *(format)* Drop duplicate timestamps, keeping the first. |
-| `to_mtype` | string | — | — | *(convert, required)* Target mtype, e.g. `pd.DataFrame`, `pd.Series`, `np.ndarray`. |
-
-`action="format"` also fills index gaps and reports what it did in `changes_applied`.
+Unsupported action/type combinations fail explicitly. See {doc}`data-guide` for
+policies, group boundaries, leakage considerations and examples.
 
 ### `save_data`
 
-Writes the target `y` and any exogenous `X` behind a handle to one file,
-creating parent directories as needed.
+| Argument | Required | Default | Meaning |
+| --- | --- | --- | --- |
+| `data_handle` | Yes | — | Source data or prediction handle |
+| `path` | Yes | — | Destination file |
+| `format` | No | `csv` | `csv`, `parquet`, `json` or `npy`; the extension does not choose it |
+| `overwrite` | No | `false` | Allow replacement of an existing file |
 
-| Argument | Type | Required | Default | Description |
-| :--- | :--- | :---: | :--- | :--- |
-| `data_handle` | string | ✅ | — | Handle to export. |
-| `path` | string | ✅ | — | Destination path. |
-| `format` | string | — | `csv` | `csv`, `parquet`, or `json`. |
-| `overwrite` | boolean | — | `false` | Refuse to replace an existing file unless explicitly enabled. The response reports whether a file was replaced. |
-
-```{warning}
-The format comes from the `format` argument, **not** the file extension.
-Writing to `out.parquet` with the default `format` produces a CSV.
-```
+Tabular export preserves explicit hierarchy index columns and aligned attached X.
+The response includes `load_config` and round-trip notes. NPY preserves ndarray
+shape/dtype without pickle. Unsupported exports such as ambiguous MultiIndex
+columns fail rather than silently flattening labels. See {doc}`data-guide`.
 
 ### `release_data_handle`
 
-| Argument | Type | Required | Description |
-| :--- | :--- | :---: | :--- |
-| `data_handle` | string | ✅ | Data handle to release. |
+`data_handle` is required. Releases the in-memory record; it does not delete saved
+files. Unknown or evicted handles return a structured error.
+
+## Visualization
 
 ### `plot_series`
 
@@ -346,7 +344,7 @@ and SVG plots as a base64 string in `image_base64`.
 
 | Argument | Type | Required | Default | Description |
 | :--- | :--- | :---: | :--- | :--- |
-| `data_handles` | array of string | ✅ | — | Handles to plot, e.g. the train/test handles from `split_data` and the `prediction_handle` from `predict`. |
+| `data_handles` | array of string | ✅ | — | Handles to plot, e.g. the train/test handles from `prepare_data` and the `prediction_handle` from `predict`. |
 | `labels` | array of string | — | — | Legend label per handle. |
 | `title` | string | — | — | Plot title. |
 | `path` | string | — | — | Save location, e.g. `/tmp/plot.png`. Omit to get the plot back inline. |
@@ -418,9 +416,11 @@ Returns the page plus `total` and `has_more` for pagination.
 | `job_id` | string | ✅ | — | Job to cancel. |
 | `delete` | boolean | — | `false` | Also remove the job record — useful for tidying completed or failed jobs. |
 
-Cancellation is cooperative: the server holds a reference to the running task and
-cancels it, but work already inside a blocking sktime call finishes its current
-step before stopping.
+Cancellation stops the awaiting task without waiting for a running fit worker.
+The server remains responsive and the job stays `cancelled`. Python cannot safely
+force-stop a worker thread: an already-running sktime call may finish and mutate
+its estimator handle after cancellation. Use a fresh estimator handle for subsequent
+work instead of reusing that handle. Cancellation does not roll back estimator state.
 
 ---
 
@@ -442,7 +442,7 @@ It exists so that an assistant can repair its own environment mid-session —
 typically installing an optional dependency that an estimator turned out to need:
 
 ```text
-pip install mlflow
+python -m pip install statsforecast
 ```
 
 | Argument | Type | Required | Description |

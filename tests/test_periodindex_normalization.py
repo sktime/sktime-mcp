@@ -54,11 +54,11 @@ class TestHelper:
 
 
 class TestSeasonalPredictOnHandle:
-    def test_load_gives_period_index(self):
+    def test_load_preserves_datetime_index(self):
         executor = get_executor()
         dh = _load_monthly(executor)
         try:
-            assert isinstance(executor._data_handles[dh]["y"].index, pd.PeriodIndex)
+            assert isinstance(executor._data_handles[dh]["y"].index, pd.DatetimeIndex)
         finally:
             executor._data_handles.pop(dh, None)
 

@@ -33,6 +33,8 @@ _INT_SETTINGS = [
     ("SKTIME_MCP_JOB_CLEANUP_INTERVAL", "job_cleanup_interval_secs", 3600, 1),
     ("SKTIME_MCP_MAX_DATA_HANDLES", "max_data_handles", 50, 1),
     ("SKTIME_MCP_MAX_RESPONSE_TOKENS", "max_response_tokens", 0, 0),
+    ("SKTIME_MCP_URL_TIMEOUT_SECONDS", "url_timeout_seconds", 30, 1),
+    ("SKTIME_MCP_URL_MAX_BYTES", "url_max_bytes", 50 * 1024 * 1024, 1),
 ]
 
 

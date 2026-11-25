@@ -34,11 +34,11 @@ def series_handle():
 
 
 class TestConvertDeadEnds:
-    def test_ndarray_target_rejected(self, series_handle):
+    def test_ndarray_target_supported(self, series_handle):
         ex, dh = series_handle
         res = transform_data_tool(data_handle=dh, action="convert", to_mtype="np.ndarray")
-        assert not res["success"]
-        assert "no time index" in res["error"].lower()
+        assert res["success"], res
+        assert res["inspection"]["mtype"] == "np.ndarray"
 
     def test_series_to_panel_clean_error(self, series_handle):
         ex, dh = series_handle
@@ -71,9 +71,13 @@ class TestDuplicateTimestamps:
         try:
             # previously this hard-failed with "Duplicate time indices found"
             assert res["success"], res
-            # auto-format removed the duplicate
             handle = res["data_handle"]
-            assert not ex._data_handles[handle]["y"].index.duplicated().any()
+            assert ex._data_handles[handle]["y"].index.duplicated().any()
+            prepared = ex.prepare_data(handle, "format", duplicates="first")
+            assert prepared["success"], prepared
+            assert not ex._data_handles[prepared["data_handle"]]["y"].index.duplicated().any()
+            assert len(ex._data_handles[handle]["y"]) == 4
+            ex.release_data_handle(prepared["data_handle"])
         finally:
             ex._data_handles.pop(res.get("data_handle"), None)
 

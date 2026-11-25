@@ -16,6 +16,7 @@ class DataSourceRegistry:
     """
 
     _adapters: dict[str, type[DataSourceAdapter]] = {
+        "memory": PandasAdapter,
         "pandas": PandasAdapter,
         "sql": SQLAdapter,
         "file": FileAdapter,

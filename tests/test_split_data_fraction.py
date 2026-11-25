@@ -60,5 +60,5 @@ def test_fractional_split_rejects_empty_training_set(monkeypatch: pytest.MonkeyP
     result = split_data_tool("source", test_size=0.99)
 
     assert result["success"] is False
-    assert "Test set would be 11 samples" in result["error"]
+    assert "at least one training observation" in result["error"]
     assert list(executor._data_handles) == ["source"]

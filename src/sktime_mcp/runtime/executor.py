@@ -171,6 +171,8 @@ def _to_period_index_if_possible(obj: Any) -> Any:
     idx = obj.index
     if isinstance(idx, pd.PeriodIndex) or not isinstance(idx, pd.DatetimeIndex):
         return obj
+    if idx.tz is not None:
+        return obj
     try:
         if idx.freq is None:
             inferred = pd.infer_freq(idx)
@@ -554,6 +556,8 @@ def _run_evaluate(
     except ImportError:  # pragma: no cover - sktime < 0.29
         from sktime.forecasting.model_selection import ExpandingWindowSplitter
 
+    y = _to_period_index_if_possible(y)
+    X = _to_period_index_if_possible(X)
     horizon = _validate_fh(fh)
     step = _check_step_length(step_length)
     win = _evaluate_window(len(y), cv_folds, initial_window, horizon, step)
@@ -751,7 +755,7 @@ class Executor:
             "error": (
                 f"Data handle '{handle_id}' has no exogenous columns: it holds only the "
                 "target series. Load the source with exog_columns=[...] in "
-                "load_data_source to attach exogenous features, or omit the X argument."
+                "load_data to attach exogenous features, or omit the X argument."
             ),
         }
 
@@ -787,6 +791,11 @@ class Executor:
         the target on itself).
         """
         if source in self._data_handles:
+            if prefer == "y" and self._data_handles[source].get("role") == "X":
+                return {
+                    "success": False,
+                    "error": "This is a feature-only handle; pass it as X_handle, not y_handle",
+                }
             if prefer == "X":
                 X = self._data_handles[source].get("X")
                 if X is None:
@@ -854,7 +863,10 @@ class Executor:
         if y_handle:
             if y_handle not in self._data_handles:
                 return {"success": False, **self.data_handle_missing(y_handle)}
-            y = self._data_handles[y_handle]["y"]
+            resolved_y = self._resolve_source(y_handle)
+            if not resolved_y["success"]:
+                return resolved_y
+            y = resolved_y["data"]
 
         if X_dataset and X_dataset == y_dataset:
             data_res = self.load_dataset(X_dataset)
@@ -1107,7 +1119,7 @@ class Executor:
                 instance.fit(X, y)
             elif is_transformer:
                 if X is not None:
-                    instance.fit(y, X)
+                    instance.fit(X, y)
                 else:
                     instance.fit(y)
             elif obj_type == "detector":
@@ -1129,6 +1141,9 @@ class Executor:
                 else:
                     instance.fit(X)
             else:
+                # Forecaster-only compatibility view; never change a loaded handle.
+                y = _to_period_index_if_possible(y)
+                X = _to_period_index_if_possible(X)
                 # Assume forecaster or similar default.
                 # sktime 1.3 flips the ``remember_data`` config default to
                 # False, after which ``update`` on forecasters without a
@@ -1203,11 +1218,18 @@ class Executor:
                 "error": (
                     "This forecaster was fitted with exogenous data (X) but predict got "
                     "none. Future X covering the forecast horizon is required: pass "
-                    "X_handle (e.g. the test half from split_data) or X_dataset."
+                    "X_handle (e.g. the test half from prepare_data) or X_dataset."
                 ),
             }
 
         dropped_y_warning = None
+        if (
+            obj_type == "forecaster"
+            and X is not None
+            and isinstance(getattr(instance, "_y", None), (pd.Series, pd.DataFrame))
+            and isinstance(instance._y.index, pd.PeriodIndex)
+        ):
+            X = _to_period_index_if_possible(X)
         try:
             if fh is None and not (is_classifier_or_regressor or is_transformer or is_detector):
                 fh = list(range(1, 13))
@@ -1263,7 +1285,7 @@ class Executor:
                         # X route used to work (F-31).
                         if y is not None:
                             predictions = (
-                                instance.transform(y, X) if X is not None else instance.transform(y)
+                                instance.transform(X, y) if X is not None else instance.transform(y)
                             )
                         elif X is not None:
                             predictions = instance.transform(X)
@@ -1537,7 +1559,7 @@ class Executor:
                 "error": f"The {obj_type or 'estimator'} does not have a method '{method_name}'.",
             }
 
-        kwargs = kwargs or {}
+        kwargs = dict(kwargs or {})
 
         try:
             method = getattr(instance, method_name)
@@ -1569,7 +1591,19 @@ class Executor:
                 elif k.endswith("_data_handle") and isinstance(v, str):
                     if v in self._data_handles:
                         actual_key = k.replace("_data_handle", "")
-                        kwargs[actual_key] = self._data_handles[v]["y"]
+                        resolved = self._resolve_source(
+                            v,
+                            prefer="X"
+                            if actual_key == "X"
+                            and getattr(instance, "get_class_tag", lambda *args: "")(
+                                "object_type", ""
+                            )
+                            == "forecaster"
+                            else "primary",
+                        )
+                        if not resolved["success"]:
+                            return resolved
+                        kwargs[actual_key] = resolved["data"]
                         del kwargs[k]
                     else:
                         return {"success": False, "error": f"Unknown data handle: {v}"}
@@ -1628,6 +1662,12 @@ class Executor:
         import copy
 
         snapshot = copy.deepcopy(instance)
+
+        if isinstance(getattr(instance, "_y", None), (pd.Series, pd.DataFrame)) and isinstance(
+            instance._y.index, pd.PeriodIndex
+        ):
+            y = _to_period_index_if_possible(y)
+            X = _to_period_index_if_possible(X)
 
         try:
             kwargs = update_params or {}
@@ -1703,16 +1743,13 @@ class Executor:
                 current_step="Fitting model (this may take a while)...",
             )
 
-            # Run fit in thread pool so it doesn't block async loop
+            # Use the loop's shared pool: exiting a per-fit pool on cancellation
+            # would call shutdown(wait=True) and block the server until fit ends.
+            # Cancelling the await cannot stop an already-running worker thread.
             loop = asyncio.get_running_loop()
-            import concurrent.futures
-
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-
-                def run_fit():
-                    return self.fit(handle_id, y, X=X, fh=fh)
-
-                fit_result = await loop.run_in_executor(pool, run_fit)
+            fit_result = await loop.run_in_executor(
+                None, lambda: self.fit(handle_id, y, X=X, fh=fh)
+            )
 
             if not fit_result["success"]:
                 raise ValueError(fit_result["error"])
@@ -1848,408 +1885,273 @@ class Executor:
                     _DATASET_KINDS[name] = "unavailable"
         return {name: _DATASET_KINDS[name] for name in _get_demo_datasets()}
 
-    def load_data_source(self, config: dict[str, Any]) -> dict[str, Any]:
-        """
-        Load data from any source (pandas, SQL, file, etc.).
-
-        Args:
-            config: Data source configuration with 'type' key
-                Examples:
-                - {"type": "pandas", "data": df, "time_column": "date", "target_column": "value"}
-                - {"type": "sql", "connection_string": "...", "query": "...", "time_column": "date"}
-                - {"type": "file", "path": "/path/to/data.csv", "time_column": "date"}
-
-        Returns:
-            Dictionary with:
-            - success: bool
-            - data_handle: str (handle ID for the loaded data)
-            - metadata: dict (information about the data)
-            - validation: dict (validation results)
-        """
+    def load_data(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Read a source and register it without silently repairing or reducing data."""
         try:
             from sktime_mcp.data import DataSourceRegistry
 
-            # Create adapter
             adapter = DataSourceRegistry.create_adapter(config)
+            return self._finalize_loaded_data(adapter, adapter.load(), config)
+        except Exception as exc:
+            logger.exception("Error loading data")
+            return {"success": False, "error": str(exc), "error_type": type(exc).__name__}
 
-            # Load data
-            data = adapter.load()
+    # Python compatibility only; these names are not advertised MCP tools.
+    load_data_source = load_data
 
-            # Validate
-            is_valid, validation_report = adapter.validate(data)
-            if not is_valid:
-                return {
-                    "success": False,
-                    "error": "Data validation failed",
-                    "validation": validation_report,
-                }
+    async def load_data_foreground_async(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Await source I/O, then register on the server's event-loop thread."""
+        try:
+            from sktime_mcp.data import DataSourceRegistry
 
-            # Convert to sktime format
-            y, X = adapter.to_sktime_format(data)
+            adapter = DataSourceRegistry.create_adapter(config)
+            data = await adapter.load_async()
+            return self._finalize_loaded_data(adapter, data, config)
+        except Exception as exc:
+            logger.exception("Error loading data")
+            return {"success": False, "error": str(exc), "error_type": type(exc).__name__}
 
-            # Update metadata to reflect the target and used columns
-            metadata = adapter.get_metadata().copy()
-            validation_report = _merge_adapter_validation_warnings(validation_report, metadata)
-            metadata["columns"] = [y.name if hasattr(y, "name") and y.name else "target"]
-            if X is not None:
-                metadata["exog_columns"] = list(X.columns)
-            # Inject column dtypes so LLMs can distinguish time index vs target
-            metadata["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
-            # Generate handle
-            data_handle = f"data_{uuid.uuid4().hex[:8]}"
+    load_data_source_foreground_async = load_data_foreground_async
 
-            # Store (enforces max_data_handles limit)
-            self._register_data_handle(
-                data_handle,
-                {
-                    "y": y,
-                    "X": X,
-                    "metadata": metadata,
-                    "validation": validation_report,
-                    "config": config,
-                },
+    def _data_record(self, y, X, *, scitype, config=None, metadata=None, parent=None):
+        from sktime_mcp.data.contracts import describe_data
+
+        inspection = describe_data(y, scitype)
+        if X is not None and (config or {}).get("role") != "X":
+            inspection["exogenous"] = describe_data(X, scitype)
+            inspection["exog_columns"] = inspection["exogenous"]["columns"]
+        meta = {**(metadata or {}), **inspection}
+        if parent:
+            meta["parent_handle"] = parent
+        return {
+            "y": y,
+            "X": X,
+            "scitype": scitype,
+            "role": (config or {}).get("role", "y"),
+            "metadata": meta,
+            "validation": inspection["validation"],
+            "config": config or {},
+        }
+
+    def _data_result(self, handle):
+        record = self._data_handles[handle]
+        return {
+            "success": True,
+            "data_handle": handle,
+            "metadata": record["metadata"],
+            "validation": record["validation"],
+            "inspection": record["metadata"],
+        }
+
+    def _finalize_loaded_data(self, adapter, data, config):
+        from sktime_mcp.data.contracts import scientific_type, validate_data
+
+        scitype = scientific_type(data, config)
+        # Explicit declarations are checked before column selection can change mtype.
+        declared = validate_data(data, scitype, config.get("mtype"))
+        if not declared["valid"] and not isinstance(data, (pd.Series, pd.DataFrame)):
+            raise ValueError(
+                f"Data does not satisfy the declared sktime contract: {declared['errors']}"
             )
+        y, X = adapter.to_sktime_format(data)
+        record = self._data_record(
+            y, X, scitype=scitype, config=config, metadata=adapter.get_metadata()
+        )
+        for warning in adapter.get_metadata().get("validation", {}).get("warnings", []):
+            if warning not in record["validation"]["warnings"]:
+                record["validation"]["warnings"].append(warning)
+        if not declared["valid"]:
+            record["validation"]["warnings"].append(
+                "Source does not yet satisfy its sktime contract. Inspect validation and use prepare_data before modelling."
+            )
+        if self._auto_format_enabled:
+            record["validation"]["warnings"].append(
+                "SKTIME_MCP_AUTO_FORMAT is deprecated and ignored; request explicit prepare_data actions."
+            )
+        handle = f"data_{uuid.uuid4().hex[:8]}"
+        self._register_data_handle(handle, record)
+        return self._data_result(handle)
 
-            # Apply auto-formatting if enabled
-            if getattr(self, "_auto_format_enabled", True):
-                try:
-                    format_result = self.format_data_handle(
-                        data_handle,
-                        auto_infer_freq=True,
-                        fill_missing=True,
-                        remove_duplicates=True,
-                        release_original=True,
-                    )
-                    if format_result["success"]:
-                        return {
-                            "success": True,
-                            "data_handle": format_result["data_handle"],
-                            "metadata": format_result["metadata"],
-                            "validation": validation_report,
-                            "formatted": True,
-                            "changes_made": format_result["changes_made"],
-                        }
-                except Exception as e:
-                    logger.warning(f"Auto-formatting failed: {e}")
-                    # Continue with unformatted data if formatting fails
-
-            # Auto-format disabled or failed: still normalise the stored handle to
-            # a PeriodIndex where possible so seasonal forecasters work (#531).
-            stored = self._data_handles.get(data_handle)
-            if stored is not None:
-                stored["y"] = _to_period_index_if_possible(stored["y"])
-                if stored.get("X") is not None:
-                    stored["X"] = _to_period_index_if_possible(stored["X"])
-
-            _final_meta = adapter.get_metadata().copy()
-            _final_meta["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
-            return {
-                "success": True,
-                "data_handle": data_handle,
-                "metadata": _final_meta,
-                "validation": validation_report,
-            }
-
-        except Exception as e:
-            logger.exception("Error loading data source")
-            return {
-                "success": False,
-                "error": str(e),
-                "error_type": type(e).__name__,
-            }
-
-    async def load_data_source_async(
-        self,
-        config: dict[str, Any],
-        job_id: str | None = None,
+    async def load_data_async(
+        self, config: dict[str, Any], job_id: str | None = None
     ) -> dict[str, Any]:
-        """
-        Async version of load_data_source with job tracking.
-
-        Runs data loading in the background without blocking the
-        MCP server. Progress is tracked via the JobManager.
-
-        Args:
-            config: Data source configuration
-            job_id: Optional job ID (created if not provided)
-
-        Returns:
-            Dictionary with data_handle and metadata
-        """
-        source_type = config.get("type", "unknown")
-
+        """Background load with exactly the same finalization as a foreground load."""
         if job_id is None:
             job_id = self._job_manager.create_job(
                 job_type="data_loading",
                 estimator_handle="",
-                dataset_name=source_type,
-                total_steps=3,
+                dataset_name=config.get("type", "unknown"),
+                total_steps=2,
             )
-
         try:
-            self._job_manager.update_job(job_id, status=JobStatus.RUNNING)
-
-            # Step 1: Load raw data
-            self._job_manager.update_job(
-                job_id, completed_steps=0, current_step=f"Loading data from '{source_type}'..."
-            )
-            await asyncio.sleep(0.01)
-
             from sktime_mcp.data import DataSourceRegistry
 
-            loop = asyncio.get_running_loop()
+            self._job_manager.update_job(
+                job_id, status=JobStatus.RUNNING, current_step="Loading data..."
+            )
             adapter = DataSourceRegistry.create_adapter(config)
-            data = await loop.run_in_executor(None, adapter.load)
-
-            # Step 2: Validate
+            data = await adapter.load_async(job_id=job_id)
             self._job_manager.update_job(
-                job_id, completed_steps=1, current_step="Validating data..."
+                job_id, completed_steps=1, current_step="Validating and registering data..."
             )
-            await asyncio.sleep(0.01)
-
-            is_valid, validation_report = adapter.validate(data)
-            if not is_valid:
-                self._job_manager.update_job(
-                    job_id, status=JobStatus.FAILED, errors=["Data validation failed"]
-                )
-                return {
-                    "success": False,
-                    "error": "Data validation failed",
-                    "validation": validation_report,
-                }
-
-            # Step 3: Convert, store, and format
-            self._job_manager.update_job(
-                job_id, completed_steps=2, current_step="Converting to sktime format..."
-            )
-            await asyncio.sleep(0.01)
-
-            y, X = adapter.to_sktime_format(data)
-
-            metadata = adapter.get_metadata().copy()
-            validation_report = _merge_adapter_validation_warnings(validation_report, metadata)
-            metadata["columns"] = [y.name if hasattr(y, "name") and y.name else "target"]
-            if X is not None:
-                metadata["exog_columns"] = list(X.columns)
-            # Inject column dtypes so LLMs can distinguish time index vs target
-            metadata["dtypes"] = {col: str(dtype) for col, dtype in data.dtypes.items()}
-            data_handle = f"data_{uuid.uuid4().hex[:8]}"
-
-            self._register_data_handle(
-                data_handle,
-                {
-                    "y": y,
-                    "X": X,
-                    "metadata": metadata,
-                    "validation": validation_report,
-                    "config": config,
-                },
-            )
-
-            # auto-format if enabled
-            if getattr(self, "_auto_format_enabled", True):
-                try:
-                    format_result = self.format_data_handle(
-                        data_handle,
-                        auto_infer_freq=True,
-                        fill_missing=True,
-                        remove_duplicates=True,
-                        release_original=True,
-                    )
-                    if format_result["success"]:
-                        data_handle = format_result["data_handle"]
-                        metadata = format_result["metadata"]
-                except Exception as e:
-                    logger.warning(f"Auto-formatting failed: {e}")
-
-            result = {
-                "success": True,
-                "data_handle": data_handle,
-                "metadata": metadata,
-                "validation": validation_report,
-            }
-
-            # mark completed with the data_handle in the result
+            result = self._finalize_loaded_data(adapter, data, config)
             self._job_manager.update_job(
                 job_id,
                 status=JobStatus.COMPLETED,
-                completed_steps=3,
+                completed_steps=2,
                 current_step="Completed",
                 result=result,
             )
-
             return result
+        except Exception as exc:
+            logger.exception("Error in async data loading")
+            self._job_manager.update_job(job_id, status=JobStatus.FAILED, errors=[str(exc)])
+            return {"success": False, "error": str(exc), "job_id": job_id}
 
-        except Exception as e:
-            logger.exception(f"Error in async data loading for job {job_id}")
-            self._job_manager.update_job(job_id, status=JobStatus.FAILED, errors=[str(e)])
+    load_data_source_async = load_data_async
+
+    def prepare_data(self, data_handle: str, action: str, **options) -> dict[str, Any]:
+        """Apply one explicit operation, preserving the source handle and its features."""
+        from copy import deepcopy
+
+        from sktime_mcp.config import settings
+        from sktime_mcp.data.contracts import scientific_type
+        from sktime_mcp.data.preparation import (
+            convert_component,
+            format_component,
+            split_components,
+        )
+
+        allowed = {
+            "format": {
+                "sort_index",
+                "duplicates",
+                "missing",
+                "fill_value",
+                "frequency",
+                "regularize",
+                "index_type",
+            },
+            "convert": {"to_mtype", "component"},
+            "split": {"axis", "test_size", "fh"},
+        }
+        if action not in allowed:
+            return {"success": False, "error": "action must be format, convert or split"}
+        if set(options) - allowed[action]:
             return {
                 "success": False,
-                "error": str(e),
-                "job_id": job_id,
+                "error": f"Unexpected options for {action}: {sorted(set(options) - allowed[action])}",
             }
+        if data_handle not in self._data_handles:
+            return {"success": False, **self.data_handle_missing(data_handle)}
+        source = self._data_handles[data_handle]
+        y, X = source["y"], source.get("X")
+        scitype = source.get("scitype") or scientific_type(y)
+        role = source.get("role", "y")
+        # An X-only handle's primary data is not a second exogenous copy.
+        sidecar = None if role == "X" else X
+        try:
+            if action == "split":
+                if self._max_data_handles < 3:
+                    raise ValueError(
+                        "prepare_data split requires capacity for source and both outputs (at least 3 data handles)"
+                    )
+                pairs, changes = split_components(y, sidecar, scitype, **options)
+            elif action == "format":
+                new_y, changes_y = format_component(
+                    y, scitype, max_rows=settings.max_prepared_rows, **options
+                )
+                new_X, changes_X = None, None
+                if sidecar is not None:
+                    new_X, changes_X = format_component(
+                        sidecar, scitype, max_rows=settings.max_prepared_rows, **options
+                    )
+                    if (
+                        hasattr(new_y, "index")
+                        and hasattr(new_X, "index")
+                        and not new_y.index.equals(new_X.index)
+                    ):
+                        raise ValueError("Preparation would misalign y and X")
+                pairs = [(new_y, new_X)]
+                changes = {"y": changes_y, "X": changes_X}
+            else:
+                to_mtype = options.get("to_mtype")
+                if not to_mtype:
+                    raise ValueError("convert requires to_mtype")
+                component = options.get("component", "y")
+                if component not in {"y", "X", "both"}:
+                    raise ValueError("component must be y, X or both")
+                if component in {"X", "both"} and sidecar is None:
+                    raise ValueError(
+                        "No exogenous component; convert the handle's primary data with component='y'"
+                    )
+                new_y, new_X = deepcopy(y), deepcopy(sidecar)
+                changes = {}
+                if component in {"y", "both"}:
+                    new_y, changes["y"] = convert_component(y, scitype, to_mtype)
+                if component in {"X", "both"}:
+                    new_X, changes["X"] = convert_component(sidecar, scitype, to_mtype)
+                pairs = [(new_y, new_X)]
+            records = []
+            for new_y, new_X in pairs:
+                if role == "X":
+                    new_X = new_y
+                records.append(
+                    self._data_record(
+                        new_y,
+                        new_X,
+                        scitype=scitype,
+                        config={**source.get("config", {}), "role": role},
+                        metadata={"source": "preparation", "action": action},
+                        parent=data_handle,
+                    )
+                )
+            # Reserve all outputs atomically. Never evict the source or one of
+            # the newly returned outputs while creating another output.
+            needed = len(self._data_handles) + len(records) - self._max_data_handles
+            victims = [key for key in self._data_handles if key != data_handle]
+            if needed > len(victims):
+                raise ValueError("Insufficient data-handle capacity to retain source and outputs")
+            for key in victims[: max(0, needed)]:
+                del self._data_handles[key]
+                self._evicted_data.append(key)
+            handles = [f"data_{uuid.uuid4().hex[:8]}" for _ in records]
+            self._data_handles.update(zip(handles, records, strict=True))
+            if action == "split":
+                return {
+                    "success": True,
+                    "action": action,
+                    "train_handle": handles[0],
+                    "test_handle": handles[1],
+                    **changes,
+                    "cutoff": records[0]["metadata"]["cutoff"],
+                    "train": self._data_result(handles[0]),
+                    "test": self._data_result(handles[1]),
+                }
+            return {**self._data_result(handles[0]), "action": action, "changes_applied": changes}
+        except Exception as exc:
+            return {"success": False, "error": str(exc), "error_type": type(exc).__name__}
 
     def format_data_handle(
         self,
-        data_handle: str,
-        auto_infer_freq: bool = True,
-        fill_missing: bool = True,
-        remove_duplicates: bool = True,
-        release_original: bool = False,
-    ) -> dict[str, Any]:
-        """
-        Format data associated with a handle.
-
-        The input handle is preserved unless ``release_original`` is True —
-        that flag is for internal auto-format-on-load, where the raw handle
-        was never exposed to the caller.
-        """
-        if data_handle not in self._data_handles:
-            return {"success": False, **self.data_handle_missing(data_handle)}
-
-        data_info = self._data_handles[data_handle]
-        y = data_info["y"].copy()
-        X = data_info["X"].copy() if data_info["X"] is not None else None
-
-        changes_made = {
-            "frequency_set": False,
-            "duplicates_removed": 0,
-            "missing_filled": 0,
-            "gaps_filled": 0,
+        data_handle,
+        auto_infer_freq=True,
+        fill_missing=True,
+        remove_duplicates=True,
+        release_original=False,
+    ):
+        """Legacy Python helper; MCP callers use explicit prepare_data options."""
+        options = {
+            "sort_index": True,
+            "missing": "ffill" if fill_missing else "keep",
+            "duplicates": "first" if remove_duplicates else "keep",
         }
-        original_frequency = data_info["metadata"].get("frequency")
-
-        # 1. Remove duplicates
-        if remove_duplicates and y.index.duplicated().any():
-            n_duplicates = int(y.index.duplicated().sum())
-            y = y[~y.index.duplicated(keep="first")]
-            if X is not None:
-                X = X[~X.index.duplicated(keep="first")]
-            changes_made["duplicates_removed"] = n_duplicates
-
-        # 2. Sort by index (report it, like the other repairs — NB-08)
-        if not y.index.is_monotonic_increasing:
-            changes_made["sorted"] = True
-        y = y.sort_index()
-        if X is not None:
-            X = X.sort_index()
-
-        # 3. Infer and set frequency. Only a DatetimeIndex without a freq needs
-        # this (a PeriodIndex always carries one). Every candidate frequency is
-        # verified against the observed timestamps before reindexing: reindexing
-        # onto a mis-anchored range (monthly data on the 15th -> "MS", weekly
-        # Mondays -> "W" = W-SUN) used to replace every value with NaN (#556).
-        freq_to_set: Any = None
-        if (
-            auto_infer_freq
-            and isinstance(y.index, pd.DatetimeIndex)
-            and y.index.freq is None
-            and len(y) > 1
-        ):
-            most_common_diff = y.index.to_series().diff().dropna().mode()[0]
-            full_range = None
-            rejected: Any = None
-            for candidate in _candidate_frequencies(y.index, most_common_diff):
-                try:
-                    candidate_range = pd.date_range(
-                        start=y.index.min(), end=y.index.max(), freq=candidate
-                    )
-                except (ValueError, TypeError):
-                    continue
-                if y.index.isin(candidate_range).all():
-                    freq_to_set = candidate
-                    full_range = candidate_range
-                    break
-                if rejected is None:
-                    rejected = candidate
-
-            if full_range is not None:
-                # index is a subset of full_range, so this never drops a value
-                # and n_gaps is never negative.
-                n_gaps = int(len(full_range) - len(y))
-                y = y.reindex(full_range)
-                if X is not None:
-                    X = X.reindex(full_range)
-                changes_made["gaps_filled"] = n_gaps
-                changes_made["frequency_set"] = True
-                months = _anchored_months(freq_to_set)
-                if months is not None:
-                    changes_made["frequency"] = "M" if months == 1 else f"{months}M"
-                    changes_made["frequency_warning"] = (
-                        f"Monthly timestamps fall on day {y.index.min().day} of the month, "
-                        f"which pandas cannot express as a frequency; the index was aligned "
-                        f"to monthly periods ('{changes_made['frequency']}'). "
-                        f"Values were kept; {n_gaps} gap(s) filled."
-                    )
-                else:
-                    changes_made["frequency"] = getattr(freq_to_set, "freqstr", freq_to_set)
-            elif rejected is not None:
-                changes_made["frequency_warning"] = (
-                    f"Inferred frequency '{getattr(rejected, 'freqstr', rejected)}' "
-                    f"(most common interval {most_common_diff}) does not align with the "
-                    f"observed timestamps. Reindexing skipped; the series was left unchanged."
-                )
-            else:
-                changes_made["frequency_warning"] = (
-                    f"Could not determine frequency from most common interval "
-                    f"({most_common_diff}). Reindexing skipped."
-                )
-
-        # 4. Fill missing values
-        if fill_missing and y.isna().any(axis=None):
-            n_missing = (
-                int(y.isna().sum().sum()) if isinstance(y, pd.DataFrame) else int(y.isna().sum())
-            )
-            y = y.ffill().bfill()
-            if X is not None:
-                X = X.ffill().bfill()
-            changes_made["missing_filled"] = n_missing
-
-        # 5. Set frequency explicitly on index (reindex already did; ffill/bfill keep it)
-        if freq_to_set is not None and isinstance(y.index, pd.DatetimeIndex):
-            y.index.freq = freq_to_set
-            if X is not None:
-                X.index.freq = freq_to_set
-
-        # 6. Normalise a regular DatetimeIndex to PeriodIndex so seasonal
-        # forecasters can predict on handle-loaded data (#531).
-        y = _to_period_index_if_possible(y)
-        if X is not None:
-            X = _to_period_index_if_possible(X)
-
-        # Generate new handle
-        new_handle = f"data_{uuid.uuid4().hex[:8]}"
-
-        new_data = {
-            "y": y,
-            "X": X,
-            "metadata": {
-                **data_info["metadata"],
-                "formatted": True,
-                "frequency": _get_index_frequency_metadata(
-                    y.index,
-                    fallback=changes_made.get("frequency") or original_frequency,
-                ),
-                "rows": len(y),
-                "start_date": str(y.index.min()),
-                "end_date": str(y.index.max()),
-                "missing_values": _missing_values_report(y, X),
-            },
-            "validation": data_info.get("validation", {}),
-            "config": data_info.get("config", {}),
-            "original_handle": data_handle,
-        }
-        self._register_data_handle(new_handle, new_data)
-
-        if release_original and data_handle in self._data_handles:
-            del self._data_handles[data_handle]
-
-        return {
-            "success": True,
-            "data_handle": new_handle,
-            "metadata": new_data["metadata"],
-            "changes_made": changes_made,
-        }
+        result = self.prepare_data(data_handle, "format", **options)
+        if result.get("success"):
+            result["changes_made"] = result["changes_applied"]["y"]
+            if release_original:
+                self._data_handles.pop(data_handle, None)
+        return result
 
     def list_data_handles(self) -> dict[str, Any]:
         """

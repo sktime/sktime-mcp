@@ -67,11 +67,11 @@ class Settings:
     @property
     def auto_format(self) -> bool:
         """
-        Whether to automatically format time series data upon load.
+        Deprecated legacy preference; loading ignores it and warns when enabled.
         Env Var: SKTIME_MCP_AUTO_FORMAT
-        Default: True
+        Default: False
         """
-        return os.environ.get("SKTIME_MCP_AUTO_FORMAT", "true").lower() == "true"
+        return os.environ.get("SKTIME_MCP_AUTO_FORMAT", "false").lower() == "true"
 
     # -- Job Management --
     @property
@@ -94,6 +94,16 @@ class Settings:
 
     # -- Memory & Response Budgets --
     @property
+    def url_timeout_seconds(self) -> int:
+        """Total URL download deadline; SKTIME_MCP_URL_TIMEOUT_SECONDS (default 30)."""
+        return _get_int_env("SKTIME_MCP_URL_TIMEOUT_SECONDS", 30, minimum=1)
+
+    @property
+    def url_max_bytes(self) -> int:
+        """Maximum downloaded bytes; SKTIME_MCP_URL_MAX_BYTES (default 50 MiB)."""
+        return _get_int_env("SKTIME_MCP_URL_MAX_BYTES", 50 * 1024 * 1024, minimum=1)
+
+    @property
     def max_data_handles(self) -> int:
         """
         Maximum number of active data handles to retain in memory.
@@ -101,6 +111,11 @@ class Settings:
         Default: 50 (minimum: 1)
         """
         return _get_int_env("SKTIME_MCP_MAX_DATA_HANDLES", 50, minimum=1)
+
+    @property
+    def max_prepared_rows(self) -> int:
+        """Maximum rows created by explicit frequency expansion (default 1000000)."""
+        return _get_int_env("SKTIME_MCP_MAX_PREPARED_ROWS", 1_000_000, minimum=1)
 
     @property
     def max_horizon(self) -> int:

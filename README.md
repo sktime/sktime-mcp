@@ -1,229 +1,33 @@
 # sktime-mcp
 
-**[Read the Documentation](https://sktime-mcp.readthedocs.io/en/latest/)** | **[PyPI Package](https://pypi.org/project/sktime-mcp/)**
+A Model Context Protocol server for discovering and running sktime components.
+Models, datasets and background jobs stay in a shared runtime so an assistant can
+continue a workflow across tool calls.
 
+[Documentation](https://sktime-mcp.readthedocs.io/en/latest/) ·
+[PyPI](https://pypi.org/project/sktime-mcp/) ·
+[Tool reference](docs/source/tool-reference.md) ·
+[Support matrix](docs/source/support-matrix.md)
 
-**MCP (Model Context Protocol) layer for sktime - Registry-Driven for LLMs**
+> **Development interface:** this checkout exposes 25 tools, including `load_data`
+> and `prepare_data`. These changes are unreleased; the published package version
+> remains 0.1.3. See the [migration guide](docs/source/migration.md) before updating
+> an existing client.
 
-A semantic engine that exposes sktime's native registry and semantics to Large Language Models, enabling them to:
+## Install and connect
 
-- 🔍 **Discover** valid estimators
-- 🧠 **Reason** about estimator capabilities  
-- 🔗 **Compose** compatible estimators
-- ⚡ **Execute** real sktime workflows on real data
-
-## 🎯 Design Philosophy
-
-This MCP is **not** just documentation or static code analysis. It is a **semantic engine** for programmatic model usage.
-
-### Key Principles
-
-1. **sktime as Source of Truth** - Model metadata comes from `all_estimators`, estimator tags, and sktime's API contracts.
-
-2. **Registry-First** - Instead of `File → Class → Infer Relationships`, we do `Registry → Semantics → Execution`.
-
-3. **Minimal MCP Surface** - Exposes only what an LLM needs: Discovery, Description, Instantiation, Execution, and model persistence.
-
-## 🛠️ Installation
-
-### Zero-install via uvx (recommended)
-
-If you have [uv](https://github.com/astral-sh/uv) installed, no separate installation step is needed. Just update your MCP client config (see [Connecting from an LLM Client](#connecting-from-an-llm-client) below) and `uvx` will handle the rest automatically.
-
-```bash
-# Verify uv is available
-uvx sktime-mcp --help
-```
-
-### pip
-
-```bash
-pip install sktime-mcp
-
-# With optional extras (SQL, forecasting models, file formats)
-pip install "sktime-mcp[all]"
-```
-
-### Development installation
-
-```bash
-git clone https://github.com/sktime/sktime-mcp
-cd sktime-mcp
-python3 -m pip install -e ".[dev]"
-```
-
-### 🐳 Docker
-
-Run without installing anything locally (only Docker required):
-
-```bash
-# Build the image
-docker build -t sktime-mcp .
-
-# Run the MCP server (stdio transport)
-docker run -i sktime-mcp
-```
-
-Or use Docker Compose:
-
-```bash
-docker compose build
-docker compose run sktime-mcp
-```
-
-**Claude Desktop** — use Docker as the MCP server command:
-
-```json
-{
-  "mcpServers": {
-    "sktime": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "sktime-mcp"]
-    }
-  }
-}
-```
-
-Environment variables can be passed at runtime:
-
-```bash
-docker run -i -e SKTIME_MCP_LOG_LEVEL=DEBUG sktime-mcp
-```
-
-For a more detailed first-time setup flow, including MCP server verification and troubleshooting, see [Beginner Setup](#-beginner-setup-firsttime-users).
-
-## 🧭 Beginner Setup (First‑Time Users)
-
-If you are new to sktime‑mcp or to MCP‑based workflows, this section provides a minimal starting point to help you verify that your setup is working correctly.
-
-### What is MCP?
-The Model Context Protocol (MCP) allows Large Language Models (LLMs) to discover, reason about, and execute sktime workflows programmatically. This project exposes sktime’s estimator registry and semantics in a structured way so that LLMs can compose and run real time-series pipelines. Execution uses the server account's privileges; tool schemas do not provide a sandbox.
-
-### Prerequisites
-- Python 3.10 or newer
-- A working Python virtual environment (recommended)
-- `pip` installed
-
-### macOS / Unix-like first-time setup
-
-For macOS or Unix-like shells, create an isolated virtual environment before installing the package:
+For this source checkout:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install sktime-mcp
-```
-
-For development (if you want to modify the source):
-
-```bash
 python -m pip install -e ".[dev]"
+python -m sktime_mcp.server --version
 ```
 
-**Verify that the MCP server starts:**
+Point your MCP client at that environment. Clients using an `mcpServers` object
+can use:
 
-```bash
-sktime-mcp
-```
-
-If the `sktime-mcp` console command is not found (e.g. the script was not placed on your `PATH`), use the module fallback instead — this is also the recommended form when an MCP client needs to target a specific Python environment:
-
-```bash
-python -m sktime_mcp.server
-```
-
-**Common first-time issues:**
-
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| `command not found: sktime-mcp` | Scripts directory not on `PATH` | Run `python -m sktime_mcp.server` or add `.venv/bin` to your `PATH` |
-| `ModuleNotFoundError: sktime_mcp` | Package not installed in the active environment | Confirm `.venv` is active (`which python`) and re-run `pip install sktime-mcp` |
-| `pip: command not found` | System `pip` not available | Use `python -m pip` instead of bare `pip` |
-| Wrong Python version selected | Multiple Python installations | Invoke `python3 -m venv .venv` explicitly and always use `python` inside the activated environment |
-
-### Minimal Setup Check
-
-After completing the steps above, confirm the server starts with `sktime-mcp`. See the [macOS / Unix-like first-time setup](#macos--unix-like-first-time-setup) section for the fallback command and common error solutions.
-
-> **Note:** On Windows, the `sktime-mcp` command may be installed to a directory
-> not on your `PATH` (e.g., `%APPDATA%\Python\Python3xx\Scripts`). Either add
-> that directory to your `PATH` or use `python -m sktime_mcp.server` instead.
-
-
-## 🚀 Quick Start
-
-### Running the MCP Server
-#### Standard Stdio Mode (for MCP Clients)
-```bash
-sktime-mcp
-```
-
-#### HTTP/SSE Mode via FastAPI (for Web Browsers or ChatGPT)
-To expose the MCP server as a REST API over SSE (Server-Sent Events) for direct consumption:
-```bash
-export SKTIME_MCP_HTTP_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-PYTHONPATH=src .venv/bin/uvicorn sktime_mcp.app:app --host 127.0.0.1 --port 8001
-```
-This exposes standard SSE on `/sse` and message passing on `/messages/`. Every request except the `/` health check must send `Authorization: Bearer <token>`. The server refuses to start without `SKTIME_MCP_HTTP_TOKEN` unless you set `SKTIME_MCP_HTTP_INSECURE=true`, which is only meant for local testing.
-
-> **Warning:** the server includes `run_command`, which runs arbitrary shell commands on the host. Anyone holding the token has full control of the machine. Do not expose it publicly without a token, and keep the token secret.
-
-> **Note for ChatGPT Web Users:** ChatGPT runs in the cloud and cannot connect to `http://127.0.0.1` (you will get an "Unsafe URL" error). You must expose your local server to the internet using a secure tunnel like [ngrok](https://ngrok.com/):
-> ```bash
-> ngrok http 8001
-> ```
-> Requests through ngrok arrive with the ngrok hostname, so add it to the allowed hosts before starting the server, e.g. `SKTIME_MCP_HTTP_ALLOWED_HOSTS="<your-ngrok-id>.ngrok-free.app"`. Then use the provided `https://<your-ngrok-id>.ngrok-free.app/sse` URL in ChatGPT.
-
-### Configuration (Environment Variables)
-
-You can configure the server's behavior at runtime using environment variables:
-
-- `SKTIME_MCP_MAX_RESPONSE_TOKENS`: Maximum tokens allowed per tool response (e.g., `10000`). If a response exceeds this limit, the largest lists/dicts/strings in the result are capped (keeping the first entries) so the response stays valid JSON, and a `truncated` object describes what was cut. Set to `0` (default) for unlimited.
-- `SKTIME_MCP_LOG_LEVEL`: Server logging verbosity level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Defaults to `WARNING`.
-- `SKTIME_MCP_AUTO_FORMAT`: Enables or disables automatic time-series formatting during data loading.
-- `SKTIME_MCP_JOB_MAX_AGE_HOURS`: Hours a finished background job is kept before cleanup (minimum `1`; running and pending jobs are never pruned). Defaults to `24`.
-- `SKTIME_MCP_MAX_HORIZON`: Maximum forecast horizon (steps) a `predict`, `split_data`, or `evaluate` call may request; larger horizons are rejected before any computation. Defaults to `10000`.
-
-### Connecting from an LLM Client
-
-The server uses stdio transport by default, compatible with Claude Desktop, Claude Code, and other MCP clients.
-
-**Claude Desktop** — add to your config file:
-
-| Platform | Config path |
-|----------|-------------|
-| macOS    | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| Linux    | `~/.config/claude/claude_desktop_config.json` |
-| Windows  | `%APPDATA%\Claude\claude_desktop_config.json` |
-
-**With uvx (recommended — no prior install needed):**
-```json
-{
-  "mcpServers": {
-    "sktime": {
-      "command": "uvx",
-      "args": ["sktime-mcp"]
-    }
-  }
-}
-```
-
-**With optional extras:**
-```json
-{
-  "mcpServers": {
-    "sktime": {
-      "command": "uvx",
-      "args": ["sktime-mcp[forecasting,sql]"]
-    }
-  }
-}
-```
-
-**With pip-installed package:**
-
-If installed in a virtual environment, supply the absolute path to that environment's Python binary:
 ```json
 {
   "mcpServers": {
@@ -234,122 +38,101 @@ If installed in a virtual environment, supply the absolute path to that environm
   }
 }
 ```
-On Windows:
-```json
-{
-  "mcpServers": {
-    "sktime": {
-      "command": "C:\\path\\to\\.venv\\Scripts\\python.exe",
-      "args": ["-m", "sktime_mcp.server"]
-    }
-  }
-}
+
+For the published release, use `pip install sktime-mcp` or `uvx sktime-mcp`.
+Optional extras include `files`, `sql`, `forecasting`, `dl`, and `dev`.
+MLflow is already a core dependency; the `mlflow` extra repeats it for compatibility.
+See [installation](docs/source/installation.md) for the dependencies your workflow needs.
+
+To run a container built from this checkout:
+
+```bash
+docker build -t sktime-mcp .
+docker run --rm -i sktime-mcp
 ```
 
-If the console script is on your system `PATH`:
-```json
-{
-  "mcpServers": {
-    "sktime": {
-      "command": "sktime-mcp"
-    }
-  }
-}
-```
+## The 25 tools
 
-## ⚙️ Configuration
+| Workflow | Tools |
+| --- | --- |
+| Discover | `query_registry`, `describe_component`, `list_available_data` |
+| Work with data | `load_data`, `inspect_data`, `prepare_data`, `save_data` |
+| Create and run components | `instantiate`, `fit`, `predict`, `update`, `get_fitted_params`, `call_method` |
+| Evaluate and visualize | `evaluate`, `plot_series` |
+| Reproduce and persist | `export_code`, `save_model`, `load_model` |
+| Manage handles | `list_handles`, `release_handle`, `release_data_handle` |
+| Manage jobs | `list_jobs`, `check_job_status`, `cancel_job` |
+| Run a command | `run_command` |
 
-The server can be configured via environment variables:
+Loading, fitting, prediction and evaluation accept `run_async=true`; poll the
+returned job ID. Handles are process-wide and disappear on restart or eviction.
 
-| Environment Variable | Description | Default |
-|----------------------|-------------|---------|
-| `SKTIME_MCP_LOG_LEVEL` | Logging verbosity (e.g. `INFO`, `DEBUG`, `WARNING`). `INFO` logs redacted tool arguments and a one-line result summary; `DEBUG` adds the redacted result body. Credentials (passwords, tokens, API keys) are masked and long strings / inline data are truncated before logging. | `"WARNING"` |
-| `SKTIME_MCP_LOG_PATH` | Optional file path to output logs to in addition to stderr | (None) |
-| `SKTIME_MCP_AUTO_FORMAT` | Automatically format time series data on load (`true`/`false`) | `"true"` |
-| `SKTIME_MCP_JOB_MAX_AGE_HOURS` | Hours a finished job is kept; minimum `1`; running/pending jobs are never removed | `24` |
-| `SKTIME_MCP_JOB_CLEANUP_INTERVAL` | Seconds between cleanup checks; minimum `1` | `3600` |
-| `SKTIME_MCP_HTTP_TOKEN` | Bearer token required by the HTTP/SSE app | (None, app refuses to start) |
-| `SKTIME_MCP_HTTP_INSECURE` | Allow the HTTP/SSE app to start without a token (`true`/`false`) | `"false"` |
-| `SKTIME_MCP_HTTP_ALLOWED_HOSTS` | Comma-separated `Host` header values the HTTP/SSE app accepts (DNS-rebinding protection) | `"127.0.0.1,127.0.0.1:*,localhost,localhost:*"` |
-| `SKTIME_MCP_HTTP_ALLOWED_ORIGINS` | Comma-separated `Origin` values the HTTP/SSE app accepts, also used as the CORS allow-list | (None) |
-| `SKTIME_MCP_MAX_HORIZON` | Maximum forecast horizon (steps) for `predict` / `split_data` / `evaluate`; larger requests are rejected up front | `10000` |
-| `SKTIME_MCP_MAX_DATA_HANDLES` | Maximum data handles before eviction; minimum `1` | `50` |
-| `SKTIME_MCP_MAX_RESPONSE_TOKENS` | Response token budget; `0` means unlimited | `0` |
+## Data without silent repair
 
-Integer settings are validated on every read. Invalid values produce a warning and use the default.
+`load_data` reads memory/inline containers, files, SQL or HTTP(S) URLs. It uses
+sktime's data contracts and preserves values, row order, missing observations,
+duplicates and multiple variables. Declare time, target and feature roles explicitly.
 
-## 📚 Available Tools
+`prepare_data` combines three operations:
 
-The full tool reference is in the project documentation: https://sktime-mcp.readthedocs.io/en/latest/
+- **format:** explicit sorting, duplicate handling, missing-value policy and bounded frequency expansion;
+- **convert:** sktime mtype conversion within a scitype, preserving unselected X/y components;
+- **split:** temporal holdouts per series or explicit whole-instance/Table-row holdouts.
 
-| Need | Tool options | Rough explanation |
+Every preparation creates new handles and retains its source. Loads and preparation
+results include bounded inspection and validation. Read the
+[data guide](docs/source/data-guide.md) for Series, Panel, Hierarchical, Table,
+Alignment and Proba representation support and operation-specific limits.
+
+Forecasting has the broadest end-to-end coverage. Custom classification can use
+feature panels and separate labels. `evaluate` remains Series-forecasting-specific;
+plotting, export and native-method lifecycle support are not uniform across tasks.
+The [support matrix](docs/source/support-matrix.md) records these boundaries.
+
+## Configuration
+
+| Variable | Default | Purpose |
 | --- | --- | --- |
-| Discover what sktime can do | `list_available_data`, `query_registry`, `describe_component` | Find demo data, estimators, tags, and component details. |
-| Bring data into the session | `load_data_source`, `inspect_data`, `transform_data`, `split_data`, `save_data` | Load files, inline data, SQL, or URLs into handles; inspect, clean, split, and persist them. |
-| Build and run models | `instantiate`, `fit`, `predict`, `update`, `get_fitted_params`, `call_method` | Create sktime estimators or pipelines, fit them, forecast, update, or call native methods. |
-| Evaluate and reproduce | `evaluate`, `export_code`, `save_model`, `load_model` | Cross-validate, generate Python code, and persist fitted models. |
-| Manage runtime state | `list_handles`, `release_handle`, `release_data_handle`, `list_jobs`, `check_job_status`, `cancel_job` | See what is in memory, clean it up, and track async work. |
+| `SKTIME_MCP_LOG_LEVEL` | `WARNING` | Logging verbosity |
+| `SKTIME_MCP_LOG_PATH` | unset | Optional log file |
+| `SKTIME_MCP_URL_TIMEOUT_SECONDS` | `30` | Total HTTP(S) download deadline |
+| `SKTIME_MCP_URL_MAX_BYTES` | `52428800` | 50 MiB downloaded/decoded size limit |
+| `SKTIME_MCP_MAX_PREPARED_ROWS` | `1000000` | Frequency-expansion row limit |
+| `SKTIME_MCP_MAX_DATA_HANDLES` | `50` | Retained data handles |
+| `SKTIME_MCP_MAX_HORIZON` | `10000` | Forecast/holdout horizon limit |
+| `SKTIME_MCP_MAX_RESPONSE_TOKENS` | `0` | Response budget; zero disables the cap |
+| `SKTIME_MCP_JOB_MAX_AGE_HOURS` | `24` | Retention for finished jobs |
+| `SKTIME_MCP_JOB_CLEANUP_INTERVAL` | `3600` | Cleanup interval in seconds |
+| `SKTIME_MCP_HTTP_TOKEN` | unset | Required HTTP/SSE bearer token |
+| `SKTIME_MCP_HTTP_INSECURE` | `false` | Explicit unauthenticated local-test mode |
+| `SKTIME_MCP_HTTP_ALLOWED_HOSTS` | `127.0.0.1,127.0.0.1:*,localhost,localhost:*` | Accepted hosts |
+| `SKTIME_MCP_HTTP_ALLOWED_ORIGINS` | unset | Allowed browser origins |
 
-The practical mental model is simple: prompts create tool calls, tool calls create handles, and handles let later prompts continue the workflow.
+Integer settings are validated; invalid values fall back to their defaults.
+`SKTIME_MCP_AUTO_FORMAT` is deprecated and ignored: preparation is explicit.
+URL parsing is outside the download deadline. These settings are not universal
+memory, SQL-query or estimator runtime limits.
 
-## 🔄 Example LLM Flows
+## Execution boundary
 
-See the [User Guide](https://sktime-mcp.readthedocs.io/en/latest/user-guide.html) for end-to-end workflow examples, including:
-- Discovering sktime coverage
-- Retail forecasting and saving results
-- Cleaning messy business data
-- Time-series classification
+Stdio runs under local process permissions. HTTP/SSE requires bearer authentication
+unless insecure mode is explicitly enabled. The health endpoint is public.
+Craft specifications and `run_command` execute with the server account's privileges;
+they are not sandboxed. Use trusted clients and appropriate process/container access.
 
-## 📁 Project Structure
+Cancelling a fit no longer blocks the server while its worker finishes. Python
+cannot safely kill that running thread; the estimator may still change after
+cancellation. Use a fresh estimator for subsequent work.
 
-```
-sktime-mcp/
-├── src/sktime_mcp/
-│   ├── server.py           # MCP server entry point
-│   ├── registry/           # Registry interface & tag resolver
-│   ├── composition/        # Pipeline composition validator
-│   ├── runtime/            # Execution engine, handle & job management
-│   ├── data/               # Data adapters (file, pandas, SQL, URL)
-│   └── tools/              # MCP tool implementations
-├── docs/                   # Sphinx documentation source
-├── examples/               # Usage examples
-├── tests/                  # Test suite
-├── Dockerfile              # Multi-stage container build
-├── docker-compose.yml      # Compose service definition
-└── .dockerignore           # Docker build context filter
-```
-
-## 🧪 Running Tests
+## Develop and verify
 
 ```bash
-pytest tests/
-```
-
-## Local Quality Checks
-
-Run standardized local checks before raising a PR:
-
-```bash
-make check
-```
-
-Auto-fix formatting and fixable lint issues:
-
-```bash
-make format-fix
-```
-
-If `make` is unavailable (common on Windows), run the equivalent commands:
-
-```bash
-ruff format --check .
 ruff check .
-pytest
+ruff format --check .
+pytest -q
+sphinx-build -W --keep-going docs/source docs/_build/html
 ```
 
-### Pre-Commit Hooks (Recommended)
-To ensure your code meets quality standards before pushing, install the pre-commit hooks:
-```bash
-make install-hooks
-```
-This will automatically run Ruff and Pytest on your code every time you make a commit.
+Read [contributing](docs/source/developer/contributing.md) for source layout,
+contract tests and browser review. The examples use small data and lightweight
+models; deep-learning dependencies are unnecessary.

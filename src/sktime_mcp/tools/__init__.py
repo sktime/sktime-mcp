@@ -3,6 +3,7 @@
 from sktime_mcp.tools.codegen import export_code_tool
 from sktime_mcp.tools.data_tools import (
     load_data_source_tool,
+    load_data_tool,
     release_data_handle_tool,
 )
 from sktime_mcp.tools.describe_component import (
@@ -30,6 +31,7 @@ from sktime_mcp.tools.job_tools import (
 )
 from sktime_mcp.tools.list_available_data import list_available_data_tool
 from sktime_mcp.tools.plotting import plot_series_tool
+from sktime_mcp.tools.prepare_data import prepare_data_tool
 from sktime_mcp.tools.query_registry import (
     query_registry_tool,
 )
@@ -51,6 +53,8 @@ __all__ = [
     "update_tool",
     "get_fitted_params_tool",
     "evaluate_tool",
+    "load_data_tool",
+    "prepare_data_tool",
     "load_data_source_tool",
     "release_data_handle_tool",
     "list_available_data_tool",

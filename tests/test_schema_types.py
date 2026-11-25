@@ -49,11 +49,12 @@ def test_every_schema_property_declares_a_type():
         ("fit", "fh", ["integer", "array"]),
         ("predict", "coverage", ["number", "array"]),
         ("predict", "alpha", ["number", "array"]),
-        ("split_data", "fh", ["integer", "array"]),
+        ("prepare_data", "fh", ["integer", "array"]),
         ("plot_series", "markers", ["string", "array"]),
     ],
 )
 def test_previously_untyped_properties_are_typed(tool_name, prop, expected_types):
     tools = {t.name: t for t in get_tools()}
     prop_schema = tools[tool_name].input_schema["properties"][prop]
-    assert prop_schema["type"] == expected_types
+    actual = prop_schema.get("type") or [branch["type"] for branch in prop_schema["oneOf"]]
+    assert actual == expected_types

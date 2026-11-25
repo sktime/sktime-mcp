@@ -1,85 +1,70 @@
 # Installation
 
-This guide covers the steps required to install `sktime-mcp` for both end-users and developers.
+Use Python **3.10 or newer**. Install only the extras needed by your workflow.
+The registry's dependency hints describe additional estimator requirements.
 
-## Prerequisites
+## Current source checkout
 
-- **Python**: Version 3.10 or higher.
-- **pip**: The Python package installer.
-- **MCP Client**: A compatible Model Context Protocol client such as Claude Desktop, Cursor, or a VS Code extension (e.g., Cline).
-
-## Standard Installation
-
-The recommended way to install `sktime-mcp` is via pip or uv. The `[all]` extra installs the bundled optional file-format, database and forecasting dependencies. Individual estimators can still require additional packages; check their dependency hints before use.
-
-### Using pip
-```bash
-pip install "sktime-mcp[all]"
-```
-
-### Using uv
-If you prefer [uv](https://github.com/astral-sh/uv), you can run the server directly without manual installation using `uvx`:
+The new 25-tool interface is an unreleased source change. To use these exact docs,
+install the checkout containing the changes, rather than assuming PyPI 0.1.3 has them:
 
 ```bash
-uvx sktime-mcp
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+python -m sktime_mcp.server --version
 ```
 
-Or install it globally:
-```bash
-uv tool install "sktime-mcp[all]"
-```
+On Windows, activate with `.venv\Scripts\Activate.ps1`. Point the MCP client at
+that environment's Python executable. Record `git rev-parse HEAD` and whether the
+working tree has changes when reproducing a development workflow.
 
-### Optional Extras
+## Published package
 
-Depending on your use case, you may choose to install specific dependency groups:
-
-| Extra | Description |
-| :--- | :--- |
-| `forecasting` | Extended forecasting models (Prophet, TBATS, StatsForecast). |
-| `sql` | Support for loading data from SQL databases (PostgreSQL, MySQL). |
-| `files` | Support for Excel and Parquet file formats. |
-| `mlflow` | Integration with MLflow for model persistence. |
-| `dl` | Deep learning models (TensorFlow, PyTorch). |
-
-To install a specific extra, use:
-```bash
-pip install "sktime-mcp[extra_name]"
-```
-
-## Development Version
-
-The hosted `latest` docs track repository development. Installing from PyPI with
-`pip` or `uvx` does not guarantee that unreleased changes are present. Use the
-source installation below for current-main features and record the commit SHA
-(`git rev-parse HEAD`) when reproducing a workflow.
-
-## Developer Installation
-
-If you intend to contribute to the project or run the test suite, install `sktime-mcp` from source in editable mode.
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/sktime/sktime-mcp.git
-   cd sktime-mcp
-   ```
-
-2. **Create and activate a virtual environment**:
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
-   ```
-
-3. **Install in editable mode with development dependencies**:
-   ```bash
-   pip install -e ".[dev,all]"
-   ```
-
-## Verification
-
-After installation, verify that the `sktime-mcp` CLI tool is available by checking its version:
+For the published interface:
 
 ```bash
-sktime-mcp --version
+python -m pip install sktime-mcp
 ```
 
-If the command is not found, ensure that your Python scripts directory is in your system's PATH.
+With uv, `uvx sktime-mcp` launches the published package in an isolated environment.
+Published and development tool names differ; see {doc}`migration`.
+
+## Optional dependencies
+
+| Extra | Adds |
+| --- | --- |
+| `files` | Excel readers and Parquet support |
+| `sql` | SQLAlchemy, PostgreSQL and MySQL drivers |
+| `forecasting` | Prophet, TBATS and StatsForecast |
+| `mlflow` | Compatibility extra; MLflow is already a core dependency |
+| `dl` | TensorFlow and PyTorch integrations |
+| `dev` | Tests, linting and documentation tools |
+| `all` | The bundled file, SQL and forecasting extras; excludes `dl` and many optional sktime dependencies |
+
+For example, install Excel/Parquet and SQL support in this checkout with:
+
+```bash
+python -m pip install -e ".[files,sql]"
+```
+
+There is no need to install deep-learning dependencies for the examples in this guide.
+
+## Docker
+
+Build from the checkout you want to run:
+
+```bash
+docker build -t sktime-mcp .
+docker run --rm -i sktime-mcp
+```
+
+Mount only the directories the workflow needs. Container file paths differ from
+host paths; configure `load_data` and `save_data` accordingly.
+
+## Verify the environment
+
+`python -m sktime_mcp.server --help` should print the CLI options. Starting without
+arguments opens the stdio server and waits for MCP messages; an idle terminal is
+expected. In the client, inspect the tool list: this checkout advertises `load_data`
+and `prepare_data`, with **25 tools total**.

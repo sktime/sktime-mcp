@@ -63,7 +63,7 @@ Runtime
 Data
 ----
 
-.. automodule:: sktime_mcp.data
+.. automodule:: sktime_mcp.data.contracts
    :members:
    :undoc-members:
    :show-inheritance:
@@ -75,3 +75,19 @@ Configuration
    :members:
    :undoc-members:
    :show-inheritance:
+
+Preparation contracts
+---------------------
+
+.. automodule:: sktime_mcp.data.preparation
+   :members:
+
+.. automodule:: sktime_mcp.tools.prepare_data
+   :members:
+
+Python compatibility
+--------------------
+
+``load_data_source_tool`` and ``Executor.load_data_source`` remain Python aliases
+for loading under the new contract. Legacy Python split/transform helpers delegate
+to preparation. Their names are not advertised MCP tools. See :doc:`migration`.

@@ -138,7 +138,7 @@ class TestUrlRedaction:
         url = f"https://alice:{SECRET}@files.example.com/data.csv?token={TOKEN}"
         adapter = UrlAdapter({"type": "url", "url": url})
         with (
-            patch("urllib.request.urlretrieve", side_effect=OSError("boom")),
+            patch.object(UrlAdapter, "_download", side_effect=OSError("boom")),
             pytest.raises(ValueError) as excinfo,
         ):
             adapter.load()
@@ -227,7 +227,7 @@ SQL_ARGS = {
         "type": "sql",
         "connection_string": f"postgresql://alice:{SECRET}@127.0.0.1:1/db?password={SECRET}",
         "table": "t",
-        "api_key": "sk-live-123",
+        "query_params": {"api_key": "sk-live-123"},
     }
 }
 
@@ -252,8 +252,10 @@ class TestServerLogRedaction:
             except OSError as exc:
                 raise RuntimeError(f"Could not load {url}") from exc
 
-        with patch("sktime_mcp.server.load_data_source_tool", side_effect=fail):
-            response = await _call_tool("load_data_source", SQL_ARGS)
+        with patch(
+            "sktime_mcp.runtime.executor.Executor.load_data_foreground_async", side_effect=fail
+        ):
+            response = await _call_tool("load_data", SQL_ARGS)
         assert response.is_error
         assert SECRET not in response.content[0].text
         assert SECRET not in caplog.text
@@ -264,8 +266,8 @@ class TestServerLogRedaction:
     async def test_adapter_failure_is_redacted_in_runtime_logs_and_response(self, caplog):
         caplog.set_level(logging.DEBUG)
         url = f"https://demo:{SECRET}@example.invalid/data.csv"
-        with patch("urllib.request.urlretrieve", side_effect=OSError(f"Cannot download {url}")):
-            response = await _call_tool("load_data_source", {"config": {"type": "url", "url": url}})
+        with patch.object(UrlAdapter, "_download", side_effect=OSError(f"Cannot download {url}")):
+            response = await _call_tool("load_data", {"config": {"type": "url", "url": url}})
         body = json.loads(response.content[0].text)
         assert body["success"] is False
         assert SECRET not in body["error"]
@@ -274,23 +276,23 @@ class TestServerLogRedaction:
 
     async def test_info_log_has_summary_but_no_secrets(self, caplog):
         caplog.set_level(logging.INFO, logger="sktime_mcp.server")
-        await _call_tool("load_data_source", SQL_ARGS)
+        await _call_tool("load_data", SQL_ARGS)
         text = _log_text(caplog)
         assert SECRET not in text
         assert "sk-live-123" not in text
-        assert "=== Tool Call: load_data_source ===" in text
+        assert "=== Tool Call: load_data ===" in text
         assert "alice:***@127.0.0.1:1/db?password=***" in text
-        assert "=== Result for load_data_source: success=False keys=[" in text
+        assert "=== Result for load_data: success=False keys=[" in text
         assert "bytes=" in text
         # The full result body is not logged at INFO.
-        assert "Result body for load_data_source" not in text
+        assert "Result body for load_data" not in text
 
     async def test_debug_log_has_redacted_body(self, caplog):
         caplog.set_level(logging.DEBUG, logger="sktime_mcp.server")
-        await _call_tool("load_data_source", SQL_ARGS)
+        await _call_tool("load_data", SQL_ARGS)
         text = _log_text(caplog)
         assert SECRET not in text
-        assert "Result body for load_data_source" in text
+        assert "Result body for load_data" in text
         assert '"success": false' in text
 
     async def test_inline_data_is_not_logged_verbatim(self, caplog):
@@ -305,7 +307,7 @@ class TestServerLogRedaction:
                 "target_column": "value",
             }
         }
-        response = await _call_tool("load_data_source", args)
+        response = await _call_tool("load_data", args)
         text = _log_text(caplog)
         assert "<list: 300 items>" in text
         assert "1150.5" not in text  # a mid-payload row is not in the log
